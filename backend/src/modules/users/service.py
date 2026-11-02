@@ -1,0 +1,434 @@
+"""Tenant-scoped user and invitation use cases."""
+
+import logging
+import secrets
+import string
+from datetime import datetime, timedelta, timezone
+from typing import Any
+from uuid import uuid4
+from fastapi import HTTPException, status
+from supabase import Client
+
+from src.core.config import settings
+from src.core.pagination import PaginationMeta, next_page_cursor
+from src.core.supabase import get_supabase_admin_client
+from src.modules.auth.rbac import Permission, require_permission
+from src.modules.auth.schemas import UserProfileResponse
+from src.modules.tenants.service import tenant_service
+from src.modules.users.models import MembershipStatus, UserRole
+from src.modules.users.email import user_email_service
+from src.modules.users.schemas import KamOption, UserInviteCreate, UserInviteRead, UserList, UserRead, UserUpdate
+
+logger = logging.getLogger(__name__)
+
+
+class UserService:
+    """Create tenant-bound users through invitations and enforce tenant scope."""
+
+    def __init__(self, database: Client | None = None) -> None:
+        self.database = database or get_supabase_admin_client()
+
+    def list_users(
+        self,
+        tenant_id: str,
+        actor: UserProfileResponse,
+        *,
+        page: int,
+        limit: int,
+    ) -> UserList:
+        require_permission(actor, Permission.USER_READ)
+        tenant_service.require_access(tenant_id, actor)
+        offset = (page - 1) * limit
+        result = (
+            self._user_query(tenant_id, count="exact")
+            .order("created_at", desc=True)
+            .order("user_id", desc=True)
+            .range(offset, offset + limit - 1)
+            .execute()
+        )
+        rows = result.data or []
+        total_records = result.count or 0
+        return UserList(
+            items=[self._to_user(row) for row in rows],
+            pagination=PaginationMeta(page=page, limit=limit, total_records=total_records),
+            next_cursor=next_page_cursor(page, limit, total_records),
+        )
+
+    def list_active_kams(self, actor: UserProfileResponse) -> list[KamOption]:
+        """Return active KAM profiles for client provisioning."""
+        require_permission(actor, Permission.CLIENT_PROVISION)
+        result = (
+            self.database.table("profiles")
+            .select("id,email,full_name")
+            .eq("role", "KAM")
+            .eq("is_active", True)
+            .order("email")
+            .execute()
+        )
+        return [KamOption.model_validate(row) for row in result.data or []]
+
+    def create_invitation(
+        self,
+        tenant_id: str,
+        payload: UserInviteCreate,
+        actor: UserProfileResponse,
+    ) -> UserInviteRead:
+        require_permission(actor, Permission.USER_INVITE)
+        tenant_service.require_access(tenant_id, actor)
+        if payload.role != UserRole.CLIENT:
+            require_permission(actor, Permission.USER_INVITE_PLATFORM)
+        tenant = tenant_service.get(tenant_id, actor)
+        if tenant.status.value == "DEACTIVATED":
+            raise HTTPException(status_code=409, detail="Cannot invite users to a deactivated tenant.")
+        user_email_service.ensure_configured()
+
+        email = payload.email.strip().lower()
+        domain = email.rsplit("@", 1)[1]
+        override_reason = payload.domain_override_reason
+        if tenant.email_domain and domain != tenant.email_domain.lower() and not override_reason:
+            raise HTTPException(
+                status_code=422,
+                detail="Email domain differs from the tenant domain; provide an override reason.",
+            )
+
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        try:
+            invitation_result = self.database.table("tenant_invitations").insert(
+                {
+                    "tenant_id": tenant_id,
+                    "normalized_email": email,
+                    "full_name": payload.full_name,
+                    "role": payload.role.value,
+                    "status": "PENDING",
+                    "invited_by_user_id": actor.id,
+                    "domain_override_reason": override_reason,
+                    "expires_at": expires_at.isoformat(),
+                }
+            ).execute()
+        except Exception as exc:
+            logger.exception("Could not create tenant invitation")
+            raise HTTPException(
+                status_code=409,
+                detail="A pending account or invitation already exists for this email.",
+            ) from exc
+        if not invitation_result.data:
+            raise HTTPException(status_code=500, detail="Invitation could not be prepared.")
+        invitation = invitation_result.data[0]
+
+        try:
+            temporary_password = self._generate_temporary_password()
+            auth_result = self.database.auth.admin.create_user(
+                {
+                    "email": email,
+                    "password": temporary_password,
+                    "email_confirm": True,
+                    "user_metadata": {"full_name": payload.full_name or ""},
+                    "app_metadata": {"must_reset_password": True},
+                }
+            )
+            invited_user = getattr(auth_result, "user", None)
+            invited_user_id = str(invited_user.id) if invited_user else None
+            if not invited_user_id:
+                raise RuntimeError("Supabase did not return the created user.")
+            profile_update = (
+                self.database.table("profiles")
+                .update({"must_reset_password": True})
+                .eq("id", invited_user_id)
+                .select("id")
+                .execute()
+            )
+            if not profile_update.data:
+                raise RuntimeError("Could not require a password reset for the invited user.")
+            link_result = self.database.auth.admin.generate_link(
+                {
+                    "type": "recovery",
+                    "email": email,
+                    "options": {
+                        "redirect_to": f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?flow=invite"
+                    },
+                }
+            )
+            reset_url = link_result.properties.action_link
+            user_email_service.send_temporary_password(
+                email=email,
+                full_name=payload.full_name,
+                temporary_password=temporary_password,
+                reset_url=reset_url,
+                idempotency_key=f"tenant-invite/{invitation['id']}/{uuid4().hex}",
+            )
+            update_result = (
+                self.database.table("tenant_invitations")
+                .update(
+                    {
+                        "status": "SENT",
+                        "user_id": invited_user_id,
+                        "sent_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
+                .eq("id", invitation["id"])
+                .execute()
+            )
+            sent_record = update_result.data[0] if update_result.data else invitation
+        except Exception as exc:
+            logger.exception("Could not send tenant invitation")
+            self.database.table("tenant_invitations").update({"status": "FAILED"}).eq(
+                "id", invitation["id"]
+            ).execute()
+            if "already been registered" in str(exc).lower():
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "This email already has a Supabase account, likely from an earlier invitation attempt. "
+                        f"List users for tenant {tenant_id}, then resend the existing invitation with "
+                        "POST /api/v1/tenants/{tenant_id}/users/{user_id}/resend-invite."
+                    ),
+                ) from exc
+            if getattr(exc, "code", None) == "PGRST204":
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "Tenant invitation setup is incomplete in Supabase. Apply migration "
+                        "20261030100000_temporary_password_reset.sql, then resend this invitation."
+                    ),
+                ) from exc
+            if isinstance(exc, HTTPException):
+                raise exc
+            raise HTTPException(
+                status_code=409,
+                detail="Invitation could not be sent. Check the address or resend after resolving the issue.",
+            ) from exc
+        return UserInviteRead(
+            invitation_id=sent_record["id"],
+            tenant_id=tenant_id,
+            email=email,
+            status=sent_record["status"],
+            expires_at=sent_record["expires_at"],
+        )
+
+    def get_user(self, tenant_id: str, user_id: str, actor: UserProfileResponse) -> UserRead:
+        require_permission(actor, Permission.USER_READ)
+        tenant_service.require_access(tenant_id, actor)
+        result = self._user_query(tenant_id).eq("user_id", user_id).limit(1).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="User not found.")
+        return self._to_user(result.data[0])
+
+    def update_user(
+        self,
+        tenant_id: str,
+        user_id: str,
+        payload: UserUpdate,
+        actor: UserProfileResponse,
+    ) -> UserRead:
+        require_permission(actor, Permission.USER_UPDATE)
+        tenant_service.require_access(tenant_id, actor)
+        self.get_user(tenant_id, user_id, actor)
+        result = (
+            self.database.table("profiles")
+            .update(payload.model_dump(mode="json", exclude_unset=True))
+            .eq("id", user_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=404, detail="User not found.")
+        return self.get_user(tenant_id, user_id, actor)
+
+    def activate_user(self, tenant_id: str, user_id: str, actor: UserProfileResponse) -> None:
+        require_permission(actor, Permission.USER_ACTIVATE)
+        self._set_user_active(tenant_id, user_id, actor, is_active=True)
+
+    def deactivate_user(self, tenant_id: str, user_id: str, actor: UserProfileResponse) -> None:
+        require_permission(actor, Permission.USER_DEACTIVATE)
+        self._set_user_active(tenant_id, user_id, actor, is_active=False)
+
+    def _set_user_active(
+        self,
+        tenant_id: str,
+        user_id: str,
+        actor: UserProfileResponse,
+        *,
+        is_active: bool,
+    ) -> None:
+        tenant_service.require_access(tenant_id, actor)
+        self.get_user(tenant_id, user_id, actor)
+        try:
+            result = (
+                self.database.table("profiles")
+                .update({"is_active": is_active})
+                .eq("id", user_id)
+                .select("id")
+                .execute()
+            )
+        except Exception as exc:
+            action = "activate" if is_active else "deactivate"
+            logger.exception("Could not %s tenant user", action)
+            raise HTTPException(status_code=409, detail=f"User could not be {action}d.") from exc
+        if not result.data:
+            raise HTTPException(status_code=404, detail="User not found.")
+
+    def resend_invitation(self, tenant_id: str, user_id: str, actor: UserProfileResponse) -> UserInviteRead:
+        require_permission(actor, Permission.USER_RESEND_INVITE)
+        tenant_service.require_access(tenant_id, actor)
+        user = self.get_user(tenant_id, user_id, actor)
+        membership = (
+            self.database.table("tenant_memberships")
+            .select("status")
+            .eq("tenant_id", tenant_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not membership.data:
+            raise HTTPException(status_code=404, detail="User membership not found.")
+        if membership.data[0]["status"] != MembershipStatus.INVITED:
+            raise HTTPException(status_code=409, detail="Only pending invitations can be resent.")
+        user_email_service.ensure_configured()
+        result = (
+            self.database.table("tenant_invitations")
+            .select("*")
+            .eq("tenant_id", tenant_id)
+            .eq("user_id", user_id)
+            .in_("status", ["SENT", "FAILED"])
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Pending invitation not found.")
+        invitation = result.data[0]
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        self.database.table("tenant_invitations").update(
+            {"status": "PENDING", "expires_at": expires_at.isoformat()}
+        ).eq("id", invitation["id"]).execute()
+        try:
+            temporary_password = self._generate_temporary_password()
+            auth_user_response = self.database.auth.admin.get_user_by_id(user_id)
+            auth_user = getattr(auth_user_response, "user", None)
+            if not auth_user:
+                raise RuntimeError("Could not load the invited authentication user.")
+            app_metadata = dict(auth_user.app_metadata or {})
+            app_metadata["must_reset_password"] = True
+            self.database.auth.admin.update_user_by_id(
+                user_id,
+                {"password": temporary_password, "app_metadata": app_metadata},
+            )
+            profile_update = (
+                self.database.table("profiles")
+                .update({"must_reset_password": True})
+                .eq("id", user_id)
+                .select("id")
+                .execute()
+            )
+            if not profile_update.data:
+                raise RuntimeError("Could not require a password reset for the invited user.")
+            link_result = self.database.auth.admin.generate_link(
+                {
+                    "type": "recovery",
+                    "email": user.email,
+                    "options": {
+                        "redirect_to": f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?flow=invite"
+                    },
+                }
+            )
+            user_email_service.send_temporary_password(
+                email=user.email,
+                full_name=user.full_name,
+                temporary_password=temporary_password,
+                reset_url=link_result.properties.action_link,
+                idempotency_key=f"tenant-invite-resend/{invitation['id']}/{uuid4().hex}",
+            )
+            sent_result = (
+                self.database.table("tenant_invitations")
+                .update({"status": "SENT", "sent_at": datetime.now(timezone.utc).isoformat()})
+                .eq("id", invitation["id"])
+                .execute()
+            )
+            sent = sent_result.data[0] if sent_result.data else invitation
+        except Exception as exc:
+            logger.exception("Could not resend tenant invitation")
+            self.database.table("tenant_invitations").update({"status": "FAILED"}).eq(
+                "id", invitation["id"]
+            ).execute()
+            if getattr(exc, "code", None) == "PGRST204":
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "Tenant invitation setup is incomplete in Supabase. Apply migration "
+                        "20261030100000_temporary_password_reset.sql, then resend this invitation."
+                    ),
+                ) from exc
+            if isinstance(exc, HTTPException):
+                raise exc
+            raise HTTPException(status_code=409, detail="Invitation could not be resent.") from exc
+        return UserInviteRead(
+            invitation_id=sent["id"],
+            tenant_id=tenant_id,
+            email=user.email,
+            status=sent["status"],
+            expires_at=sent["expires_at"],
+        )
+
+    def accept_invitation(self, user_id: str) -> UserRead:
+        try:
+            result = self.database.rpc("accept_tenant_invitation", {"p_user_id": user_id}).execute()
+        except Exception as exc:
+            logger.exception("Could not accept tenant invitation")
+            raise HTTPException(status_code=409, detail="Invitation cannot be accepted.") from exc
+        if result.data is False:
+            raise HTTPException(status_code=409, detail="Invitation cannot be accepted.")
+        membership = (
+            self.database.table("tenant_memberships")
+            .select("tenant_id")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not membership.data:
+            raise HTTPException(status_code=404, detail="Invitation not found.")
+        result = self._user_query(membership.data[0]["tenant_id"]).eq("user_id", user_id).limit(1).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Invitation not found.")
+        return self._to_user(result.data[0])
+
+    def _user_query(self, tenant_id: str, *, count: str | None = None) -> Any:
+        return (
+            self.database.table("tenant_memberships")
+            .select(
+                "tenant_id,user_id,status,created_at,updated_at,"
+                "profiles!inner(id,email,full_name,role,is_active,created_at,updated_at),"
+                "tenants!inner(status)",
+                count=count,
+            )
+            .eq("tenant_id", tenant_id)
+        )
+
+    @staticmethod
+    def _to_user(row: dict[str, Any]) -> UserRead:
+        profile = row["profiles"]
+        return UserRead(
+            id=profile["id"],
+            tenant_id=row["tenant_id"],
+            email=profile["email"],
+            full_name=profile.get("full_name"),
+            role=profile["role"],
+            is_active=profile["is_active"],
+            tenant_status=row["tenants"]["status"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _generate_temporary_password() -> str:
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*_-+="
+        characters = [
+            secrets.choice(string.ascii_uppercase),
+            secrets.choice(string.ascii_lowercase),
+            secrets.choice(string.digits),
+            secrets.choice("!@#$%^&*_-+="),
+            *(secrets.choice(alphabet) for _ in range(20)),
+        ]
+        secrets.SystemRandom().shuffle(characters)
+        return "".join(characters)
+
+
+user_service = UserService()

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reset your TOFAA password</title>
+  </head>
+  <body style="margin:0;background:#f4f2ed;font-family:Arial,Helvetica,sans-serif;color:#202b27;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f2ed;padding:32px 12px;">
+      <tr><td align="center">
+        <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="width:100%;max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;">
+          <tr><td style="background:#173c34;padding:26px 36px;color:#ffffff;font-size:20px;font-weight:700;letter-spacing:1px;">TOFAA</td></tr>
+          <tr><td style="padding:36px;">
+            <p style="margin:0 0 12px;color:#997342;font-size:12px;font-weight:700;letter-spacing:1.5px;">ACCOUNT SECURITY</p>
+            <h1 style="margin:0 0 18px;font-size:27px;line-height:1.25;color:#173c34;">Reset your password</h1>
+            <p style="margin:0 0 18px;font-size:15px;line-height:1.7;">We received a request to reset the password for:</p>
+            <p style="margin:0 0 24px;padding:14px 16px;background:#f4f2ed;border-radius:8px;font-size:15px;font-weight:700;word-break:break-word;">{{ .Email }}</p>
+            <p style="margin:0 0 26px;font-size:15px;line-height:1.7;">Select the button below to choose a new password. If you didn’t request this change, you can ignore this email.</p>
+            <table role="presentation" cellspacing="0" cellpadding="0"><tr><td bgcolor="#173c34" style="border-radius:7px;">
+              <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:15px 24px;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1px;">RESET PASSWORD</a>
+            </td></tr></table>
+            <p style="margin:26px 0 0;color:#66716c;font-size:12px;line-height:1.6;">This link expires in one hour and can be used once.</p>
+            <p style="margin:18px 0 0;color:#66716c;font-size:12px;line-height:1.6;">If the button doesn’t work, copy and paste this link into your browser:<br /><a href="{{ .ConfirmationURL }}" style="color:#173c34;word-break:break-all;">{{ .ConfirmationURL }}</a></p>
+          </td></tr>
+          <tr><td style="padding:18px 36px;background:#f8f7f4;color:#7b837f;font-size:11px;line-height:1.5;">TOFAA Gifting OS · This is an account security email.</td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>
