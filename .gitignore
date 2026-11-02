@@ -1,0 +1,40 @@
+# Local environment and secrets
+.env*
+!.env.example
+
+# Dependencies
+**/node_modules/
+
+# Next.js
+**/.next/
+**/.next-dev/
+frontend/out/
+
+# Python caches and virtual environments
+**/__pycache__/
+*.py[cod]
+**/.venv/
+**/venv/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Build and test output
+**/build/
+**/dist/
+frontend/coverage/
+**/*.tsbuildinfo
+
+# Mobile tooling
+mobile/.expo/
+mobile/ios/Pods/
+mobile/ios/build/
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/android/local.properties
+
+# Local files
+*.whl
+.DS_Store
+Thumbs.db
+.idea/

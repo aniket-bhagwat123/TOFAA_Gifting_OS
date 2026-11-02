@@ -1,0 +1,18 @@
+@import "react-datepicker/dist/react-datepicker.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body { margin: 0; background: #F6F7FB; color: #172033; font-family: Arial, Helvetica, sans-serif; }
+button, input, textarea, select { font: inherit; }
+::selection { background: #DEDEFF; color: #292A7A; }
+#datepicker-portal { position: relative; z-index: 60; }
+.react-datepicker-popper { z-index: 60 !important; }
+.react-datepicker__view-calendar-icon input { padding: 0.75rem 3.5rem 0.75rem 0.875rem; }
+.react-datepicker__input-container .datepicker-calendar-icon,
+.react-datepicker__input-container .datepicker-calendar-icon-clearable { top: 50%; right: 0.875rem; left: auto; width: 20px; height: 20px; padding: 0; box-sizing: border-box; transform: translateY(-50%); color: #64748b; }
+.react-datepicker__input-container .datepicker-calendar-icon-clearable { right: 2.25rem; }
