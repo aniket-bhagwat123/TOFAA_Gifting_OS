@@ -120,7 +120,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const personalOf = (groupId: string, id: string) => budgets[`RECIPIENT:${groupId}:${id}`]?.budgetCredits;
   const openPersonBudget = (group: RecipientGroup, id: string, name: string) => {
     const pool = budgets[`GROUP:${group.id}`];
-    if (pool?.budgetMode !== "SHARED_POOL") { setBudgetFor({ kind: "recipient", id, name, groupId: group.id }); return; }
+    if (pool?.budgetMode !== "SHARED_POOL") { setBudgetFor({ kind: "recipient", id, name, groupId: group.id, suggested: memberBudget(budgets, group, id) }); return; }
     const others = group.recipientIds.filter((other) => other !== id);
     const taken = others.reduce((sum, other) => sum + (personalOf(group.id, other) ?? 0), 0);
     const waiting = others.filter((other) => personalOf(group.id, other) === undefined).length;

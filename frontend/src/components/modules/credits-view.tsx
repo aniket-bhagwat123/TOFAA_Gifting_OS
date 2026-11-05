@@ -11,6 +11,10 @@ import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet } from "@/components/ui/sheet";
 import { titleCase } from "@/lib/utils";
+import { DatePickerField } from "@/components/ui/date-picker-field";
+
+/** "YYYY-MM-DD" to a local Date, or nothing when empty. */
+const asDate = (value: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value); return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : undefined; };
 
 type Balance = { availableCredits: number; totalCredits?: number; reservedCredits?: number; asOf: string };
 type UsageGroup = { sourceType: string; creditsUsed: number; entryCount: number };
@@ -187,8 +191,8 @@ export function CreditsView() {
           {([["ledger", "Ledger"], ["requests", "Credit requests"]] as const).map(([key, text]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`-mb-px min-h-12 border-b-2 text-sm font-semibold ${tab === key ? "border-brand text-brand" : "border-transparent text-muted hover:text-ink"}`}>{text}</button>)}
         </div>
         {tab === "ledger" && <div className="flex flex-wrap items-center gap-2 pb-2">
-          <input type="date" aria-label="From date" value={from} max={to || undefined} onChange={(event) => { setFrom(event.target.value); setPage(1); }} className="min-h-10 rounded-xl border border-line px-3 text-sm text-ink" />
-          <input type="date" aria-label="To date" value={to} min={from || undefined} onChange={(event) => { setTo(event.target.value); setPage(1); }} className="min-h-10 rounded-xl border border-line px-3 text-sm text-ink" />
+          <DatePickerField id="ledger-from" label="From date" placeholder="From date" compact value={from} maxDate={asDate(to)} onChange={(value) => { setFrom(value); setPage(1); }} />
+          <DatePickerField id="ledger-to" label="To date" placeholder="To date" compact value={to} minDate={asDate(from)} onChange={(value) => { setTo(value); setPage(1); }} />
           {(from || to) && <button type="button" onClick={() => { setFrom(""); setTo(""); setPage(1); }} className="inline-flex min-h-10 items-center gap-1 px-2 text-sm font-medium text-brand"><X size={14} /> Clear</button>}
         </div>}
       </div>

@@ -87,7 +87,7 @@ export function OccasionsHome() {
                 <span className={`rounded-full px-3 py-1 text-xs font-semibold ${card.occasion.daysAway <= 7 ? "bg-amber-50 text-amber-800" : "bg-slate-100 text-slate-700"}`}>{countdown(card.occasion.daysAway)}</span>
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-xl font-bold text-ink">{card.occasion.occasionName}</h3>
+                <h3 className="text-xl font-bold capitalize text-ink">{card.occasion.occasionName}</h3>
                 <p className="mt-1 text-sm text-muted">{day(card.occasion.occasionDate)}</p>
                 {card.occasion.description && <p className="mt-3 line-clamp-3 text-sm text-ink/80">{card.occasion.description}</p>}
               </div>
@@ -119,7 +119,7 @@ export function OccasionsHome() {
           const body = <Card className="flex min-h-20 items-center gap-3.5 px-4 py-3 transition-shadow hover:shadow-md">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand"><Gift size={18} /></span>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold text-ink">{item.recipientName ?? item.title}</p>
+              <p className="truncate font-semibold text-ink capitalize">{item.recipientName ?? item.title}</p>
               <p className="truncate text-sm text-muted">{item.sourceName ?? item.title} · {relativeTime(item.happenedAt)}</p>
             </div>
             <div className="shrink-0 text-right">

@@ -25,6 +25,7 @@ export function BudgetSheet({ target, current, spendBase, onClose, onSaved }: {
   const [credits, setCredits] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
   useEffect(() => { setMode(current?.budgetMode ?? "PER_RECIPIENT"); setCredits(current ? String(current.budgetCredits) : target?.suggested ? String(target.suggested) : ""); setError(null); }, [target, current]);
 
   const reset = async () => {

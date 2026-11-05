@@ -99,7 +99,7 @@ export function OccasionSend({ occasionId }: { occasionId: string }) {
     <div>
       <Link href="/occasions" className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-ink"><ChevronLeft size={16} /> Occasions</Link>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <h2 className="text-3xl font-bold text-ink">{occasion.occasionName}</h2>
+        <h2 className="text-3xl font-bold capitalize text-ink">{occasion.occasionName}</h2>
         {daysAway !== null && daysAway >= 0 && <span className={`rounded-full px-3 py-1 text-sm font-semibold ${daysAway <= 7 ? "bg-amber-50 text-amber-800" : "bg-slate-100 text-slate-700"}`}>{countdown(daysAway)}</span>}
       </div>
       <p className="mt-1 text-base text-muted">{occasion.occasionDate ? day(occasion.occasionDate) : ""}{occasion.description ? ` · ${occasion.description}` : ""}</p>
@@ -135,7 +135,7 @@ export function OccasionSend({ occasionId }: { occasionId: string }) {
               const on = groupIds.includes(group.id);
               return <label key={group.id} className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 ${on ? "border-brand bg-brand-soft" : "border-line hover:bg-slate-50"}`}>
                 <input type="checkbox" checked={on} onChange={() => toggleGroup(group.id)} className="h-5 w-5 accent-brand" />
-                <span className="min-w-0"><span className="block truncate font-medium text-ink">{group.name}</span><span className="block text-sm text-muted">{group.recipientIds.length} {group.recipientIds.length === 1 ? "person" : "people"}</span></span>
+                <span className="min-w-0"><span className="block truncate font-medium capitalize text-ink">{group.name}</span><span className="block text-sm text-muted">{group.recipientIds.length} {group.recipientIds.length === 1 ? "person" : "people"}</span></span>
               </label>;
             })}
           </div> : <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-muted">You have no groups yet. Pick people one by one, or <Link href="/recipient-groups" className="font-semibold text-brand hover:underline">create a group</Link>.</p>)

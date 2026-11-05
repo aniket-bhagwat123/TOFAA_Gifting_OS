@@ -32,7 +32,10 @@ export function DatePickerField({
   onBlur,
   error,
   required,
-  maxDate
+  maxDate,
+  minDate,
+  compact = false,
+  placeholder = "Pick a date"
 }: {
   label: string;
   id: string;
@@ -44,13 +47,18 @@ export function DatePickerField({
   required?: boolean;
   /** Latest date that can be picked, e.g. today for a birthday. */
   maxDate?: Date;
+  /** Earliest date that can be picked. */
+  minDate?: Date;
+  /** A smaller trigger for filter bars; the label is kept for screen readers only. */
+  compact?: boolean;
+  placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
   const selected = parseDate(value);
   const endMonth = maxDate ?? new Date(new Date().getFullYear() + 10, 11);
 
   return <div className="space-y-1.5">
-    <label htmlFor={id} className="block text-sm font-medium text-ink"><span>{label}{required && <RequiredMark />}</span></label>
+    <label htmlFor={id} className={cn("block text-sm font-medium text-ink", compact && "sr-only")}><span>{label}{required && <RequiredMark />}</span></label>
     {name && <input type="hidden" name={name} value={value} />}
     <Popover open={open} onOpenChange={(next) => { setOpen(next); if (!next) onBlur?.(); }}>
       <PopoverTrigger asChild>
@@ -60,13 +68,13 @@ export function DatePickerField({
           aria-invalid={error ? "true" : undefined}
           aria-describedby={error ? `${id}-error` : undefined}
           className={cn(
-            "flex min-h-12 w-full items-center gap-3 rounded-xl border bg-white px-4 py-3 text-left text-base outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/15 data-[state=open]:border-brand",
+            compact ? "flex min-h-10 w-44 items-center gap-2 rounded-xl border bg-white px-3 py-2 text-left text-sm outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/15 data-[state=open]:border-brand" : "flex min-h-12 w-full items-center gap-3 rounded-xl border bg-white px-4 py-3 text-left text-base outline-none transition focus:border-brand focus:ring-4 focus:ring-brand/15 data-[state=open]:border-brand",
             selected ? "text-ink" : "text-slate-400",
             error ? "border-rose-400" : "border-line"
           )}
         >
           <CalendarDays size={18} className="shrink-0 text-muted" aria-hidden />
-          <span className="truncate">{selected ? display.format(selected) : "Pick a date"}</span>
+          <span className="truncate">{selected ? display.format(selected) : placeholder}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start">
@@ -80,9 +88,9 @@ export function DatePickerField({
             setOpen(false);
           }}
           captionLayout="dropdown"
-          startMonth={new Date(1920, 0)}
+          startMonth={minDate ?? new Date(1920, 0)}
           endMonth={endMonth}
-          disabled={maxDate ? { after: maxDate } : undefined}
+          disabled={[...(maxDate ? [{ after: maxDate }] : []), ...(minDate ? [{ before: minDate }] : [])]}
           autoFocus
         />
         {!required && selected && <div className="border-t border-line p-2">
