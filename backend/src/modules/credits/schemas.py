@@ -109,7 +109,10 @@ class CreditBalanceRead(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     tenant_id: str
+    # What the client can still use: total credits minus budgets set aside in Occasions and Events.
     available_credits: int
+    total_credits: int
+    reserved_credits: int
     currency: str
     as_of: datetime | str
 
@@ -174,3 +177,26 @@ class CreditMutationResult(BaseModel):
     ledger_entry: CreditLedgerRead
 
 
+
+
+class CreditPricingRead(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    currency: str
+    unit_price_minor: int
+
+
+class PaymentProofRead(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    file_id: str
+    file_name: str
+    content_type: str
+    size_bytes: int
+
+
+class PaymentProofLink(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    url: str
+    expires_in_seconds: int

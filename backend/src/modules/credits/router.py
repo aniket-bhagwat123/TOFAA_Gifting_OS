@@ -4,7 +4,8 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Header, Query, status
+from fastapi import APIRouter, Body, Header, Query, Request, status
+from starlette.concurrency import run_in_threadpool
 
 from src.core.schema import ApiResponse
 from src.modules.auth.dependencies import CurrentUserDep
@@ -14,6 +15,9 @@ from src.modules.credits.schemas import (
     CreditLedgerPage,
     CreditLedgerRead,
     CreditMutationResult,
+    CreditPricingRead,
+    PaymentProofLink,
+    PaymentProofRead,
     CreditRequestCreate,
     CreditRequestHistory,
     CreditRequestPage,
@@ -115,6 +119,41 @@ def submit_credit_payment(
     )
 
 
+@router.post(
+    "/tenants/{tenant_id}/credit-requests/{request_id}/payment-proof",
+    response_model=ApiResponse[PaymentProofRead],
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_payment_proof(
+    tenant_id: UUID,
+    request_id: UUID,
+    request: Request,
+    actor: CurrentUserDep,
+    file_name: Annotated[str, Query(alias="fileName", min_length=1, max_length=200)] = "proof",
+) -> ApiResponse[PaymentProofRead]:
+    """Raw file body (Content-Type: image/png, image/jpeg or application/pdf, up to 5 MB)."""
+    content = await request.body()
+    data = await run_in_threadpool(
+        credits_service.upload_payment_proof,
+        str(tenant_id), str(request_id), actor,
+        content=content,
+        content_type=request.headers.get("content-type", ""),
+        file_name=file_name,
+    )
+    return ApiResponse(data=data, message="Payment proof attached.")
+
+
+@router.get(
+    "/admin/credit-requests/{request_id}/payment-proof",
+    response_model=ApiResponse[PaymentProofLink],
+)
+def credit_payment_proof_link(request_id: UUID, actor: CurrentUserDep) -> ApiResponse[PaymentProofLink]:
+    return ApiResponse(
+        data=credits_service.payment_proof_link(str(request_id), actor),
+        message="Payment proof link created.",
+    )
+
+
 @router.get(
     "/admin/credit-requests",
     response_model=ApiResponse[CreditRequestPage],
@@ -149,7 +188,7 @@ def approve_credit_request(
         data=credits_service.review_request(
             str(request_id), actor, decision="approve", note=payload.review_note or ""
         ),
-        message="Credit request approved.",
+        message="Credit request approved and credits added.",
     )
 
 
@@ -202,6 +241,17 @@ def verify_credit_payment(
             idempotency_key=idempotency_key,
         ),
         message="Payment verified and credits added.",
+    )
+
+
+@router.get(
+    "/tenants/{tenant_id}/credits/pricing",
+    response_model=ApiResponse[CreditPricingRead],
+)
+def credit_pricing(tenant_id: UUID, actor: CurrentUserDep) -> ApiResponse[CreditPricingRead]:
+    return ApiResponse(
+        data=credits_service.pricing(str(tenant_id), actor),
+        message="Credit pricing retrieved successfully.",
     )
 
 

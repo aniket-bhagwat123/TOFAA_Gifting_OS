@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Query, status
+from fastapi import APIRouter, Body, HTTPException, Query, status
 
 from src.core.schema import ApiResponse
 from src.modules.auth.dependencies import CurrentUserDep
@@ -13,6 +13,21 @@ from src.modules.recipients.service import recipient_service
 
 router = APIRouter(tags=["Recipients"])
 
+MAX_RECIPIENT_IDS = 100
+
+
+def parse_recipient_ids(value: str | None) -> list[str] | None:
+    """`recipientIds=a,b,c` -> a list of IDs. Missing means no filter; empty means "none"."""
+    if value is None:
+        return None
+    parts = [part.strip() for part in value.split(",") if part.strip()]
+    if len(parts) > MAX_RECIPIENT_IDS:
+        raise HTTPException(status_code=422, detail=f"recipientIds can hold at most {MAX_RECIPIENT_IDS} IDs.")
+    try:
+        return [str(UUID(part)) for part in parts]
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="recipientIds must be a comma-separated list of recipient IDs.") from exc
+
 
 @router.get("/tenants/{tenant_id}/recipients", response_model=RecipientList)
 def list_recipients(
@@ -20,9 +35,19 @@ def list_recipients(
     actor: CurrentUserDep,
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=100)] = 10,
+    recipient_ids: Annotated[
+        str | None,
+        Query(
+            alias="recipientIds",
+            max_length=4000,
+            description="Only these recipients, as comma-separated IDs (at most 100), e.g. a group's members.",
+        ),
+    ] = None,
 ) -> RecipientList:
-    """List recipients visible to a user in the requested tenant."""
-    return recipient_service.list_recipients(str(tenant_id), actor, page=page, limit=limit)
+    """List recipients visible to a user in the requested tenant, optionally only the given IDs."""
+    return recipient_service.list_recipients(
+        str(tenant_id), actor, page=page, limit=limit, recipient_ids=parse_recipient_ids(recipient_ids)
+    )
 
 
 @router.post(

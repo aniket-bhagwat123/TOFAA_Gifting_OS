@@ -42,3 +42,13 @@ def test_recipient_rejects_future_birth_date():
 def test_recipient_patch_must_include_a_field():
     with pytest.raises(ValidationError):
         RecipientUpdate()
+
+
+def test_a_recipient_can_be_created_without_a_budget():
+    recipient = RecipientCreate.model_validate({
+        "name": "Rohan Mehta",
+        "mobileNumber": "+919876543210",
+        "address": {"addressLine1": "1 Road", "city": "Pune", "postalCode": "411001"},
+        "dateOfBirth": "1990-01-01",
+    })
+    assert recipient.budget is None

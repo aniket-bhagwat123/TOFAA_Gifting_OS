@@ -1,11 +1,11 @@
 import logging
-from typing import Any
 from fastapi import HTTPException, status
 from supabase import Client
 
 from src.core.config import settings
 from src.core.supabase import get_supabase_admin_client, get_supabase_client, get_user_supabase_client
 from src.core.security import decode_access_token
+from src.core.ttl_cache import MISSING, lookups
 from src.modules.auth.rbac import Role
 from src.modules.auth.schemas import (
     AuthResponse,
@@ -15,7 +15,6 @@ from src.modules.auth.schemas import (
     TokenResponse,
     UserLoginRequest,
     UserProfileResponse,
-    UserRegisterRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,56 +24,6 @@ class AuthService:
     def __init__(self, anon_client: Client | None = None, admin_client: Client | None = None) -> None:
         self.anon_client = anon_client or get_supabase_client()
         self.admin_client = admin_client or get_supabase_admin_client()
-
-    def register(self, payload: UserRegisterRequest) -> AuthResponse:
-        """
-        Registers a new user in Supabase Auth.
-        The PostgreSQL trigger 'on_auth_user_created' automatically synchronizes public.profiles.
-        """
-        try:
-            sign_up_options: dict[str, Any] = {
-                "data": {
-                    "full_name": payload.full_name or "",
-                }
-            }
-            res = self.anon_client.auth.sign_up({
-                "email": payload.email,
-                "password": payload.password,
-                "options": sign_up_options,
-            })
-            
-            if not res.user:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Failed to register user.",
-                )
-
-            user_id = str(res.user.id)
-            user_profile = self.get_profile_by_id(user_id, default_email=payload.email, default_name=payload.full_name)
-
-            token_response = None
-            message = "Registration successful."
-            if res.session:
-                token_response = TokenResponse(
-                    access_token=res.session.access_token,
-                    refresh_token=res.session.refresh_token,
-                    expires_in=res.session.expires_in,
-                    expires_at=res.session.expires_at,
-                    token_type=res.session.token_type or "bearer",
-                )
-            else:
-                message = "Registration successful. Please verify your email if required."
-
-            return AuthResponse(user=user_profile, session=token_response, message=message)
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Sign up error: {str(e)}", exc_info=True)
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Registration failed: {str(e)}",
-            )
 
     def login(self, payload: UserLoginRequest) -> AuthResponse:
         """
@@ -103,20 +52,23 @@ class AuthService:
                 ),
             )
 
+            if user_profile.tenant_id is None:
+                # Signing in with the invited credentials proves the user owns the invite, so
+                # activate the pending membership now; otherwise tenant_id stays null forever.
+                user_profile = self._accept_pending_invitation(user_id, user_profile)
+
+            # The password was right, so say what is wrong rather than leaving the user guessing.
             if not user_profile.is_active:
                 raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid email or password.",
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Your account isn't active. Please contact your administrator.",
                 )
-
-            if (
-                user_profile.role == Role.CLIENT
-                and user_profile.tenant_id is None
-                and not user_profile.must_reset_password
-            ):
+            # Clients and account managers must belong to an active tenant to sign in.
+            # A super admin works across every tenant, so belonging to one is not required.
+            if user_profile.tenant_id is None and user_profile.role != Role.SUPER_ADMIN:
                 raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid email or password.",
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Your account isn't linked to an active organisation. Please contact your administrator.",
                 )
 
             token_response = TokenResponse(
@@ -167,7 +119,7 @@ class AuthService:
             logger.error(f"Refresh token error: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Unable to refresh session: {str(e)}",
+                detail="Unable to refresh session.",
             )
 
     def logout(self, access_token: str) -> None:
@@ -237,16 +189,40 @@ class AuthService:
         default_email: str | None = None,
         default_name: str | None = None,
         default_must_reset_password: bool = False,
+        *,
+        use_cache: bool = True,
     ) -> UserProfileResponse:
+        """
+        The user's profile, remembered for ``AUTH_CACHE_SECONDS`` so a burst of requests (one screen
+        makes several) reads the database once. Any successful write clears it. Pass
+        ``use_cache=False`` to force a fresh read, e.g. right after accepting an invitation.
+        """
+        key = ("profile", user_id)
+        ttl = settings.AUTH_CACHE_SECONDS
+        if use_cache:
+            cached = lookups.get(key, ttl)
+            if cached is not MISSING:
+                return cached
+        profile, from_database = self._read_profile(user_id, default_email, default_name, default_must_reset_password)
+        if from_database:  # never remember the stand-in profile used when the read failed
+            lookups.set(key, profile)
+        return profile
+
+    def _read_profile(
+        self,
+        user_id: str,
+        default_email: str | None,
+        default_name: str | None,
+        default_must_reset_password: bool,
+    ) -> tuple[UserProfileResponse, bool]:
         """
         Fetches the public.profiles record for a user.
         Falls back gracefully if the database trigger has slight eventual consistency latency.
         """
         try:
             # Use admin client to ensure we can read the profile across schema boundaries
-            response = self.admin_client.table("profiles").select("*").eq("id", user_id).limit(1).execute()
-            if response.data and len(response.data) > 0:
-                record = response.data[0]
+            record = self._profile_record(user_id)
+            if record:
                 return UserProfileResponse(
                     id=record["id"],
                     email=record.get("email") or default_email or "",
@@ -257,10 +233,16 @@ class AuthService:
                     must_reset_password=record.get(
                         "must_reset_password", default_must_reset_password
                     ),
-                    tenant_id=self._get_active_tenant_id(user_id),
+                    # Only a client's access depends on this. Staff get their home tenant for
+                    # information; their access comes from their role and assignments.
+                    tenant_id=(
+                        self._active_tenant_from(record["tenant_memberships"])
+                        if "tenant_memberships" in record
+                        else self._get_active_tenant_id(user_id)
+                    ),
                     created_at=record.get("created_at"),
                     updated_at=record.get("updated_at"),
-                )
+                ), True
         except Exception as e:
             logger.warning(f"Could not fetch profile from public.profiles table: {str(e)}")
 
@@ -272,6 +254,48 @@ class AuthService:
             role="CLIENT",
             is_active=True,
             must_reset_password=default_must_reset_password,
+        ), False
+
+    def _profile_record(self, user_id: str) -> dict | None:
+        """The profile and its membership in one round trip; two separate reads if the join is unavailable."""
+        try:
+            response = (
+                self.admin_client.table("profiles")
+                .select("*,tenant_memberships(tenant_id,status,tenants(status))")
+                .eq("id", user_id)
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            logger.warning("Joined profile read failed, falling back to two reads: %s", exc)
+            response = self.admin_client.table("profiles").select("*").eq("id", user_id).limit(1).execute()
+        return response.data[0] if response.data else None
+
+    @staticmethod
+    def _active_tenant_from(memberships: object) -> str | None:
+        """The tenant of an ACTIVE membership whose tenant is ACTIVE too."""
+        if isinstance(memberships, dict):
+            memberships = [memberships]
+        for membership in memberships or []:
+            tenant = membership.get("tenants")
+            tenant_status = tenant.get("status") if isinstance(tenant, dict) else None
+            if membership.get("status") == "ACTIVE" and tenant_status == "ACTIVE":
+                return str(membership["tenant_id"])
+        return None
+
+    def _accept_pending_invitation(self, user_id: str, profile: UserProfileResponse) -> UserProfileResponse:
+        """Activate an unaccepted invitation and reload the profile; unchanged if there is nothing to accept."""
+        try:
+            self.admin_client.rpc("accept_tenant_invitation", {"p_user_id": user_id}).execute()
+        except Exception as exc:
+            logger.info("No pending invitation could be accepted for user %s: %s", user_id, exc)
+            return profile
+        return self.get_profile_by_id(
+            user_id,
+            default_email=profile.email,
+            default_name=profile.full_name,
+            default_must_reset_password=profile.must_reset_password,
+            use_cache=False,
         )
 
     def _get_active_tenant_id(self, user_id: str) -> str | None:

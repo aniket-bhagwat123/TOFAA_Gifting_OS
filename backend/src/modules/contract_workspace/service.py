@@ -128,7 +128,7 @@ class ContractWorkspaceService:
     ) -> GiftLineRead:
         self._require_team_role(actor)
         current = self._get_gift(gift_id)
-        self._authorize_team(current["tenant_id"], actor)
+        tenant_service.require_context(current["tenant_id"], actor, write=True)
         values = payload.model_dump(mode="json", exclude_unset=True)
         reason = values.pop("reason", None)
         if "recipient_id" in values:
@@ -177,7 +177,7 @@ class ContractWorkspaceService:
     ) -> GiftLineRead:
         self._require_team_role(actor)
         current = self._get_gift(gift_id)
-        self._authorize_team(current["tenant_id"], actor)
+        tenant_service.require_context(current["tenant_id"], actor, write=True)
         if current["status"] == "CANCELLED":
             raise HTTPException(status_code=409, detail="Gift line is already cancelled.")
         try:
@@ -219,7 +219,7 @@ class ContractWorkspaceService:
         if len(rows) != len(ids):
             raise HTTPException(status_code=404, detail="One or more gift lines were not found.")
         for tenant_id in {row["tenant_id"] for row in rows}:
-            self._authorize_team(tenant_id, actor)
+            tenant_service.require_context(tenant_id, actor, write=True)
         fields = payload.model_fields_set
         try:
             result = self.database.rpc(
@@ -325,9 +325,11 @@ class ContractWorkspaceService:
         recipient_ids = list({row["recipient_id"] for row in rows})
         event_ids = list({row["event_id"] for row in rows if row.get("event_id")})
         occasion_ids = list({row["occasion_id"] for row in rows if row.get("occasion_id")})
+        tenant_ids = list({row["tenant_id"] for row in rows})
         recipients = (
             self.database.table("recipients")
             .select("id,name,tier")
+            .in_("tenant_id", tenant_ids)
             .in_("id", recipient_ids)
             .execute()
             .data
@@ -336,6 +338,7 @@ class ContractWorkspaceService:
         events = (
             self.database.table("events")
             .select("id,event_name")
+            .in_("tenant_id", tenant_ids)
             .in_("id", event_ids)
             .execute()
             .data
@@ -344,7 +347,8 @@ class ContractWorkspaceService:
         recipient_map = {item["id"]: item for item in recipients}
         event_map = {item["id"]: item for item in events}
         occasions = (
-            self.database.table("occasions").select("id,occasion_name").in_("id", occasion_ids).execute().data
+            self.database.table("occasions").select("id,occasion_name").in_("id", occasion_ids)
+            .or_(f"tenant_id.is.null,tenant_id.in.({','.join(tenant_ids)})").execute().data
             if occasion_ids else []
         ) or []
         occasion_map = {item["id"]: item for item in occasions}

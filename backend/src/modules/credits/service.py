@@ -1,6 +1,8 @@
 """Credit request lifecycle and immutable tenant credit ledger."""
 
 import logging
+import re
+from uuid import uuid4
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
@@ -8,6 +10,7 @@ from fastapi import HTTPException
 from postgrest.exceptions import APIError
 from supabase import Client
 
+from src.core.concurrency import run_parallel
 from src.core.pagination import PaginationMeta, next_page_cursor
 from src.core.supabase import get_supabase_admin_client
 from src.modules.auth.rbac import Permission, Role, require_permission
@@ -18,6 +21,9 @@ from src.modules.credits.schemas import (
     CreditLedgerPage,
     CreditLedgerRead,
     CreditMutationResult,
+    CreditPricingRead,
+    PaymentProofLink,
+    PaymentProofRead,
     CreditRequestCreate,
     CreditRequestEventRead,
     CreditRequestHistory,
@@ -32,6 +38,11 @@ from src.modules.tenants.service import tenant_service
 
 logger = logging.getLogger(__name__)
 
+PROOF_BUCKET = "payment-proofs"
+PROOF_MAX_BYTES = 5 * 1024 * 1024
+PROOF_TYPES = {"image/png": "png", "image/jpeg": "jpg", "application/pdf": "pdf"}
+PROOF_URL_SECONDS = 300
+
 
 class CreditsService:
     def __init__(self, database: Client | None = None) -> None:
@@ -44,8 +55,8 @@ class CreditsService:
         actor: UserProfileResponse,
         idempotency_key: str,
     ) -> CreditRequestRead:
-        if actor.role != Role.CLIENT:
-            raise HTTPException(status_code=403, detail="Only tenant users can request credits.")
+        if actor.role not in (Role.CLIENT, Role.KAM):
+            raise HTTPException(status_code=403, detail="Only tenant users and account managers can request credits.")
         idempotency_key = self._validate_idempotency_key(idempotency_key)
         self._authorize_tenant(tenant_id, actor, Permission.CREDIT_CREATE)
         row = self._rpc(
@@ -135,9 +146,12 @@ class CreditsService:
         payload: PaymentSubmission,
         actor: UserProfileResponse,
     ) -> CreditRequestRead:
-        if actor.role != Role.CLIENT:
-            raise HTTPException(status_code=403, detail="Only tenant users can submit payment details.")
+        if actor.role not in (Role.CLIENT, Role.KAM):
+            raise HTTPException(status_code=403, detail="Only tenant users and account managers can submit payment details.")
         self.get_request(tenant_id, request_id, actor)
+        proof = payload.payment_proof_file_id
+        if proof and not proof.startswith(f"{tenant_id}/{request_id}/"):
+            raise HTTPException(status_code=422, detail="Payment proof does not belong to this request.")
         row = self._rpc(
             "submit_credit_payment",
             {
@@ -160,15 +174,8 @@ class CreditsService:
     ) -> CreditRequestPage:
         self._require_staff(actor)
         query = self.database.table("credit_requests").select("*", count="exact")
-        if actor.role == Role.KAM:
-            assignments = (
-                self.database.table("team_client_assignments")
-                .select("tenant_id")
-                .eq("user_id", actor.id)
-                .eq("active", True)
-                .execute()
-            )
-            tenant_ids = list({row["tenant_id"] for row in assignments.data or []})
+        tenant_ids = tenant_service.visible_tenant_ids(actor)
+        if tenant_ids is not None:
             if not tenant_ids:
                 return CreditRequestPage(
                     items=[],
@@ -200,8 +207,8 @@ class CreditsService:
         note: str,
     ) -> CreditRequestRead:
         self._require_staff(actor)
-        tenant_id = self._request_tenant_id(request_id)
-        self._authorize_tenant(tenant_id, actor, Permission.CREDIT_REVIEW)
+        tenant_id = self._reviewable_tenant_id(request_id, actor)
+        tenant_service.require_context(tenant_id, actor, write=True)
         row = self._rpc(
             "review_credit_request",
             {
@@ -223,8 +230,8 @@ class CreditsService:
     ) -> CreditMutationResult:
         self._require_staff(actor)
         idempotency_key = self._validate_idempotency_key(idempotency_key)
-        tenant_id = self._request_tenant_id(request_id)
-        self._authorize_tenant(tenant_id, actor, Permission.CREDIT_REVIEW)
+        tenant_id = self._reviewable_tenant_id(request_id, actor)
+        tenant_service.require_context(tenant_id, actor, write=True)
         result = self._rpc(
             "verify_credit_request_payment",
             {
@@ -246,20 +253,95 @@ class CreditsService:
             request_id, actor, decision="reject_payment", note=reason
         )
 
-    def balance(self, tenant_id: str, actor: UserProfileResponse) -> CreditBalanceRead:
+    def pricing(self, tenant_id: str, actor: UserProfileResponse) -> CreditPricingRead:
         self._authorize_tenant(tenant_id, actor, Permission.CREDIT_READ)
-        account = (
-            self.database.table("credit_accounts")
-            .select("tenant_id,currency,available_credits,updated_at")
-            .eq("tenant_id", tenant_id)
+        result = (
+            self.database.table("credit_pricing")
+            .select("currency,minor_units_per_credit")
+            .eq("id", 1)
             .limit(1)
             .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=503, detail="Credit pricing is not configured.")
+        row = result.data[0]
+        return CreditPricingRead(currency=row["currency"], unit_price_minor=row["minor_units_per_credit"])
+
+    def upload_payment_proof(
+        self,
+        tenant_id: str,
+        request_id: str,
+        actor: UserProfileResponse,
+        *,
+        content: bytes,
+        content_type: str,
+        file_name: str,
+    ) -> PaymentProofRead:
+        if actor.role not in (Role.CLIENT, Role.KAM):
+            raise HTTPException(status_code=403, detail="Only tenant users and account managers can attach payment proof.")
+        request = self.get_request(tenant_id, request_id, actor)
+        if request.status != "awaiting_payment":
+            raise HTTPException(status_code=409, detail="Payment proof can only be attached while payment is due.")
+        content_type = (content_type or "").split(";")[0].strip().lower()
+        if content_type not in PROOF_TYPES:
+            raise HTTPException(status_code=415, detail="Attach a PNG, JPG or PDF file.")
+        if not content:
+            raise HTTPException(status_code=422, detail="The file is empty.")
+        if len(content) > PROOF_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="The file is too large. Attach one under 5 MB.")
+        safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", file_name or "proof")[:80] or "proof"
+        path = f"{tenant_id}/{request_id}/{uuid4().hex}.{PROOF_TYPES[content_type]}"
+        try:
+            self.database.storage.from_(PROOF_BUCKET).upload(path, content, {"content-type": content_type})
+        except Exception as exc:  # storage client raises its own error types
+            logger.exception("Could not store payment proof")
+            raise HTTPException(status_code=503, detail="The file could not be saved. Please try again.") from exc
+        return PaymentProofRead(file_id=path, file_name=safe_name, content_type=content_type, size_bytes=len(content))
+
+    def payment_proof_link(self, request_id: str, actor: UserProfileResponse) -> PaymentProofLink:
+        """Short-lived link so staff can open the proof while verifying a payment."""
+        tenant_id = self._reviewable_tenant_id(request_id, actor)
+        row = (
+            self.database.table("credit_requests")
+            .select("payment_proof_file_id")
+            .eq("tenant_id", tenant_id)
+            .eq("id", request_id)
+            .limit(1)
+            .execute()
+            .data
+        )
+        proof = row[0].get("payment_proof_file_id") if row else None
+        if not proof:
+            raise HTTPException(status_code=404, detail="No payment proof was attached.")
+        try:
+            signed = self.database.storage.from_(PROOF_BUCKET).create_signed_url(proof, PROOF_URL_SECONDS)
+        except Exception as exc:
+            logger.exception("Could not sign payment proof link")
+            raise HTTPException(status_code=503, detail="The proof could not be opened right now.") from exc
+        url = signed.get("signedURL") or signed.get("signedUrl")
+        if not url:
+            raise HTTPException(status_code=503, detail="The proof could not be opened right now.")
+        return PaymentProofLink(url=url, expires_in_seconds=PROOF_URL_SECONDS)
+
+    def balance(self, tenant_id: str, actor: UserProfileResponse) -> CreditBalanceRead:
+        self._authorize_tenant(tenant_id, actor, Permission.CREDIT_READ)
+        account, reserved = run_parallel(
+            lambda: (
+                self.database.table("credit_accounts")
+                .select("tenant_id,currency,available_credits,updated_at")
+                .eq("tenant_id", tenant_id)
+                .limit(1)
+                .execute()
+            ),
+            lambda: self._reserved_for_budgets(tenant_id),
         )
         if account.data:
             row = account.data[0]
             return CreditBalanceRead(
                 tenant_id=tenant_id,
-                available_credits=row["available_credits"],
+                available_credits=max(row["available_credits"] - reserved, 0),
+                total_credits=row["available_credits"],
+                reserved_credits=reserved,
                 currency=row["currency"],
                 as_of=row["updated_at"],
             )
@@ -269,9 +351,23 @@ class CreditsService:
         return CreditBalanceRead(
             tenant_id=tenant_id,
             available_credits=0,
+            total_credits=0,
+            reserved_credits=0,
             currency=pricing.data[0]["currency"],
             as_of=datetime.now(timezone.utc),
         )
+
+    def _reserved_for_budgets(self, tenant_id: str) -> int:
+        """Credits already set aside in Occasion / Event budgets and not yet spent."""
+        try:
+            result = self.database.rpc("gift_spend_reserved_credits", {"p_tenant_id": tenant_id}).execute()
+        except APIError:
+            logger.exception("Could not read reserved credits")
+            return 0
+        value = result.data
+        if isinstance(value, list):
+            value = value[0] if value else 0
+        return int(value or 0)
 
     def ledger(
         self,
@@ -419,17 +515,21 @@ class CreditsService:
         )
         return CreditLedgerRead.model_validate(row)
 
-    def _request_tenant_id(self, request_id: str) -> str:
+    def _reviewable_tenant_id(self, request_id: str, actor: UserProfileResponse) -> str:
+        """The request's tenant. Account managers may also raise requests, so nobody reviews their own."""
         result = (
             self.database.table("credit_requests")
-            .select("tenant_id")
+            .select("tenant_id,created_by_user_id")
             .eq("id", request_id)
             .limit(1)
             .execute()
         )
         if not result.data:
             raise HTTPException(status_code=404, detail="Credit request not found.")
-        return result.data[0]["tenant_id"]
+        row = result.data[0]
+        if str(row.get("created_by_user_id")) == str(actor.id):
+            raise HTTPException(status_code=403, detail="You can't review a credit request you created.")
+        return row["tenant_id"]
 
     def _authorize_tenant(
         self,
@@ -439,8 +539,9 @@ class CreditsService:
     ) -> None:
         require_permission(actor, permission)
         tenant_service.require_access(tenant_id, actor)
-        tenant = self.database.table("tenants").select("id").eq("id", tenant_id).limit(1).execute()
-        if not tenant.data:
+        if actor.role == Role.CLIENT:
+            return  # access already proved this is the client's own, existing tenant
+        if tenant_service.tenant_state(tenant_id) is None:
             raise HTTPException(status_code=404, detail="Tenant not found.")
 
     @staticmethod

@@ -9,11 +9,17 @@ from src.core.schema import ApiResponse
 from src.modules.auth.dependencies import CurrentUserDep, TokenDep
 from src.modules.auth.authorization import SuperAdminDep
 from src.core.security import decode_access_token
+from src.modules.tenants.service import tenant_service
+from src.modules.tenants.service import tenant_service
 from src.modules.users.schemas import KamOption, UserInviteCreate, UserInviteRead, UserList, UserRead, UserUpdate
 from src.modules.users.service import user_service
 
 
 router = APIRouter(tags=["Users"])
+# TOFAA staff accounts: super admin only, always in the internal tenant.
+team_router = APIRouter(prefix="/admin/team", tags=["TOFAA Team"])
+# Separate because the invited user has no active tenant context yet.
+invitation_router = APIRouter(tags=["Users"])
 
 
 @router.get("/admin/kams", response_model=list[KamOption])
@@ -116,11 +122,58 @@ def resend_invitation(
     )
 
 
-@router.post("/auth/invitations/accept", response_model=ApiResponse[UserRead])
+@invitation_router.post("/auth/invitations/accept", response_model=ApiResponse[UserRead])
 def accept_invitation(token: TokenDep) -> ApiResponse[UserRead]:
     """Activate the invitation for the user identified by the verified bearer token."""
     token_subject = decode_access_token(token).sub
     return ApiResponse(
         data=user_service.accept_invitation(token_subject),
         message="User invitation accepted successfully.",
+    )
+
+
+@team_router.get("", response_model=UserList)
+def list_team(
+    actor: SuperAdminDep,
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
+) -> UserList:
+    return user_service.list_users(tenant_service.internal_tenant_id(), actor, page=page, limit=limit)
+
+
+@team_router.post("", response_model=ApiResponse[UserInviteRead], status_code=status.HTTP_202_ACCEPTED)
+def invite_team_member(payload: Annotated[UserInviteCreate, Body()], actor: SuperAdminDep) -> ApiResponse[UserInviteRead]:
+    return ApiResponse(
+        data=user_service.create_invitation(tenant_service.internal_tenant_id(), payload, actor),
+        message="Team invitation created successfully.",
+    )
+
+
+@team_router.patch("/{user_id}", response_model=ApiResponse[UserRead])
+def update_team_member(
+    user_id: UUID, payload: Annotated[UserUpdate, Body()], actor: SuperAdminDep
+) -> ApiResponse[UserRead]:
+    return ApiResponse(
+        data=user_service.update_user(tenant_service.internal_tenant_id(), str(user_id), payload, actor),
+        message="Team member updated successfully.",
+    )
+
+
+@team_router.post("/{user_id}/activate", response_model=ApiResponse[dict])
+def activate_team_member(user_id: UUID, actor: SuperAdminDep) -> ApiResponse[dict]:
+    user_service.activate_user(tenant_service.internal_tenant_id(), str(user_id), actor)
+    return ApiResponse(data={}, message="Team member activated successfully.")
+
+
+@team_router.post("/{user_id}/deactivate", response_model=ApiResponse[dict])
+def deactivate_team_member(user_id: UUID, actor: SuperAdminDep) -> ApiResponse[dict]:
+    user_service.deactivate_user(tenant_service.internal_tenant_id(), str(user_id), actor)
+    return ApiResponse(data={}, message="Team member deactivated successfully.")
+
+
+@team_router.post("/{user_id}/resend-invite", response_model=ApiResponse[UserInviteRead])
+def resend_team_invitation(user_id: UUID, actor: SuperAdminDep) -> ApiResponse[UserInviteRead]:
+    return ApiResponse(
+        data=user_service.resend_invitation(tenant_service.internal_tenant_id(), str(user_id), actor),
+        message="Team invitation resent successfully.",
     )

@@ -197,8 +197,8 @@ class EventService:
         actor: UserProfileResponse,
         permission: Permission,
     ) -> None:
-        if actor.role not in (Role.CLIENT, Role.SUPER_ADMIN):
-            raise HTTPException(status_code=403, detail="Only tenant users and super admins can manage events.")
+        if actor.role not in (Role.CLIENT, Role.KAM, Role.SUPER_ADMIN):
+            raise HTTPException(status_code=403, detail="Only tenant users and the TOFAA team can manage events.")
         EventService._require_tenant_access(tenant_id, actor, permission)
 
 

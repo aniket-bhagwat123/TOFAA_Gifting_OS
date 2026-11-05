@@ -48,11 +48,6 @@ def get_current_active_user(
     """
     Ensures that the authenticated user account is active.
     """
-    if current_user.must_reset_password:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Set a new password before using tenant features.",
-        )
     if not current_user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -63,10 +58,12 @@ def get_current_active_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User role is not authorized.",
         )
-    if current_user.role == Role.CLIENT and current_user.tenant_id is None:
+    # Resolved from the active membership on every request, so deactivating a user or a tenant
+    # takes effect immediately. A super admin needs no tenant: they reach every client.
+    if current_user.tenant_id is None and current_user.role != Role.SUPER_ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Client onboarding is incomplete or inactive.",
+            detail="Your account isn't linked to an active organisation.",
         )
     return current_user
 

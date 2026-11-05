@@ -31,7 +31,8 @@ async def test_get_me_authorized(async_client: AsyncClient, create_test_token):
     user_id = "22222222-2222-2222-2222-222222222222"
     token = create_test_token(user_id=user_id, email="alice@tofaa.com", user_metadata={"full_name": "Alice Smith"})
     profile = UserProfileResponse(
-        id=user_id, email="alice@tofaa.com", full_name="Alice Smith", role="SUPER_ADMIN"
+        id=user_id, email="alice@tofaa.com", full_name="Alice Smith", role="SUPER_ADMIN",
+        tenant_id="44444444-4444-4444-4444-444444444444",
     )
 
     with patch("src.modules.auth.dependencies.auth_service.get_profile_by_id", return_value=profile):
@@ -48,33 +49,13 @@ async def test_get_me_authorized(async_client: AsyncClient, create_test_token):
 
 
 @pytest.mark.asyncio
-async def test_register_endpoint(async_client: AsyncClient):
-    fake_profile = UserProfileResponse(
-        id="33333333-3333-3333-3333-333333333333",
-        email="bob@tofaa.com",
-        full_name="Bob Jones",
-        role="CLIENT",
-        is_active=True,
+async def test_public_registration_is_closed(async_client: AsyncClient):
+    """Users only exist because an administrator invited them into a tenant."""
+    response = await async_client.post(
+        "/api/v1/auth/register",
+        json={"email": "bob@tofaa.com", "password": "Password123!"},
     )
-    fake_auth_response = AuthResponse(
-        user=fake_profile,
-        session=None,
-        message="Registration successful. Please verify your email if required.",
-    )
-
-    with patch("src.modules.auth.router.auth_service.register", return_value=fake_auth_response):
-        response = await async_client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "bob@tofaa.com",
-                "password": "Password123!",
-                "full_name": "Bob Jones",
-            },
-        )
-        assert response.status_code == 201
-        data = response.json()
-        assert data["data"]["user"]["email"] == "bob@tofaa.com"
-        assert data["data"]["user"]["full_name"] == "Bob Jones"
+    assert response.status_code in (404, 405)
 
 
 @pytest.mark.asyncio

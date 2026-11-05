@@ -16,6 +16,14 @@ def recipient_id() -> str:
     return "14d36f4c-ec6a-4211-9f32-79e39c5d54d1"
 
 
+@pytest.fixture(autouse=True)
+def tenant_context_valid(monkeypatch):
+    """These contract tests stub services and have no database; the guard has its own tests."""
+    from src.modules.tenants.service import tenant_service
+
+    monkeypatch.setattr(tenant_service, "require_context", lambda *_args, **_kwargs: None)
+
+
 @pytest.fixture
 async def e2e_client():
     actor = UserProfileResponse(

@@ -6,11 +6,10 @@ from src.modules.auth.rbac import Permission
 from src.modules.events.service import EventService
 
 
-def test_kam_cannot_edit_tenant_events():
+def test_kam_can_edit_tenant_events(monkeypatch):
     kam = UserProfileResponse(id="kam-1", email="kam@example.com", role="KAM")
-    with pytest.raises(HTTPException) as exc:
-        EventService._require_tenant_editor("tenant-1", kam, Permission.EVENT_UPDATE)
-    assert exc.value.status_code == 403
+    monkeypatch.setattr("src.modules.events.service.tenant_service.require_access", lambda tenant, actor: None)
+    EventService._require_tenant_editor("tenant-1", kam, Permission.EVENT_UPDATE)
 
 
 def test_tenant_user_can_pass_event_editor_role_check(monkeypatch):

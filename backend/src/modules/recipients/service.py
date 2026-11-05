@@ -10,6 +10,7 @@ from src.core.pagination import PaginationMeta, next_page_cursor
 from src.core.supabase import get_supabase_admin_client
 from src.modules.auth.rbac import Permission, Role, require_permission
 from src.modules.auth.schemas import UserProfileResponse
+from src.modules.tenants.service import tenant_service
 from src.modules.recipients.schemas import RecipientCreate, RecipientList, RecipientRead, RecipientUpdate
 
 
@@ -29,16 +30,26 @@ class RecipientService:
         *,
         page: int,
         limit: int,
+        recipient_ids: list[str] | None = None,
     ) -> RecipientList:
         require_permission(actor, Permission.RECIPIENT_READ)
         self._require_tenant_access(tenant_id, actor)
+        if recipient_ids is not None and not recipient_ids:
+            return RecipientList(
+                items=[], pagination=PaginationMeta(page=page, limit=limit, total_records=0), next_cursor=None
+            )
         offset = (page - 1) * limit
-        result = (
+        query = (
             self.database.table("recipients")
             .select(f"{RECIPIENT_RESPONSE_COLUMNS},created_at", count="exact")
             .eq("tenant_id", tenant_id)
             .is_("deleted_at", "null")
-            .order("created_at", desc=True)
+        )
+        if recipient_ids is not None:
+            # Still inside the tenant filter above, so another tenant's IDs simply match nothing.
+            query = query.in_("id", recipient_ids)
+        result = (
+            query.order("created_at", desc=True)
             .order("id", desc=True)
             .range(offset, offset + limit - 1)
             .execute()
@@ -167,21 +178,10 @@ class RecipientService:
 
     def _require_tenant_access(self, tenant_id: str, actor: UserProfileResponse) -> None:
         require_permission(actor, Permission.RECIPIENT_READ)
-        if actor.role == Role.SUPER_ADMIN or (actor.role == Role.CLIENT and actor.tenant_id == tenant_id):
-            return
-        if actor.role == Role.KAM:
-            result = (
-                self.database.table("team_client_assignments")
-                .select("id")
-                .eq("tenant_id", tenant_id)
-                .eq("user_id", actor.id)
-                .eq("active", True)
-                .limit(1)
-                .execute()
-            )
-            if result.data:
-                return
-        raise HTTPException(status_code=404, detail="Recipient not found.")
+        try:
+            tenant_service.require_access(tenant_id, actor)
+        except HTTPException as exc:
+            raise HTTPException(status_code=404, detail="Recipient not found.") from exc
 
 
 recipient_service = RecipientService()

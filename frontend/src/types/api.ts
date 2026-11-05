@@ -21,6 +21,8 @@ export interface AuthUser {
   platformRole: "CLIENT" | "TOFAA_TEAM" | "SUPER_ADMIN";
   tenant?: { id: string; name: string };
   permissions: string[];
+  /** True while the user is still on a temporary password (e.g. just invited). */
+  mustResetPassword: boolean;
 }
 
 export interface AuthSession { access_token: string; refresh_token: string; expires_at?: number | null; expires_in?: number | null; token_type?: string }

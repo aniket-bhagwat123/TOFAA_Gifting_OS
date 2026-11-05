@@ -67,14 +67,14 @@ class UserEmailService:
 <tr><td style="padding:36px">
 <p style="margin:0 0 12px;color:#997342;font-size:12px;font-weight:bold;letter-spacing:1.5px">ACCOUNT INVITATION</p>
 <h1 style="margin:0 0 18px;color:#173c34;font-size:27px">Your account is ready</h1>
-<p style="font-size:15px;line-height:1.7">Hello {safe_name}, use these credentials to open the password reset flow.</p>
+<p style="font-size:15px;line-height:1.7">Hello {safe_name}, your account is ready. Use these details to sign in.</p>
 <p style="margin:18px 0 8px;font-size:13px;color:#66716c">ACCOUNT EMAIL</p>
 <p style="margin:0 0 18px;padding:14px 16px;background:#f4f2ed;border-radius:8px;font-size:15px;font-weight:bold;word-break:break-word">{safe_email}</p>
 <p style="margin:18px 0 8px;font-size:13px;color:#66716c">TEMPORARY PASSWORD</p>
 <p style="margin:0;padding:14px 16px;background:#f4f2ed;border-radius:8px;font-family:monospace;font-size:16px;font-weight:bold;word-break:break-all">{safe_password}</p>
-<p style="margin:16px 0 24px;color:#66716c;font-size:13px;line-height:1.6">This temporary password only lets you reach password reset. You must choose a new password before accessing tenant features.</p>
+<p style="margin:16px 0 24px;color:#66716c;font-size:13px;line-height:1.6">You can sign in with this password straight away. If you would rather choose your own, use the button below.</p>
 <table role="presentation" cellspacing="0" cellpadding="0"><tr><td bgcolor="#173c34" style="border-radius:7px">
-<a href="{safe_url}" style="display:inline-block;padding:15px 24px;color:#fff;text-decoration:none;font-size:13px;font-weight:bold;letter-spacing:1px">RESET PASSWORD</a>
+<a href="{safe_url}" style="display:inline-block;padding:15px 24px;color:#fff;text-decoration:none;font-size:13px;font-weight:bold;letter-spacing:1px">CHOOSE MY OWN PASSWORD</a>
 </td></tr></table>
 <p style="margin:24px 0 0;color:#66716c;font-size:12px;line-height:1.6">The reset link expires in one hour and can be used once. If you weren’t expecting this account, contact your administrator.</p>
 <p style="margin:16px 0 0;color:#66716c;font-size:12px;line-height:1.6">If the button doesn’t work, copy this link into your browser:<br><a href="{safe_url}" style="color:#173c34;word-break:break-all">{safe_url}</a></p>

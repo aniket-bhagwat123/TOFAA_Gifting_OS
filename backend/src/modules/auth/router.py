@@ -12,7 +12,6 @@ from src.modules.auth.schemas import (
     TokenResponse,
     UserLoginRequest,
     UserProfileResponse,
-    UserRegisterRequest,
 )
 from src.modules.auth.service import auth_service
 
@@ -20,20 +19,6 @@ router = APIRouter(
     prefix="/auth",
     tags=["Authentication"],
 )
-
-
-@router.post(
-    "/register",
-    response_model=ApiResponse[AuthResponse],
-    status_code=status.HTTP_201_CREATED,
-    summary="Register a new user",
-    description="Creates a new user in Supabase Auth. A user profile is automatically generated via database triggers.",
-)
-async def register(payload: Annotated[UserRegisterRequest, Body()]) -> ApiResponse[AuthResponse]:
-    return ApiResponse(
-        data=auth_service.register(payload),
-        message="Registration successful.",
-    )
 
 
 @router.post(

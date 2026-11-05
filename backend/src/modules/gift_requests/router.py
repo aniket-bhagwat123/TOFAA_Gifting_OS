@@ -10,12 +10,19 @@ from src.modules.auth.dependencies import CurrentUserDep
 from src.modules.gift_requests.schemas import (
     GiftProposalUpdate,
     GiftRequestAction,
+    GiftRequestApproval,
     GiftRequestCreate,
     GiftRequestEventPage,
     GiftRequestPage,
     GiftRequestRead,
     GiftRequestStatus,
+    GiftRequestSummary,
     GiftRequestUpdate,
+    OccasionActivity,
+    SendEventGiftRequest,
+    SendGiftsRequest,
+    SendGiftsResult,
+    UpcomingGiftItem,
 )
 from src.modules.gift_requests.service import gift_request_service
 
@@ -43,12 +50,42 @@ def list_gift_requests(
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     request_status: Annotated[GiftRequestStatus | None, Query(alias="status")] = None,
+    search: Annotated[str | None, Query(max_length=100)] = None,
 ) -> ApiResponse[GiftRequestPage]:
     return ApiResponse(
         data=gift_request_service.list_for_tenant(
-            str(tenant_id), actor, page=page, limit=limit, status_filter=request_status
+            str(tenant_id), actor, page=page, limit=limit, status_filter=request_status, search=search
         ),
         message="Gift requests retrieved successfully.",
+    )
+
+
+@router.get("/tenants/{tenant_id}/gift-requests/summary", response_model=ApiResponse[GiftRequestSummary])
+def gift_request_summary(tenant_id: UUID, actor: CurrentUserDep) -> ApiResponse[GiftRequestSummary]:
+    return ApiResponse(
+        data=gift_request_service.summary(str(tenant_id), actor),
+        message="Gift request counts retrieved successfully.",
+    )
+
+
+@router.get("/tenants/{tenant_id}/gift-requests/upcoming", response_model=ApiResponse[list[UpcomingGiftItem]])
+def upcoming_gift_occasions(
+    tenant_id: UUID,
+    actor: CurrentUserDep,
+    days: Annotated[int, Query(ge=1, le=365)] = 60,
+) -> ApiResponse[list[UpcomingGiftItem]]:
+    return ApiResponse(
+        data=gift_request_service.upcoming(str(tenant_id), actor, days=days),
+        message="Upcoming birthdays and events retrieved successfully.",
+    )
+
+
+@router.get("/tenants/{tenant_id}/gift-requests/activity", response_model=ApiResponse[OccasionActivity])
+def occasion_gift_activity(tenant_id: UUID, actor: CurrentUserDep) -> ApiResponse[OccasionActivity]:
+    """Gifts sent from the Occasions page: waiting on TOFAA, approved, and delivered in the last 30 days."""
+    return ApiResponse(
+        data=gift_request_service.occasion_activity(str(tenant_id), actor),
+        message="Occasion gift activity retrieved successfully.",
     )
 
 
@@ -134,12 +171,13 @@ def cancel_gift_request(
 def approve_gift_proposal(
     tenant_id: UUID,
     request_id: UUID,
-    payload: Annotated[GiftRequestAction, Body()],
+    payload: Annotated[GiftRequestApproval, Body()],
     actor: CurrentUserDep,
 ) -> ApiResponse[GiftRequestRead]:
     return ApiResponse(
         data=gift_request_service.transition(
-            str(tenant_id), str(request_id), "approve", actor, note=payload.note
+            str(tenant_id), str(request_id), "approve", actor,
+            note=payload.note, selected_option_index=payload.selected_option_index,
         ),
         message="Gift proposal approved.",
     )
@@ -160,6 +198,42 @@ def request_gift_proposal_changes(
             str(tenant_id), str(request_id), "request_changes", actor, note=payload.note
         ),
         message="Proposal changes requested.",
+    )
+
+
+@router.post(
+    "/tenants/{tenant_id}/occasions/{occasion_id}/send",
+    response_model=ApiResponse[SendGiftsResult],
+    status_code=status.HTTP_201_CREATED,
+)
+def send_occasion_gifts(
+    tenant_id: UUID,
+    occasion_id: UUID,
+    payload: Annotated[SendGiftsRequest, Body()],
+    actor: CurrentUserDep,
+) -> ApiResponse[SendGiftsResult]:
+    """Pick groups and/or people and a budget per person; sends a gift request to TOFAA for each."""
+    return ApiResponse(
+        data=gift_request_service.send_gifts(str(tenant_id), "occasion", str(occasion_id), payload, actor),
+        message="Gift requests sent.",
+    )
+
+
+@router.post(
+    "/tenants/{tenant_id}/events/{event_id}/send",
+    response_model=ApiResponse[SendGiftsResult],
+    status_code=status.HTTP_201_CREATED,
+)
+def send_event_gift(
+    tenant_id: UUID,
+    event_id: UUID,
+    payload: Annotated[SendEventGiftRequest, Body()],
+    actor: CurrentUserDep,
+) -> ApiResponse[SendGiftsResult]:
+    """Send a gift request for the recipient this event belongs to (birthday, anniversary, ...)."""
+    return ApiResponse(
+        data=gift_request_service.send_gifts(str(tenant_id), "event", str(event_id), payload, actor),
+        message="Gift request sent.",
     )
 
 

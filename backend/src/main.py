@@ -1,3 +1,5 @@
+import asyncio
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 import logging
 from typing import AsyncGenerator
@@ -8,11 +10,14 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from src.api.router import api_router
+from src.core import audit, telemetry
 from src.core.config import settings
+from src.core.ttl_cache import lookups
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -25,11 +30,40 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    docs_url=f"{settings.API_V1_STR}/docs",
-    redoc_url=f"{settings.API_V1_STR}/redoc",
+    # The API map is not published in production.
+    openapi_url=None if settings.is_production else f"{settings.API_V1_STR}/openapi.json",
+    docs_url=None if settings.is_production else f"{settings.API_V1_STR}/docs",
+    redoc_url=None if settings.is_production else f"{settings.API_V1_STR}/redoc",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def request_pipeline(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    """One middleware for everything per-request: timing, audit trail, cache refresh, security headers."""
+    context = audit.begin()
+    stats = telemetry.begin()
+    response = await call_next(request)
+    is_write = request.method in audit.WRITE_METHODS and response.status_code < 400
+    if is_write:
+        # A change may alter who a user is or which clients they reach: forget what was remembered.
+        lookups.clear()
+        if context:
+            route = getattr(request.scope.get("route"), "path", "")
+            # Fire and forget: the change already committed, and a slow audit insert must not delay the reply.
+            asyncio.get_running_loop().run_in_executor(None, audit.write, request.method, route, response.status_code, context)
+    calls, db_ms, total_ms = telemetry.summarize(stats)
+    response.headers["Server-Timing"] = f'db;desc="{calls} calls";dur={db_ms:.0f}, total;dur={total_ms:.0f}'
+    if total_ms > 300 or calls > 6:
+        logger.info("request_timing %s %s status=%s total_ms=%.0f db_calls=%d db_ms=%.0f", request.method, request.url.path, response.status_code, total_ms, calls, db_ms)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cache-Control"] = "no-store"
+    if settings.is_production:
+        # Browsers must only ever reach this API over TLS.
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 
 @app.exception_handler(StarletteHTTPException)

@@ -1,6 +1,6 @@
 """HTTP DTOs for tenant management."""
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.core.pagination import PaginationMeta
 from src.core.schema import to_camel
@@ -15,6 +15,15 @@ class TenantCreate(BaseModel):
     legal_name: str | None = Field(default=None, max_length=200)
     gstin: str | None = Field(default=None, min_length=15, max_length=15, pattern=r"^[A-Za-z0-9]{15}$")
     email_domain: str | None = Field(default=None, max_length=253)
+    first_user_email: str | None = Field(default=None, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    first_user_name: str | None = Field(default=None, max_length=150)
+
+    @field_validator("tenant_type")
+    @classmethod
+    def reject_internal(cls, value: TenantType) -> TenantType:
+        if value == TenantType.INTERNAL:
+            raise ValueError("The TOFAA team tenant already exists and cannot be created.")
+        return value
 
 
 class TenantUpdate(BaseModel):
@@ -46,6 +55,7 @@ class TenantRead(BaseModel):
     status: TenantStatus
     created_at: str
     updated_at: str
+    invitation_warning: str | None = Field(default=None, description="Set on creation when the first user's invitation failed.")
 
 
 class TenantList(BaseModel):

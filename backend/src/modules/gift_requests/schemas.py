@@ -89,6 +89,7 @@ class GiftProposalOption(BaseModel):
     name: str = Field(min_length=1, max_length=180)
     description: str | None = Field(default=None, max_length=1000)
     price: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    image_url: str | None = Field(default=None, max_length=1000)
 
     @field_validator("name", mode="before")
     @classmethod
@@ -113,6 +114,46 @@ class GiftRequestAction(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
+class GiftRequestApproval(BaseModel):
+    """Client decision on a published proposal: which option, plus an optional note."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    selected_option_index: int | None = Field(default=None, ge=0, le=19)
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class SendGiftsRequest(BaseModel):
+    """Send gift requests for an occasion: a budget per person, plus who it is for."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    recipient_ids: list[UUID] = Field(default_factory=list, max_length=500)
+    group_ids: list[UUID] = Field(default_factory=list, max_length=50)
+    budget_per_recipient: Decimal = Field(gt=0, le=10_000_000, max_digits=12, decimal_places=2)
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class SendEventGiftRequest(BaseModel):
+    """Send a gift request for one recipient's event (birthday, anniversary...)."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    budget_per_recipient: Decimal = Field(gt=0, le=10_000_000, max_digits=12, decimal_places=2)
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class SendGiftsResult(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    created_count: int
+    skipped_count: int  # already had an open request for this occasion or event
+    request_ids: list[str]
+    skipped_recipient_ids: list[str]
+    credits_per_recipient: int
+    total_credits: int
+
+
 class GiftRequestRead(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -133,6 +174,12 @@ class GiftRequestRead(BaseModel):
     status: GiftRequestStatus
     proposal: GiftProposal | None = None
     status_note: str | None = None
+    selected_option_index: int | None = None
+    recipient_name: str | None = None
+    occasion_name: str | None = None
+    event_name: str | None = None
+    event_date: date | None = None
+    created_by_name: str | None = None
     created_at: datetime | str
     updated_at: datetime | str
 
@@ -146,8 +193,55 @@ class GiftRequestEventRead(BaseModel):
     from_status: GiftRequestStatus | None = None
     to_status: GiftRequestStatus
     actor_user_id: str | None = None
+    actor_name: str | None = None
+    actor_role: str | None = None
     note: str | None = None
     created_at: datetime | str
+
+
+class GiftRequestSummary(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    total: int
+    by_status: dict[str, int]
+
+
+class UpcomingGiftItem(BaseModel):
+    """A birthday or event coming up, so the client can start a gift request from it."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    kind: str  # BIRTHDAY | EVENT
+    recipient_id: str
+    recipient_name: str | None = None
+    title: str
+    date: date
+    days_away: int
+    event_id: str | None = None
+    request_id: str | None = None  # an open gift request already exists for this event
+
+
+class OccasionActivityItem(BaseModel):
+    """One gift sent from the Occasions page: waiting on TOFAA, approved, or delivered."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    request_id: str | None = None
+    title: str
+    recipient_name: str | None = None
+    source_name: str | None = None  # the occasion or event it was sent for
+    budget: Decimal | None = None
+    credits: int | None = None
+    status: str
+    happened_at: datetime | str  # when it was last updated, or delivered
+
+
+class OccasionActivity(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    pending: list[OccasionActivityItem]  # sent, TOFAA is still working on it
+    approved: list[OccasionActivityItem]  # budget approved, not delivered yet
+    delivered: list[OccasionActivityItem]  # delivered in the last 30 days
 
 
 class GiftRequestPage(BaseModel):

@@ -38,7 +38,9 @@ class RecipientCreate(BaseModel):
     address: RecipientAddress
     date_of_birth: date
     anniversary_date: date | None = None
-    budget: Decimal = Field(
+    # Set later, when the recipient is edited.
+    budget: Decimal | None = Field(
+        default=None,
         ge=0,
         max_digits=12,
         decimal_places=2,

@@ -8,6 +8,9 @@ from fastapi import APIRouter, Body, Query, status
 from src.core.schema import ApiResponse
 from src.modules.auth.dependencies import CurrentUserDep
 from src.modules.gift_spend.schemas import (
+    DefaultBudgetRead,
+    DefaultBudgetSet,
+    DefaultBudgetTarget,
     EventBudgetUpdate,
     EventSpendSummary,
     GiftSpendNotificationPage,
@@ -15,13 +18,14 @@ from src.modules.gift_spend.schemas import (
     GiftSpendSettingsRead,
     GiftSpendSettingsUpdate,
     OccasionGroupAllocationRead,
-    OccasionGroupBudgetUpdate,
+    OccasionGroupCreate,
+    OccasionGroupUpdate,
     OccasionGroupImport,
     OccasionSpendSummary,
     RecipientGroupCreate,
     RecipientGroupRead,
     RecipientGroupUpdate,
-    RecipientOccasionBudgetUpdate,
+    OccasionRecipientBudgetUpdate,
     SpendSummary,
 )
 from src.modules.gift_spend.service import gift_spend_service
@@ -64,6 +68,40 @@ def update_recipient_group(
     )
 
 
+@router.get("/default-budgets", response_model=ApiResponse[list[DefaultBudgetRead]])
+def list_default_budgets(tenant_id: UUID, actor: CurrentUserDep) -> ApiResponse[list[DefaultBudgetRead]]:
+    return ApiResponse(
+        data=gift_spend_service.list_default_budgets(str(tenant_id), actor),
+        message="Default budgets retrieved successfully.",
+    )
+
+
+@router.put("/default-budgets", response_model=ApiResponse[DefaultBudgetRead])
+def set_default_budget(
+    tenant_id: UUID,
+    payload: Annotated[DefaultBudgetSet, Body()],
+    actor: CurrentUserDep,
+) -> ApiResponse[DefaultBudgetRead]:
+    return ApiResponse(
+        data=gift_spend_service.set_default_budget(str(tenant_id), payload, actor),
+        message="Budget saved successfully.",
+    )
+
+
+@router.delete("/default-budgets", response_model=ApiResponse[dict])
+def delete_default_budget(
+    tenant_id: UUID,
+    target_type: Annotated[DefaultBudgetTarget, Query(alias="targetType")],
+    target_id: Annotated[UUID, Query(alias="targetId")],
+    actor: CurrentUserDep,
+    group_id: Annotated[UUID | None, Query(alias="groupId")] = None,
+) -> ApiResponse[dict]:
+    gift_spend_service.delete_default_budget(
+        str(tenant_id), target_type, str(target_id), str(group_id) if group_id else None, actor,
+    )
+    return ApiResponse(data={}, message="Budget removed successfully.")
+
+
 @router.delete("/groups/{group_id}", response_model=ApiResponse[dict])
 def delete_recipient_group(tenant_id: UUID, group_id: UUID, actor: CurrentUserDep) -> ApiResponse[dict]:
     gift_spend_service.delete_group(str(tenant_id), str(group_id), actor)
@@ -90,23 +128,48 @@ def import_group_to_occasion(
     )
 
 
+@router.post(
+    "/occasions/{occasion_id}/groups",
+    response_model=ApiResponse[OccasionGroupAllocationRead],
+    status_code=status.HTTP_201_CREATED,
+)
+def create_occasion_group(
+    tenant_id: UUID,
+    occasion_id: UUID,
+    payload: Annotated[OccasionGroupCreate, Body()],
+    actor: CurrentUserDep,
+) -> ApiResponse[OccasionGroupAllocationRead]:
+    created = gift_spend_service.create_occasion_group(str(tenant_id), str(occasion_id), payload, actor)
+    summary = gift_spend_service.occasion_summary(str(tenant_id), str(occasion_id), actor)
+    allocation = next(item for item in summary.groups if item.id == created.id)
+    return ApiResponse(data=allocation, message="Group created.")
+
+
 @router.put(
     "/occasions/{occasion_id}/groups/{allocation_id}",
     response_model=ApiResponse[OccasionGroupAllocationRead],
 )
-def update_occasion_group_budget(
+def update_occasion_group(
     tenant_id: UUID,
     occasion_id: UUID,
     allocation_id: UUID,
-    payload: Annotated[OccasionGroupBudgetUpdate, Body()],
+    payload: Annotated[OccasionGroupUpdate, Body()],
     actor: CurrentUserDep,
 ) -> ApiResponse[OccasionGroupAllocationRead]:
-    gift_spend_service.update_group_allocation(
+    gift_spend_service.update_occasion_group(
         str(tenant_id), str(occasion_id), str(allocation_id), payload, actor,
     )
     summary = gift_spend_service.occasion_summary(str(tenant_id), str(occasion_id), actor)
     allocation = next(item for item in summary.groups if item.id == str(allocation_id))
-    return ApiResponse(data=allocation, message="Occasion group budget updated.")
+    return ApiResponse(data=allocation, message="Group updated.")
+
+
+@router.delete("/occasions/{occasion_id}/groups/{allocation_id}", response_model=ApiResponse[dict])
+def delete_occasion_group(
+    tenant_id: UUID, occasion_id: UUID, allocation_id: UUID, actor: CurrentUserDep,
+) -> ApiResponse[dict]:
+    gift_spend_service.delete_occasion_group(str(tenant_id), str(occasion_id), str(allocation_id), actor)
+    return ApiResponse(data={}, message="Group removed from the occasion.")
 
 
 @router.put(
@@ -117,13 +180,24 @@ def set_occasion_recipient_budget(
     tenant_id: UUID,
     occasion_id: UUID,
     recipient_id: UUID,
-    payload: Annotated[RecipientOccasionBudgetUpdate, Body()],
+    payload: Annotated[OccasionRecipientBudgetUpdate, Body()],
     actor: CurrentUserDep,
 ) -> ApiResponse[dict]:
     data = gift_spend_service.set_occasion_recipient_budget(
         str(tenant_id), str(occasion_id), str(recipient_id), payload, actor,
     )
     return ApiResponse(data=data, message="Recipient occasion budget saved.")
+
+
+@router.delete(
+    "/occasions/{occasion_id}/recipients/{recipient_id}/budget",
+    response_model=ApiResponse[dict],
+)
+def remove_occasion_recipient(
+    tenant_id: UUID, occasion_id: UUID, recipient_id: UUID, actor: CurrentUserDep,
+) -> ApiResponse[dict]:
+    gift_spend_service.remove_occasion_recipient(str(tenant_id), str(occasion_id), str(recipient_id), actor)
+    return ApiResponse(data={}, message="Person removed from the occasion.")
 
 
 @router.get("/occasions/{occasion_id}/summary", response_model=ApiResponse[OccasionSpendSummary])
@@ -154,6 +228,17 @@ def event_spend_summary(
     return ApiResponse(
         data=gift_spend_service.event_summary(str(tenant_id), str(event_id), actor),
         message="Event spend summary retrieved.",
+    )
+
+
+@router.get("/balance", response_model=ApiResponse[dict])
+def gift_spend_balance(tenant_id: UUID, actor: CurrentUserDep) -> ApiResponse[dict]:
+    """Light version of /summary: total, set-aside and unassigned credits, without loading every budget."""
+    from src.modules.gift_spend.schemas import to_camel_keys
+
+    return ApiResponse(
+        data=to_camel_keys(gift_spend_service.budget_balance(str(tenant_id), actor)),
+        message="Gift spend balance retrieved.",
     )
 
 

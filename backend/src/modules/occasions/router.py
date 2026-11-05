@@ -8,7 +8,14 @@ from fastapi import APIRouter, Body, Query, status
 from src.core.schema import ApiResponse
 from src.modules.auth.authorization import SuperAdminDep
 from src.modules.auth.dependencies import CurrentUserDep
-from src.modules.occasions.schemas import OccasionCreate, OccasionList, OccasionRead, OccasionUpdate
+from src.core.config import settings
+from src.modules.occasions.schemas import (
+    OccasionCreate,
+    OccasionList,
+    OccasionRead,
+    OccasionUpdate,
+    UpcomingOccasion,
+)
 from src.modules.occasions.service import occasion_service
 
 router = APIRouter(tags=["Occasions"])
@@ -87,6 +94,19 @@ def create_occasion(
     return ApiResponse(
         data=occasion_service.create_occasion(str(tenant_id), payload, actor),
         message="Occasion created successfully.",
+    )
+
+
+@router.get("/tenants/{tenant_id}/occasions/upcoming", response_model=ApiResponse[list[UpcomingOccasion]])
+def upcoming_occasions(
+    tenant_id: UUID,
+    actor: CurrentUserDep,
+    days: Annotated[int | None, Query(ge=1, le=120)] = None,
+) -> ApiResponse[list[UpcomingOccasion]]:
+    """Occasions in the next ``days`` days (default: the planning window, 20 days), nearest first."""
+    return ApiResponse(
+        data=occasion_service.upcoming(str(tenant_id), actor, days=days or settings.UPCOMING_OCCASION_DAYS),
+        message="Upcoming occasions retrieved successfully.",
     )
 
 

@@ -4,6 +4,8 @@ API endpoint and schema reference for UI integration.
 
 **Generated from the application OpenAPI schema.** Rebuild after changing API routes or Pydantic schemas. JSON dates use ISO 8601 (`YYYY-MM-DD`); timestamps use ISO 8601 date-time; UUIDs are strings; decimals are JSON numbers/strings depending on client serialization.
 
+> **Not yet regenerated for the tenant changes.** Public signup (`POST /auth/register`) is removed, and invitations no longer take `domainOverrideReason`. New: `GET /tenants/{tenantId}/activity` (changes TOFAA made for a client), `/admin/team` (TOFAA staff accounts, super admin only), and `firstUserEmail` / `firstUserName` on `POST /tenants`. User creation takes `sendInvitation` (default true); when false nobody is emailed, a `password` is required, and the account is active at once. Tenant type `INTERNAL` is reserved for the TOFAA team and is never returned in client lists. `GET /tenants/{tenantId}/recipients` accepts `recipientIds` (comma-separated IDs, at most 100) to return only those recipients, e.g. a group's members; an empty value returns none.
+
 ## Base URLs and authentication
 
 - API base path: `/api/v1` (all versioned routes below are prefixed `/api/v1`).
@@ -16,7 +18,6 @@ API endpoint and schema reference for UI integration.
 - [GET `/health` — System health check](#health-get-health)
 - [GET `/health/live` — Liveness check](#health-get-health-live)
 - [GET `/health/ready` — Readiness check](#health-get-health-ready)
-- [POST `/api/v1/auth/register` — Register a new user](#authentication-post-api-v1-auth-register)
 - [POST `/api/v1/auth/login` — User login](#authentication-post-api-v1-auth-login)
 - [POST `/api/v1/auth/refresh` — Refresh access token](#authentication-post-api-v1-auth-refresh)
 - [POST `/api/v1/auth/logout` — User logout](#authentication-post-api-v1-auth-logout)
@@ -148,24 +149,6 @@ System health check
 | Status | Schema | Description |
 |---|---|---|
 | 200 | `application/json`: `object` | Successful Response |
-
-### Authentication — POST `/api/v1/auth/register` {#authentication-post-api-v1-auth-register}
-
-Register a new user
-
-Creates a new user in Supabase Auth. A user profile is automatically generated via database triggers.
-
-**Authentication:** Public / no bearer token declared.
-
-**Request body:** required.
-- `application/json`: [UserRegisterRequest](#userregisterrequest)
-
-**Responses**
-
-| Status | Schema | Description |
-|---|---|---|
-| 201 | `application/json`: [ApiResponse_AuthResponse_](#apiresponse_authresponse_) | Successful Response |
-| 422 | `application/json`: [HTTPValidationError](#httpvalidationerror) | Validation Error |
 
 ### Authentication — POST `/api/v1/auth/login` {#authentication-post-api-v1-auth-login}
 
@@ -1297,9 +1280,25 @@ Import Group To Occasion
 | 201 | `application/json`: [ApiResponse_OccasionGroupAllocationRead_](#apiresponse_occasiongroupallocationread_) | Successful Response |
 | 422 | `application/json`: [HTTPValidationError](#httpvalidationerror) | Validation Error |
 
+### Gift Spend Management — POST `/api/v1/tenants/{tenant_id}/gift-spend/occasions/{occasion_id}/groups`
+
+Create a group inside an occasion. No budget is needed; set it later with the PUT below.
+
+**Request body:** `{ "group_name": "Leadership", "recipient_ids": ["<uuid>", "..."] }`
+
+**Responses:** 201 `ApiResponse<OccasionGroupAllocationRead>`; 409 name already used in the occasion or a person already belongs to another group; 404 occasion or recipient not found.
+
+### Gift Spend Management — DELETE `/api/v1/tenants/{tenant_id}/gift-spend/occasions/{occasion_id}/groups/{allocation_id}`
+
+Delete an occasion group and its budget. Returns 409 if any person in it already has spend.
+
+### Gift Spend Management — DELETE `/api/v1/tenants/{tenant_id}/gift-spend/occasions/{occasion_id}/recipients/{recipient_id}/budget`
+
+Remove a person added directly to an occasion (not through a group) when they have no spend.
+
 ### Gift Spend Management — PUT `/api/v1/tenants/{tenant_id}/gift-spend/occasions/{occasion_id}/groups/{allocation_id}` {#gift-spend-management-put-api-v1-tenants-tenant_id-gift-spend-occasions-occasion_id-groups-allocation_id}
 
-Update Occasion Group Budget
+Update an occasion group. Send only what changes: `group_name`, `recipient_ids`, `budget_mode`, `budget_credits` (camelCase names also accepted).
 
 **Authentication:** Required.
 
@@ -1312,7 +1311,7 @@ Update Occasion Group Budget
 | `allocation_id` | path | Yes | `string (uuid)` |  |
 
 **Request body:** required.
-- `application/json`: [OccasionGroupBudgetUpdate](#occasiongroupbudgetupdate)
+- `application/json`: `OccasionGroupUpdate` — `{ "group_name"?: string, "recipient_ids"?: uuid[], "budget_mode"?: "PER_RECIPIENT"|"SHARED_POOL", "budget_credits"?: int > 0 }`
 
 **Responses**
 
@@ -1523,7 +1522,7 @@ List All Occasions
 | `page` | query | No | `integer` | Default: `1`. |
 | `limit` | query | No | `integer` | Default: `10`. |
 | `activeOnly` | query | No | `boolean` | Default: `False`. |
-| `tenantId` | query | No | `string (uuid)` | `null` |  |
+| `tenantId` | query | No | `string (uuid)` | `null` | Limits results to this tenant plus global occasions. Unknown tenant: `404`. |
 
 **Responses**
 
@@ -7518,19 +7517,6 @@ All schema property names below use the public JSON field names (camelCase unles
     "role": {
       "$ref": "#/components/schemas/Role",
       "default": "CLIENT"
-    },
-    "domainOverrideReason": {
-      "anyOf": [
-        {
-          "type": "string",
-          "maxLength": 500,
-          "minLength": 5
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "title": "Domainoverridereason"
     }
   },
   "additionalProperties": false,

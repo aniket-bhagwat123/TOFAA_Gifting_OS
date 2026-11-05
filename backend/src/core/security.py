@@ -72,9 +72,9 @@ def decode_access_token(token: str) -> TokenPayload:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication signing keys are temporarily unavailable.",
         )
-    except jwt.PyJWTError as e:
+    except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid authentication token: {str(e)}",
+            detail="Invalid authentication token.",
             headers={"WWW-Authenticate": "Bearer"},
         )

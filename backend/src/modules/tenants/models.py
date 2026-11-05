@@ -18,6 +18,7 @@ class TenantStatus(StrEnum):
 class TenantType(StrEnum):
     ORGANIZATION = "ORGANIZATION"
     INDIVIDUAL = "INDIVIDUAL"
+    INTERNAL = "INTERNAL"
 
 
 class Tenant(BaseModel):

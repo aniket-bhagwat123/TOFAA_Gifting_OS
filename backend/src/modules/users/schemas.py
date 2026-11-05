@@ -16,7 +16,23 @@ class UserInviteCreate(BaseModel):
     email: str = Field(max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     full_name: str | None = Field(default=None, max_length=150)
     role: UserRole = UserRole.CLIENT
-    domain_override_reason: str | None = Field(default=None, min_length=5, max_length=500)
+    password: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=128,
+        description="Optional initial password. When omitted a secure temporary password is generated. Either way the user must change it at first sign-in.",
+    )
+    send_invitation: bool = Field(
+        default=True,
+        description="Email the user their temporary password. When false nobody is emailed, the account works "
+        "immediately, and a password must be provided for the administrator to hand over.",
+    )
+
+    @model_validator(mode="after")
+    def need_a_password_without_email(self) -> "UserInviteCreate":
+        if not self.send_invitation and not self.password:
+            raise ValueError("Set a temporary password, or send an email invitation so one is generated.")
+        return self
 
 
 class UserUpdate(BaseModel):
@@ -24,6 +40,12 @@ class UserUpdate(BaseModel):
 
     full_name: str | None = Field(default=None, max_length=150)
     is_active: bool | None = Field(default=None)
+    password: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=128,
+        description="Optional new password. The user must change it at next sign-in.",
+    )
 
     @model_validator(mode="after")
     def require_a_change(self) -> "UserUpdate":

@@ -54,3 +54,17 @@ class OccasionList(BaseModel):
     items: list[OccasionRead]
     pagination: PaginationMeta
     next_cursor: str | None = Field(default=None)
+
+
+class UpcomingOccasion(BaseModel):
+    """An occasion coming up soon, with how many gift requests this client already sent for it."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    id: str
+    occasion_name: str
+    occasion_date: date
+    description: str | None = None
+    days_away: int
+    is_global: bool  # created by TOFAA for every client, e.g. Diwali
+    requests_sent: int

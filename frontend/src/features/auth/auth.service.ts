@@ -1,5 +1,6 @@
 import { api } from "@/services/api-client";
 import { endpoints } from "@/services/endpoints";
+import { clearRequestCache } from "@/features/modules/module.service";
 import type { AuthMeResponse, LoginResponse, AuthSession } from "@/types/api";
 
 export const authService = {
@@ -14,7 +15,10 @@ export const authService = {
   },
   async logout() {
     try { await api.post(endpoints.auth.logout, {}); }
-    finally { if (typeof window !== "undefined") window.localStorage.removeItem("tofaa-session"); }
+    finally { clearRequestCache(); if (typeof window !== "undefined") window.localStorage.removeItem("tofaa-session"); }
+  },
+  async resetPassword(newPassword: string) {
+    await api.post(endpoints.auth.resetPassword, { newPassword });
   },
   async refresh(refresh_token: string) {
     const { data } = await api.post<AuthSession>(endpoints.auth.refresh, { refresh_token });
@@ -29,6 +33,7 @@ export function toAuthUser(user: AuthMeResponse) {
     name: user.full_name || user.email,
     platformRole: user.role === "KAM" ? "TOFAA_TEAM" as const : user.role,
     tenant: user.tenant_id ? { id: user.tenant_id, name: "" } : undefined,
-    permissions: []
+    permissions: [],
+    mustResetPassword: user.must_reset_password === true
   };
 }

@@ -18,6 +18,19 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+/** Called when the sign-in can no longer be renewed. The app registers a handler that clears its state and shows the login page. */
+let sessionExpiredHandler: ((hadSession: boolean) => void) | null = null;
+let expiring = false;
+export function setSessionExpiredHandler(handler: ((hadSession: boolean) => void) | null) { sessionExpiredHandler = handler; }
+function expireSession(hadSession: boolean) {
+  if (typeof window !== "undefined") window.localStorage.removeItem("tofaa-session");
+  if (expiring) return;
+  expiring = true;
+  setTimeout(() => { expiring = false; }, 3000);
+  if (sessionExpiredHandler) sessionExpiredHandler(hadSession);
+  else window.location.assign("/login");
+}
+
 let refreshInFlight: Promise<string | null> | null = null;
 
 api.interceptors.response.use(
@@ -36,7 +49,7 @@ api.interceptors.response.use(
         const token = await refreshInFlight;
         if (token && request) { request.headers.Authorization = `Bearer ${token}`; return api(request); }
       }
-      if (!isAuthPage) window.location.assign("/login");
+      if (!isAuthPage) expireSession(!!session);
     }
     return Promise.reject(error);
   }

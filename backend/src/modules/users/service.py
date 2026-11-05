@@ -12,14 +12,18 @@ from supabase import Client
 from src.core.config import settings
 from src.core.pagination import PaginationMeta, next_page_cursor
 from src.core.supabase import get_supabase_admin_client
-from src.modules.auth.rbac import Permission, require_permission
+from src.modules.auth.rbac import Permission, Role, require_permission
 from src.modules.auth.schemas import UserProfileResponse
+from src.modules.tenants.models import TenantType
 from src.modules.tenants.service import tenant_service
 from src.modules.users.models import MembershipStatus, UserRole
 from src.modules.users.email import user_email_service
 from src.modules.users.schemas import KamOption, UserInviteCreate, UserInviteRead, UserList, UserRead, UserUpdate
 
 logger = logging.getLogger(__name__)
+
+# Long enough for a new user to sign in after a weekend or a failed first email.
+INVITATION_TTL = timedelta(days=7)
 
 
 class UserService:
@@ -40,7 +44,7 @@ class UserService:
         tenant_service.require_access(tenant_id, actor)
         offset = (page - 1) * limit
         result = (
-            self._user_query(tenant_id, count="exact")
+            self._user_query(tenant_id, count="exact", clients_only=actor.role != Role.SUPER_ADMIN)
             .order("created_at", desc=True)
             .order("user_id", desc=True)
             .range(offset, offset + limit - 1)
@@ -80,18 +84,17 @@ class UserService:
         tenant = tenant_service.get(tenant_id, actor)
         if tenant.status.value == "DEACTIVATED":
             raise HTTPException(status_code=409, detail="Cannot invite users to a deactivated tenant.")
-        user_email_service.ensure_configured()
-
-        email = payload.email.strip().lower()
-        domain = email.rsplit("@", 1)[1]
-        override_reason = payload.domain_override_reason
-        if tenant.email_domain and domain != tenant.email_domain.lower() and not override_reason:
+        # Staff belong to the TOFAA team and nobody else does; mixing them would leak access.
+        if (tenant.tenant_type == TenantType.INTERNAL) != (payload.role != UserRole.CLIENT):
             raise HTTPException(
                 status_code=422,
-                detail="Email domain differs from the tenant domain; provide an override reason.",
+                detail="Team members join the TOFAA team, and client users join a client.",
             )
+        if payload.send_invitation:
+            user_email_service.ensure_configured()
 
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        email = payload.email.strip().lower()
+        expires_at = datetime.now(timezone.utc) + INVITATION_TTL
         try:
             invitation_result = self.database.table("tenant_invitations").insert(
                 {
@@ -101,7 +104,6 @@ class UserService:
                     "role": payload.role.value,
                     "status": "PENDING",
                     "invited_by_user_id": actor.id,
-                    "domain_override_reason": override_reason,
                     "expires_at": expires_at.isoformat(),
                 }
             ).execute()
@@ -116,59 +118,48 @@ class UserService:
         invitation = invitation_result.data[0]
 
         try:
-            temporary_password = self._generate_temporary_password()
+            temporary_password = payload.password or self._generate_temporary_password()
             auth_result = self.database.auth.admin.create_user(
                 {
                     "email": email,
                     "password": temporary_password,
                     "email_confirm": True,
                     "user_metadata": {"full_name": payload.full_name or ""},
-                    "app_metadata": {"must_reset_password": True},
                 }
             )
             invited_user = getattr(auth_result, "user", None)
             invited_user_id = str(invited_user.id) if invited_user else None
             if not invited_user_id:
                 raise RuntimeError("Supabase did not return the created user.")
-            profile_update = (
-                self.database.table("profiles")
-                .update({"must_reset_password": True})
-                .eq("id", invited_user_id)
-                .select("id")
-                .execute()
-            )
-            if not profile_update.data:
-                raise RuntimeError("Could not require a password reset for the invited user.")
-            link_result = self.database.auth.admin.generate_link(
-                {
-                    "type": "recovery",
-                    "email": email,
-                    "options": {
-                        "redirect_to": f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?flow=invite"
-                    },
-                }
-            )
-            reset_url = link_result.properties.action_link
-            user_email_service.send_temporary_password(
-                email=email,
-                full_name=payload.full_name,
-                temporary_password=temporary_password,
-                reset_url=reset_url,
-                idempotency_key=f"tenant-invite/{invitation['id']}/{uuid4().hex}",
-            )
-            update_result = (
-                self.database.table("tenant_invitations")
-                .update(
+            if payload.send_invitation:
+                link_result = self.database.auth.admin.generate_link(
                     {
-                        "status": "SENT",
-                        "user_id": invited_user_id,
-                        "sent_at": datetime.now(timezone.utc).isoformat(),
+                        "type": "recovery",
+                        "email": email,
+                        "options": {
+                            "redirect_to": f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?flow=invite"
+                        },
                     }
                 )
-                .eq("id", invitation["id"])
-                .execute()
+                user_email_service.send_temporary_password(
+                    email=email,
+                    full_name=payload.full_name,
+                    temporary_password=temporary_password,
+                    reset_url=link_result.properties.action_link,
+                    idempotency_key=f"tenant-invite/{invitation['id']}/{uuid4().hex}",
+                )
+            sent_values = {"status": "SENT", "user_id": invited_user_id}
+            if payload.send_invitation:
+                sent_values["sent_at"] = datetime.now(timezone.utc).isoformat()
+            update_result = (
+                self.database.table("tenant_invitations").update(sent_values).eq("id", invitation["id"]).execute()
             )
             sent_record = update_result.data[0] if update_result.data else invitation
+            if not payload.send_invitation:
+                # Nobody is emailed and the administrator hands over the password, so the account works at
+                # once instead of waiting for a first sign-in that could come after the invitation expires.
+                self.database.rpc("accept_tenant_invitation", {"p_user_id": invited_user_id}).execute()
+                sent_record = {**sent_record, "status": "ACCEPTED"}
         except Exception as exc:
             logger.exception("Could not send tenant invitation")
             self.database.table("tenant_invitations").update({"status": "FAILED"}).eq(
@@ -208,7 +199,12 @@ class UserService:
     def get_user(self, tenant_id: str, user_id: str, actor: UserProfileResponse) -> UserRead:
         require_permission(actor, Permission.USER_READ)
         tenant_service.require_access(tenant_id, actor)
-        result = self._user_query(tenant_id).eq("user_id", user_id).limit(1).execute()
+        result = (
+            self._user_query(tenant_id, clients_only=actor.role != Role.SUPER_ADMIN)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
         if not result.data:
             raise HTTPException(status_code=404, detail="User not found.")
         return self._to_user(result.data[0])
@@ -223,15 +219,29 @@ class UserService:
         require_permission(actor, Permission.USER_UPDATE)
         tenant_service.require_access(tenant_id, actor)
         self.get_user(tenant_id, user_id, actor)
-        result = (
-            self.database.table("profiles")
-            .update(payload.model_dump(mode="json", exclude_unset=True))
-            .eq("id", user_id)
-            .execute()
-        )
+        changes = payload.model_dump(mode="json", exclude_unset=True, exclude={"password"})
+        if payload.password:
+            self._set_password(user_id, payload.password)
+            changes["must_reset_password"] = False
+        result = self.database.table("profiles").update(changes).eq("id", user_id).execute()
         if not result.data:
             raise HTTPException(status_code=404, detail="User not found.")
         return self.get_user(tenant_id, user_id, actor)
+
+    def _set_password(self, user_id: str, password: str) -> None:
+        """Replace a user's password."""
+        try:
+            auth_user = getattr(self.database.auth.admin.get_user_by_id(user_id), "user", None)
+            if not auth_user:
+                raise HTTPException(status_code=404, detail="User not found.")
+            app_metadata = dict(auth_user.app_metadata or {})
+            app_metadata.pop("must_reset_password", None)
+            self.database.auth.admin.update_user_by_id(user_id, {"password": password, "app_metadata": app_metadata})
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Could not update user password")
+            raise HTTPException(status_code=502, detail="The password could not be updated. Please try again.") from exc
 
     def activate_user(self, tenant_id: str, user_id: str, actor: UserProfileResponse) -> None:
         require_permission(actor, Permission.USER_ACTIVATE)
@@ -250,6 +260,8 @@ class UserService:
         is_active: bool,
     ) -> None:
         tenant_service.require_access(tenant_id, actor)
+        if user_id == actor.id and not is_active:
+            raise HTTPException(status_code=409, detail="You can't deactivate your own account.")
         self.get_user(tenant_id, user_id, actor)
         try:
             result = (
@@ -296,7 +308,7 @@ class UserService:
         if not result.data:
             raise HTTPException(status_code=404, detail="Pending invitation not found.")
         invitation = result.data[0]
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        expires_at = datetime.now(timezone.utc) + INVITATION_TTL
         self.database.table("tenant_invitations").update(
             {"status": "PENDING", "expires_at": expires_at.isoformat()}
         ).eq("id", invitation["id"]).execute()
@@ -307,20 +319,12 @@ class UserService:
             if not auth_user:
                 raise RuntimeError("Could not load the invited authentication user.")
             app_metadata = dict(auth_user.app_metadata or {})
-            app_metadata["must_reset_password"] = True
+            app_metadata.pop("must_reset_password", None)
             self.database.auth.admin.update_user_by_id(
                 user_id,
                 {"password": temporary_password, "app_metadata": app_metadata},
             )
-            profile_update = (
-                self.database.table("profiles")
-                .update({"must_reset_password": True})
-                .eq("id", user_id)
-                .select("id")
-                .execute()
-            )
-            if not profile_update.data:
-                raise RuntimeError("Could not require a password reset for the invited user.")
+            self.database.table("profiles").update({"must_reset_password": False}).eq("id", user_id).execute()
             link_result = self.database.auth.admin.generate_link(
                 {
                     "type": "recovery",
@@ -390,8 +394,11 @@ class UserService:
             raise HTTPException(status_code=404, detail="Invitation not found.")
         return self._to_user(result.data[0])
 
-    def _user_query(self, tenant_id: str, *, count: str | None = None) -> Any:
-        return (
+    def _user_query(self, tenant_id: str, *, count: str | None = None, clients_only: bool = False) -> Any:
+        """Select a tenant's members. Every profile has a home tenant, including platform staff, so
+        ``clients_only`` keeps staff out of reach: a client who could see a super admin here could
+        also reset their password and take over every tenant."""
+        query = (
             self.database.table("tenant_memberships")
             .select(
                 "tenant_id,user_id,status,created_at,updated_at,"
@@ -401,6 +408,7 @@ class UserService:
             )
             .eq("tenant_id", tenant_id)
         )
+        return query.eq("profiles.role", UserRole.CLIENT.value) if clients_only else query
 
     @staticmethod
     def _to_user(row: dict[str, Any]) -> UserRead:

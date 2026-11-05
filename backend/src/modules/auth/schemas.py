@@ -10,12 +10,6 @@ from src.modules.auth.rbac import Role
 # Request Schemas
 # ============================================================================
 
-class UserRegisterRequest(BaseModel):
-    email: str = Field(max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", description="User's email address")
-    password: str = Field(min_length=8, max_length=128, description="User password (min 8 characters)")
-    full_name: str | None = Field(default=None, max_length=150, description="Full name of the user")
-
-
 class UserLoginRequest(BaseModel):
     email: str = Field(max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", description="User's email address")
     password: str = Field(description="User password")
@@ -45,7 +39,7 @@ class UserProfileResponse(BaseModel):
     full_name: str | None = Field(default=None, description="User's full name")
     avatar_url: str | None = Field(default=None, description="Avatar image URL")
     role: Role = Field(default=Role.CLIENT, description="Application role")
-    tenant_id: str | None = Field(default=None, description="Tenant company for client users")
+    tenant_id: str | None = Field(default=None, description="The user's tenant. Null when the account has no tenant, such as a platform super admin.")
     is_active: bool = Field(default=True, description="Account active status")
     must_reset_password: bool = Field(default=False, description="Whether the user must replace their temporary password")
     created_at: datetime | str | None = Field(default=None, description="Timestamp user was created")

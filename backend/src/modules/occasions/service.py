@@ -1,6 +1,8 @@
 """Tenant-scoped occasion CRUD."""
 
 import logging
+from collections import Counter
+from datetime import date, timedelta
 
 from fastapi import HTTPException
 from supabase import Client
@@ -10,7 +12,13 @@ from src.core.supabase import get_supabase_admin_client
 from src.modules.auth.rbac import Permission, require_permission
 from src.modules.auth.rbac import Role
 from src.modules.auth.schemas import UserProfileResponse
-from src.modules.occasions.schemas import OccasionCreate, OccasionList, OccasionRead, OccasionUpdate
+from src.modules.occasions.schemas import (
+    OccasionCreate,
+    OccasionList,
+    OccasionRead,
+    OccasionUpdate,
+    UpcomingOccasion,
+)
 from src.modules.tenants.service import tenant_service
 
 logger = logging.getLogger(__name__)
@@ -50,6 +58,50 @@ class OccasionService:
             next_cursor=next_page_cursor(page, limit, total),
         )
 
+    def upcoming(self, tenant_id: str, actor: UserProfileResponse, *, days: int) -> list[UpcomingOccasion]:
+        """Active occasions in the next ``days`` days (TOFAA's and the client's own), nearest first."""
+        self._require_tenant_access(tenant_id, actor, Permission.OCCASION_READ)
+        today = date.today()
+        rows = (
+            self.database.table("occasions")
+            .select("id,tenant_id,occasion_name,occasion_date,description")
+            .or_(f"tenant_id.is.null,tenant_id.eq.{tenant_id}")
+            .eq("is_active", True)
+            .gte("occasion_date", today.isoformat())
+            .lte("occasion_date", (today + timedelta(days=days)).isoformat())
+            .order("occasion_date")
+            .order("occasion_name")
+            .limit(100)
+            .execute()
+            .data
+            or []
+        )
+        sent: Counter[str] = Counter()
+        if rows:
+            requests = (
+                self.database.table("gift_requests")
+                .select("occasion_id")
+                .eq("tenant_id", tenant_id)
+                .in_("occasion_id", [row["id"] for row in rows])
+                .not_.in_("status", ["CANCELLED", "REJECTED"])
+                .execute()
+                .data
+                or []
+            )
+            sent.update(row["occasion_id"] for row in requests)
+        return [
+            UpcomingOccasion(
+                id=row["id"],
+                occasion_name=row["occasion_name"],
+                occasion_date=row["occasion_date"],
+                description=row.get("description"),
+                days_away=(date.fromisoformat(str(row["occasion_date"])) - today).days,
+                is_global=row.get("tenant_id") is None,
+                requests_sent=sent[row["id"]],
+            )
+            for row in rows
+        ]
+
     def get_occasion(
         self, tenant_id: str, occasion_id: str, actor: UserProfileResponse,
     ) -> OccasionRead:
@@ -74,7 +126,8 @@ class OccasionService:
             raise HTTPException(status_code=403, detail="Only super admins can list all occasions.")
         query = self.database.table("occasions").select("*", count="exact")
         if tenant_id is not None:
-            query = query.eq("tenant_id", tenant_id)
+            tenant_service.require_context(tenant_id, actor)
+            query = query.or_(f"tenant_id.is.null,tenant_id.eq.{tenant_id}")
         if active_only:
             query = query.eq("is_active", True)
         offset = (page - 1) * limit

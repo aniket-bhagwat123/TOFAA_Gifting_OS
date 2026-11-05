@@ -6,10 +6,17 @@ interface ModuleEntry { data: unknown; status: "idle" | "loading" | "succeeded" 
 interface ModulesState { byKey: Record<string, ModuleEntry>; selectedTenantId: string | null }
 const initialState: ModulesState = { byKey: {}, selectedTenantId: null };
 
-export const loadModule = createAsyncThunk("modules/load", async (args: { key: string; endpoint: string; params: Record<string, string | number | undefined> }, { rejectWithValue }) => {
+/** Where a user's last chosen client is remembered between visits. */
+export const selectedTenantKey = (userId?: string) => `tofaa.selectedTenant.${userId ?? "anonymous"}`;
+
+/** Platform-wide lists that do not belong to the tenant being viewed. */
+const isPlatformKey = (key: string) => key === "tenantOptions" || key === "clients";
+
+export const loadModule = createAsyncThunk("modules/load", async (args: { key: string; endpoint: string; params: Record<string, string | number | undefined> }, { rejectWithValue, getState }) => {
+  const tenantId = (getState() as { modules: ModulesState }).modules.selectedTenantId;
   try {
     const data = await getModuleRecords(args.endpoint, args.params);
-    return { key: args.key, data, updatedAt: Date.now() };
+    return { key: args.key, data, updatedAt: Date.now(), tenantId };
   } catch (error) { return rejectWithValue(getApiErrorMessage(error)); }
 });
 
@@ -19,7 +26,7 @@ const slice = createSlice({
     clearModuleData(state) { state.byKey = {}; state.selectedTenantId = null; },
     setSelectedTenant(state, action: { payload: string }) {
       if (state.selectedTenantId !== action.payload) {
-        for (const key of Object.keys(state.byKey)) if (key !== "tenantOptions" && key !== "clients") delete state.byKey[key];
+        for (const key of Object.keys(state.byKey)) if (!isPlatformKey(key)) delete state.byKey[key];
       }
       state.selectedTenantId = action.payload;
     }
@@ -27,11 +34,9 @@ const slice = createSlice({
   extraReducers: (builder) => builder
     .addCase(loadModule.pending, (state, action) => { const key = action.meta.arg.key; state.byKey[key] = { ...state.byKey[key], data: state.byKey[key]?.data ?? null, status: "loading", error: null, updatedAt: state.byKey[key]?.updatedAt ?? null }; })
     .addCase(loadModule.fulfilled, (state, action) => {
+      // A slow response from the previous tenant must not appear under the one now being viewed.
+      if (!isPlatformKey(action.payload.key) && action.payload.tenantId !== state.selectedTenantId) return;
       state.byKey[action.payload.key] = { data: action.payload.data, status: "succeeded", error: null, updatedAt: action.payload.updatedAt };
-      if (action.payload.key === "tenantOptions" && !state.selectedTenantId) {
-        const tenants = (action.payload.data as { items?: Array<{ id?: string }> })?.items;
-        state.selectedTenantId = tenants?.[0]?.id ?? null;
-      }
     })
     .addCase(loadModule.rejected, (state, action) => { const entry = state.byKey[action.meta.arg.key]; state.byKey[action.meta.arg.key] = { data: entry?.data ?? null, status: "failed", error: (action.payload as string) || action.error.message || "Unable to load data", updatedAt: entry?.updatedAt ?? null }; })
 });
