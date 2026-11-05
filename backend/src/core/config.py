@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # How far ahead a client sees upcoming occasions (days). Clients get 15-20 days to plan gifts.
     UPCOMING_OCCASION_DAYS: int = 20
 
+    # One-time secret that lets POST /api/v1/bootstrap/super-admin create the first super admin.
+    # Leave it unset and that endpoint answers 404.
+    BOOTSTRAP_SECRET: str | None = None
+
     # Resend delivery for tenant invitation emails.
     RESEND_API_KEY: str | None = None
     RESEND_FROM_EMAIL: str | None = None

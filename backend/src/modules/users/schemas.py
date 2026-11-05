@@ -10,6 +10,14 @@ from src.modules.tenants.models import TenantStatus
 from src.modules.users.models import UserRole
 
 
+class SuperAdminBootstrap(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    email: str = Field(max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    full_name: str | None = Field(default=None, max_length=150)
+    password: str = Field(min_length=8, max_length=128)
+
+
 class UserInviteCreate(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 

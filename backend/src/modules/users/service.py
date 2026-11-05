@@ -1,5 +1,6 @@
 """Tenant-scoped user and invitation use cases."""
 
+import hmac
 import logging
 import secrets
 import string
@@ -18,7 +19,7 @@ from src.modules.tenants.models import TenantType
 from src.modules.tenants.service import tenant_service
 from src.modules.users.models import MembershipStatus, UserRole
 from src.modules.users.email import user_email_service
-from src.modules.users.schemas import KamOption, UserInviteCreate, UserInviteRead, UserList, UserRead, UserUpdate
+from src.modules.users.schemas import SuperAdminBootstrap, KamOption, UserInviteCreate, UserInviteRead, UserList, UserRead, UserUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,50 @@ class UserService:
             .execute()
         )
         return [KamOption.model_validate(row) for row in result.data or []]
+
+    def bootstrap_super_admin(self, secret: str | None, payload: SuperAdminBootstrap) -> dict[str, str]:
+        """Create the first super admin. Needs BOOTSTRAP_SECRET and refuses once one exists."""
+        if not settings.BOOTSTRAP_SECRET:
+            raise HTTPException(status_code=404, detail="Not found.")
+        if not secret or not hmac.compare_digest(secret, settings.BOOTSTRAP_SECRET):
+            raise HTTPException(status_code=403, detail="Invalid bootstrap secret.")
+        existing = self.database.table("profiles").select("id").eq("role", "SUPER_ADMIN").limit(1).execute()
+        if existing.data:
+            raise HTTPException(status_code=409, detail="A super admin already exists.")
+
+        email = payload.email.strip().lower()
+        invitation = self.database.table("tenant_invitations").insert(
+            {
+                "tenant_id": tenant_service.internal_tenant_id(),
+                "normalized_email": email,
+                "full_name": payload.full_name,
+                "role": "SUPER_ADMIN",
+                "status": "PENDING",
+                "invited_by_user_id": None,
+                "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            }
+        ).execute().data[0]
+        try:
+            created = self.database.auth.admin.create_user(
+                {
+                    "email": email,
+                    "password": payload.password,
+                    "email_confirm": True,
+                    "user_metadata": {"full_name": payload.full_name or ""},
+                }
+            )
+            user_id = str(created.user.id)
+            self.database.table("tenant_invitations").update({"status": "SENT", "user_id": user_id}).eq(
+                "id", invitation["id"]
+            ).execute()
+            self.database.rpc("accept_tenant_invitation", {"p_user_id": user_id}).execute()
+        except Exception as exc:
+            logger.exception("Could not bootstrap super admin")
+            self.database.table("tenant_invitations").update({"status": "FAILED"}).eq(
+                "id", invitation["id"]
+            ).execute()
+            raise HTTPException(status_code=409, detail="Could not create the super admin. Check the logs.") from exc
+        return {"id": user_id, "email": email, "role": "SUPER_ADMIN"}
 
     def create_invitation(
         self,

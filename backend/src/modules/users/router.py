@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Query, status
+from fastapi import APIRouter, Body, Header, Query, status
 
 from src.core.schema import ApiResponse
 from src.modules.auth.dependencies import CurrentUserDep, TokenDep
@@ -11,7 +11,7 @@ from src.modules.auth.authorization import SuperAdminDep
 from src.core.security import decode_access_token
 from src.modules.tenants.service import tenant_service
 from src.modules.tenants.service import tenant_service
-from src.modules.users.schemas import KamOption, UserInviteCreate, UserInviteRead, UserList, UserRead, UserUpdate
+from src.modules.users.schemas import SuperAdminBootstrap, KamOption, UserInviteCreate, UserInviteRead, UserList, UserRead, UserUpdate
 from src.modules.users.service import user_service
 
 
@@ -20,6 +20,18 @@ router = APIRouter(tags=["Users"])
 team_router = APIRouter(prefix="/admin/team", tags=["TOFAA Team"])
 # Separate because the invited user has no active tenant context yet.
 invitation_router = APIRouter(tags=["Users"])
+
+
+@invitation_router.post("/bootstrap/super-admin", response_model=ApiResponse[dict], status_code=status.HTTP_201_CREATED)
+def bootstrap_super_admin(
+    payload: Annotated[SuperAdminBootstrap, Body()],
+    x_bootstrap_secret: Annotated[str | None, Header()] = None,
+) -> ApiResponse[dict]:
+    """Create the first super admin once. Send the BOOTSTRAP_SECRET in the X-Bootstrap-Secret header."""
+    return ApiResponse(
+        data=user_service.bootstrap_super_admin(x_bootstrap_secret, payload),
+        message="Super admin created.",
+    )
 
 
 @router.get("/admin/kams", response_model=list[KamOption])
