@@ -5,6 +5,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { logoutUser } from "@/features/auth/auth.slice";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { displayName } from "@/lib/utils";
 import { selectedTenantKey, setSelectedTenant } from "@/features/modules/modules.slice";
 
 const moduleTitles: Record<string, string> = {
@@ -36,7 +37,8 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
     catch { toast.error("We couldn't sign you out. Please try again."); }
   }
 
-  const initials = user?.name?.split(" ").map((x) => x[0]).slice(0, 2).join("") || "U";
+  const shownName = displayName(user);
+  const initials = shownName.split(" ").map((x) => x[0]).slice(0, 2).join("") || "U";
   // Translucent chrome: content scrolls beneath it, separated by a hairline only.
   return <header className="material material-edge sticky top-0 z-20 flex h-[68px] items-center justify-between px-4 sm:px-6 lg:px-8">
     <div className="flex items-center gap-2">
@@ -53,7 +55,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
       </label>}
       <div className="flex items-center gap-2.5 pl-1">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand/10 text-sm font-semibold text-brand uppercase" aria-hidden>{initials}</div>
-        <p className="hidden text-sm font-medium text-ink md:block">{user?.name || ""}</p>
+        <p className="hidden text-sm font-medium text-ink md:block capitalize">{shownName}</p>
         <button onClick={handleLogout} title="Sign out" className="press flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-medium text-slate-700 hover:bg-black/5"><LogOut size={18} /><span className="hidden md:inline">Sign out</span></button>
       </div>
     </div>

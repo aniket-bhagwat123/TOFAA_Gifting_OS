@@ -23,3 +23,10 @@ export function formatCurrency(value?: string | number | null) {
 export function titleCase(value: string) {
   return value.replace(/([A-Z])/g, " $1").replace(/[_-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+/** The name to show for a user: their full name, or the part of their email before "@" — never the whole email. */
+export function displayName(user?: { name?: string | null; email?: string | null } | null) {
+  const name = user?.name?.trim();
+  if (name && !name.includes("@")) return name;
+  return (name || user?.email || "").split("@")[0].trim();
+}
