@@ -56,7 +56,7 @@ function ResetPasswordForm() {
       await authService.resetPassword(password);
       await dispatch(loadCurrentUser()); // clears the "temporary password" flag in the store
       toast.success("Your password has been updated.");
-      router.replace("/dashboard");
+      router.replace("/home");
     } catch (error) { toast.error(getApiErrorMessage(error)); }
     finally { setSaving(false); }
   };
@@ -66,7 +66,7 @@ function ResetPasswordForm() {
     <PasswordField label="New password" required value={password} onChange={(value) => { setPassword(value); setErrors((current) => ({ ...current, password: undefined })); }} error={errors.password} showStrength allowGenerate autoFocus />
     <PasswordField label="Confirm new password" required value={confirm} onChange={(value) => { setConfirm(value); setErrors((current) => ({ ...current, confirm: undefined })); }} error={errors.confirm} placeholder="Type it once more" />
     <Button type="submit" size="lg" className="w-full" disabled={saving}>{saving ? "Saving…" : firstTime ? "Set password and continue" : "Update password"}</Button>
-    {!firstTime && <Link href="/dashboard" className="flex min-h-11 items-center justify-center text-sm font-medium text-brand hover:underline">Cancel</Link>}
+    {!firstTime && <Link href="/home" className="flex min-h-11 items-center justify-center text-sm font-medium text-brand hover:underline">Cancel</Link>}
   </form>;
 }
 

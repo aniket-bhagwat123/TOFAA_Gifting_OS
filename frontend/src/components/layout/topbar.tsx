@@ -8,14 +8,14 @@ import { toast } from "sonner";
 import { selectedTenantKey, setSelectedTenant } from "@/features/modules/modules.slice";
 
 const moduleTitles: Record<string, string> = {
-  dashboard: "Dashboard",
-  requests: "Gift requests",
+  home: "Home",
+  requests: "Gifting Activity",
   gifts: "Gifts",
   events: "Events",
   occasions: "Occasions",
-  credits: "Credits",
+  credits: "Budgets",
   clients: "Clients",
-  recipients: "Recipients",
+  recipients: "People",
   "recipient-groups": "Recipient groups",
   "team-users": "Users",
   activity: "Activity"
@@ -28,7 +28,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
   const dispatch = useAppDispatch();
   const router = useRouter();
   const pathname = usePathname();
-  const segment = pathname.split("/").filter(Boolean)[0] ?? "dashboard";
+  const segment = pathname.split("/").filter(Boolean)[0] ?? "home";
   const moduleTitle = moduleTitles[segment] ?? segment.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
   async function handleLogout() {

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Building2, Cake, CalendarDays, CalendarRange, ClipboardList, Gift, Send, Sparkles, UserPlus, Users, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowRight, Building2, Cake, CalendarDays, CalendarRange, ClipboardList, Gift, Sparkles, UserPlus, Users, Wallet, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { loadModule } from "@/features/modules/modules.slice";
@@ -25,7 +25,7 @@ const moduleForRole: Record<Role, string[]> = {
 
 const statMeta: Record<string, { label: string; icon: LucideIcon; tint: string }> = {
   recipients: { label: "Recipients", icon: Users, tint: "bg-sky-500" },
-  requests: { label: "Gift requests", icon: ClipboardList, tint: "bg-rose-500" },
+  requests: { label: "Gifting Activity", icon: ClipboardList, tint: "bg-rose-500" },
   gifts: { label: "Gifts", icon: Gift, tint: "bg-violet-500" },
   credits: { label: "Credit requests", icon: Wallet, tint: "bg-emerald-500" },
   clients: { label: "Clients", icon: Building2, tint: "bg-indigo-500" },
@@ -35,10 +35,10 @@ const statMeta: Record<string, { label: string; icon: LucideIcon; tint: string }
 
 const banner: Record<Role, { headline: string; text: string; actions: Action[] }> = {
   CLIENT: {
-    headline: "Make every moment feel special",
-    text: "Send a thoughtful gift in a few taps. We handle the choosing, packing and delivery.",
+    headline: "Never miss a moment that matters.",
+    text: "Stay ahead of important birthdays, milestones, and celebrations. We’ll help you plan every thoughtful gesture.",
     actions: [
-      { title: "Send a gift", hint: "", href: "/requests/new", icon: Send },
+      { title: "View upcoming occasions", hint: "", href: "/occasions", icon: CalendarDays },
       { title: "Add a recipient", hint: "", href: "/recipients?new=1", icon: UserPlus }
     ]
   },
@@ -48,8 +48,8 @@ const banner: Record<Role, { headline: string; text: string; actions: Action[] }
     actions: [{ title: "Review requests", hint: "", href: "/requests", icon: ClipboardList }]
   },
   SUPER_ADMIN: {
-    headline: "Everything across your clients",
-    text: "Keep an eye on requests, credits and deliveries for every organisation.",
+    headline: "Never miss a moment that matters.",
+    text: "Stay ahead of important birthdays, milestones, and celebrations. We’ll help you plan every thoughtful gesture.",
     actions: [
       { title: "Add a client", hint: "", href: "/clients?new=1", icon: Building2 },
       { title: "Review requests", hint: "", href: "/requests", icon: ClipboardList }

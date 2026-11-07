@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useAppSelector } from "@/store/hooks";
 import { cn } from "@/lib/utils";
 import { moduleConfig, type PlatformRole } from "@/features/modules/module-config";
-import { Home, LayoutDashboard, Building2, Users, CalendarDays, ClipboardList, Gift, UserCog, Sparkles, Wallet, CalendarRange, History, X } from "lucide-react";
+import { Home, Building2, Users, CalendarDays, ClipboardList, Gift, UserCog, Sparkles, Wallet, CalendarRange, History, X } from "lucide-react";
 
 type Role = PlatformRole;
 
@@ -16,17 +16,18 @@ const item = (key: string, label: string, icon: typeof Home, also?: string[]): N
 
 // Who can see what comes from each module's `roles` in module-config — one source of truth.
 const groups: { title: string; items: NavItem[] }[] = [
-  { title: "", items: [{ label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["CLIENT", "TOFAA_TEAM", "SUPER_ADMIN"] }, item("activity", "Activity", History)] },
-  { title: "Gifting", items: [
-    item("requests", "Gift requests", ClipboardList),
+  { title: "", items: [
+    { label: "Home", href: "/home", icon: Home, roles: ["CLIENT", "TOFAA_TEAM", "SUPER_ADMIN"] },
+    item("occasions", "Occasions", CalendarDays),
+    item("recipients", "People", Users, ["/recipient-groups"]),
+    item("requests", "Gifting Activity", ClipboardList),
+    item("credits", "Budgets", Wallet),
+    item("activity", "Activity", History)
+  ] },
+  { title: "More", items: [
     item("gifts", "Gifts", Gift),
     item("events", "Events", CalendarRange),
-    item("occasions", "Occasions", CalendarDays),
-    item("credits", "Credits", Wallet)
-  ] },
-  { title: "People", items: [
-    item("clients", "Clients", Building2),
-    item("recipients", "Recipients", Users, ["/recipient-groups"])
+    item("clients", "Clients", Building2)
   ] },
   { title: "Admin", items: [item("team-users", "Users", UserCog)] }
 ];
@@ -48,7 +49,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
       return <div key={group.title || "top"}>
         {group.title && <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-[0.08em] text-muted">{group.title}</p>}
         <div className="space-y-1">{items.map((item) => {
-          const active = [item.href, ...(item.also ?? [])].some((path) => pathname === path || (path !== "/dashboard" && pathname.startsWith(path)));
+          const active = [item.href, ...(item.also ?? [])].some((path) => pathname === path || (path !== "/home" && pathname.startsWith(path)));
           const Icon = item.icon;
           return <Link key={item.href} href={item.href} onClick={onNavigate} aria-current={active ? "page" : undefined} className={cn("press flex min-h-11 items-center gap-3 rounded-xl px-3 text-[0.9375rem] font-medium", active ? "bg-brand/10 text-brand" : "text-slate-700 hover:bg-black/5 hover:text-ink")}>
             <Icon size={19} strokeWidth={1.8} />{item.label}

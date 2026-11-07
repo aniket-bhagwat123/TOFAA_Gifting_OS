@@ -32,7 +32,7 @@ function LoginForm() {
       await dispatch(loginUser(values)).unwrap();
       toast.success("Welcome back");
       const next = params.get("next");
-      router.replace(next?.startsWith("/") ? next : "/dashboard");
+      router.replace(next?.startsWith("/") ? next : "/home");
     } catch (error) { toast.error(getApiErrorMessage(error)); }
   };
 

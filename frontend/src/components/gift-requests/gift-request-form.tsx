@@ -159,7 +159,7 @@ export function GiftRequestForm({ requestId }: { requestId?: string }) {
 
   return <form noValidate onSubmit={(event) => { event.preventDefault(); void save("send"); }} className="mx-auto flex w-full max-w-5xl flex-col gap-4 lg:h-[calc(100dvh-8.5rem)]">
     <div className="space-y-1">
-      <Link href={backHref} className="inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-ink"><ChevronLeft size={16} /> {requestId ? "Back to request" : "Gift requests"}</Link>
+      <Link href={backHref} className="inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-ink"><ChevronLeft size={16} /> {requestId ? "Back to request" : "Gifting Activity"}</Link>
       <h2 className="text-2xl font-bold text-ink">{editing ? "Edit gift request" : "New gift request"}</h2>
       <p className="text-sm text-muted">Tell the TOFAA team who the gift is for. They will come back with options to choose from.</p>
     </div>

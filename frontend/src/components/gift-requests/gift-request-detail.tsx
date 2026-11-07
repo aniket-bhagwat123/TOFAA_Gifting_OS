@@ -127,7 +127,7 @@ export function GiftRequestDetail({ requestId }: { requestId: string }) {
   return <div className="space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
-        <Link href="/requests" className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-ink"><ChevronLeft size={16} /> Gift requests</Link>
+        <Link href="/requests" className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-ink"><ChevronLeft size={16} /> Gifting Activity</Link>
         <div className="flex flex-wrap items-center gap-3"><h2 className="text-2xl font-bold text-ink sm:text-3xl">{request.title}</h2><StatusChip status={status} /></div>
         <p className="mt-1 text-sm text-muted">Requested by {request.createdByName ?? "—"} · {day(request.createdAt)} · For {request.recipientName ?? "—"}</p>
       </div>

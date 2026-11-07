@@ -20,7 +20,7 @@ export function ModuleGate({ moduleKey }: { moduleKey: string }) {
   const config = moduleConfig[moduleKey];
   if (!user) return <div className="flex justify-center py-20"><Spinner /></div>;
   if (!config.roles.includes(user.platformRole)) {
-    return <EmptyState title="This page isn't available for your account" description="Head back to the dashboard to see what you can do." action={<Link href="/dashboard"><Button><Lock size={16} /> Back to Dashboard</Button></Link>} />;
+    return <EmptyState title="This page isn't available for your account" description="Head back to Home to see what you can do." action={<Link href="/home"><Button><Lock size={16} /> Back to Home</Button></Link>} />;
   }
   return <>
     {(moduleKey === "recipients" || moduleKey === "recipient-groups") && <PeopleTabs active={moduleKey} />}
