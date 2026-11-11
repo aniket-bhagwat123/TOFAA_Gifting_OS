@@ -8,6 +8,7 @@ from src.modules.auth.schemas import (
     MessageResponse,
     PasswordResetRequest,
     PasswordUpdateRequest,
+    ProfileUpdateRequest,
     RefreshTokenRequest,
     TokenResponse,
     UserLoginRequest,
@@ -93,3 +94,14 @@ def reset_password(
 )
 def get_me(current_user: CurrentUserDep) -> UserProfileResponse:
     return current_user
+
+
+@router.patch(
+    "/me",
+    response_model=UserProfileResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update my profile",
+    description="Lets any signed-in user change their own name, email and mobile number. The photo uses PUT /me/avatar.",
+)
+def update_me(payload: Annotated[ProfileUpdateRequest, Body()], current_user: CurrentUserDep) -> UserProfileResponse:
+    return auth_service.update_profile(current_user, payload)

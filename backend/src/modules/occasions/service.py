@@ -148,6 +148,9 @@ class OccasionService:
             raise HTTPException(status_code=403, detail="Only super admins can create global occasions.")
         values = payload.model_dump(mode="json")
         values["occasion_name"] = values["occasion_name"].strip()
+        for key in ("category", "repeat_annually", "priority", "notes"):
+            if values.get(key) is None:
+                values.pop(key, None)
         values.update(tenant_id=None, created_by_user_id=actor.id)
         try:
             result = self.database.table("occasions").insert(values).select("*").execute()
@@ -175,6 +178,9 @@ class OccasionService:
         self._require_tenant_access(tenant_id, actor, Permission.OCCASION_CREATE)
         values = payload.model_dump(mode="json")
         values["occasion_name"] = values["occasion_name"].strip()
+        for key in ("category", "repeat_annually", "priority", "notes"):
+            if values.get(key) is None:
+                values.pop(key, None)  # keeps working on a database that has not got these columns yet
         values.update(tenant_id=tenant_id, created_by_user_id=actor.id)
         try:
             result = self.database.table("occasions").insert(values).select("*").execute()

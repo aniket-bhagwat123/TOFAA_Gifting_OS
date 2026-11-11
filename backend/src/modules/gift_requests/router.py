@@ -26,6 +26,7 @@ from src.modules.gift_requests.schemas import (
     SendEventGiftRequest,
     SendGiftsRequest,
     SendGiftsResult,
+    DuplicateRequest,
     UpcomingGiftItem,
 )
 from src.modules.gift_requests.service import gift_request_service
@@ -85,6 +86,24 @@ def upcoming_gift_occasions(
     return ApiResponse(
         data=gift_request_service.upcoming(str(tenant_id), actor, days=days),
         message="Upcoming birthdays and events retrieved successfully.",
+    )
+
+
+@router.get("/tenants/{tenant_id}/gift-requests/duplicates", response_model=ApiResponse[list[DuplicateRequest]])
+def duplicate_gift_requests(
+    tenant_id: UUID,
+    actor: CurrentUserDep,
+    recipient_id: Annotated[UUID, Query(alias="recipientId")],
+    event_id: Annotated[UUID | None, Query(alias="eventId")] = None,
+    occasion_id: Annotated[UUID | None, Query(alias="occasionId")] = None,
+) -> ApiResponse[list[DuplicateRequest]]:
+    """Open requests already raised for this person and occasion/event, so the screen can warn before a second one."""
+    return ApiResponse(
+        data=gift_request_service.duplicates(
+            str(tenant_id), actor, recipient_id=str(recipient_id),
+            event_id=str(event_id) if event_id else None, occasion_id=str(occasion_id) if occasion_id else None,
+        ),
+        message="Existing requests retrieved successfully.",
     )
 
 

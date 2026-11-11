@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 from fastapi import HTTPException, status
 from supabase import Client
 
@@ -11,6 +12,7 @@ from src.modules.auth.schemas import (
     AuthResponse,
     PasswordResetRequest,
     PasswordUpdateRequest,
+    ProfileUpdateRequest,
     RefreshTokenRequest,
     TokenResponse,
     UserLoginRequest,
@@ -146,6 +148,31 @@ class AuthService:
             # Do not leak whether the email exists for security
             pass
 
+    def update_profile(self, user: UserProfileResponse, payload: ProfileUpdateRequest) -> UserProfileResponse:
+        """Edit the signed-in user's own name, email and mobile number."""
+        changes: dict[str, Any] = {}
+        if payload.full_name is not None:
+            changes["full_name"] = payload.full_name
+        if "mobile_number" in payload.model_fields_set:
+            changes["mobile_number"] = payload.mobile_number or None
+        if payload.email is not None and payload.email.lower() != user.email.lower():
+            email = payload.email.lower()
+            taken = self.admin_client.table("profiles").select("id").eq("email", email).neq("id", user.id).limit(1).execute().data
+            if taken:
+                raise HTTPException(status_code=409, detail="That email is already used by another account.")
+            try:
+                # The email is the sign-in name, so it must change in Supabase Auth as well as on the profile.
+                self.admin_client.auth.admin.update_user_by_id(user.id, {"email": email, "email_confirm": True})
+            except Exception as exc:
+                logger.exception("Could not update user email")
+                raise HTTPException(status_code=409, detail="That email could not be used. Try a different one.") from exc
+            changes["email"] = email
+        if changes:
+            result = self.admin_client.table("profiles").update(changes).eq("id", user.id).select("id").execute()
+            if not result.data:
+                raise HTTPException(status_code=404, detail="User not found.")
+        return self.get_profile_by_id(user.id, user.email, use_cache=False)
+
     def update_password(self, access_token: str, payload: PasswordUpdateRequest) -> None:
         """
         Updates the password for the authenticated user.
@@ -228,6 +255,7 @@ class AuthService:
                     email=record.get("email") or default_email or "",
                     full_name=record.get("full_name") or default_name,
                     avatar_url=record.get("avatar_url"),
+                    mobile_number=record.get("mobile_number"),
                     role=record.get("role", "CLIENT"),
                     is_active=record.get("is_active", True),
                     must_reset_password=record.get(

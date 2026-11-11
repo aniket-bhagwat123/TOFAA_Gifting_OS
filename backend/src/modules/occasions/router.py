@@ -3,6 +3,8 @@
 from typing import Annotated
 from uuid import UUID
 
+from datetime import date
+
 from fastapi import APIRouter, Body, Query, status
 
 from src.core.schema import ApiResponse
@@ -16,6 +18,7 @@ from src.modules.occasions.schemas import (
     OccasionUpdate,
     UpcomingOccasion,
 )
+from src.modules.occasions.overview import OccasionOverview, occasion_overview_service
 from src.modules.occasions.service import occasion_service
 
 router = APIRouter(tags=["Occasions"])
@@ -107,6 +110,25 @@ def upcoming_occasions(
     return ApiResponse(
         data=occasion_service.upcoming(str(tenant_id), actor, days=days or settings.UPCOMING_OCCASION_DAYS),
         message="Upcoming occasions retrieved successfully.",
+    )
+
+
+@router.get("/tenants/{tenant_id}/occasions/overview", response_model=OccasionOverview)
+def occasions_overview(
+    tenant_id: UUID,
+    actor: CurrentUserDep,
+    date_from: Annotated[date | None, Query(alias="dateFrom")] = None,
+    date_to: Annotated[date | None, Query(alias="dateTo")] = None,
+    days: Annotated[int | None, Query(ge=1, le=366)] = None,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    tab: Annotated[str, Query(description="ALL, NOT_PLANNED, BUDGET_ALLOCATED, REQUEST_SUBMITTED, IN_PROGRESS or DELIVERED")] = "ALL",
+    sort: Annotated[str, Query(description="soonest, priority or name")] = "soonest",
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=500)] = 10,
+) -> OccasionOverview:
+    """Recipient dates and company occasions in one list, with planning status, budget and linked requests."""
+    return occasion_overview_service.overview(
+        str(tenant_id), actor, date_from=date_from, date_to=date_to, days=days, q=q, tab=tab, sort=sort, page=page, limit=limit,
     )
 
 

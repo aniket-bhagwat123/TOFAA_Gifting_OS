@@ -20,6 +20,9 @@ export interface AuthUser {
   email: string;
   platformRole: "CLIENT" | "TOFAA_TEAM" | "SUPER_ADMIN";
   avatarUrl?: string | null;
+  /** The name as typed on the profile (empty when never set); `name` falls back to the email. */
+  fullName?: string;
+  mobileNumber?: string | null;
   tenant?: { id: string; name: string };
   permissions: string[];
   /** True while the user is still on a temporary password (e.g. just invited). */

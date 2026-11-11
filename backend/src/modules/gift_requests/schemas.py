@@ -304,6 +304,17 @@ class UpcomingGiftItem(BaseModel):
     request_id: str | None = None  # an open gift request already exists for this event
 
 
+class DuplicateRequest(BaseModel):
+    """An open request that already covers the same person and occasion or event."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    id: str
+    request_code: str | None = None
+    status: str
+    title: str | None = None
+
+
 class OccasionActivityItem(BaseModel):
     """One gift sent from the Occasions page: waiting on TOFAA, approved, or delivered."""
 

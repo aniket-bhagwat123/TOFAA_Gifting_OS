@@ -101,6 +101,9 @@ class EventService:
         if recipient_id is not None:
             self._require_recipient(tenant_id, recipient_id)
         values = payload.model_dump(mode="json")
+        for key in ("occasion_type", "relationship", "repeat_annually", "priority", "notes"):
+            if values.get(key) is None:
+                values.pop(key, None)  # keeps working on a database that has not got these columns yet
         values.update(
             {
                 "tenant_id": tenant_id,

@@ -17,6 +17,11 @@ export const authService = {
     try { await api.post(endpoints.auth.logout, {}); }
     finally { clearRequestCache(); if (typeof window !== "undefined") window.localStorage.removeItem("tofaa-session"); }
   },
+  async updateProfile(payload: { fullName?: string; email?: string; mobileNumber?: string }) {
+    const { data } = await api.patch<AuthMeResponse>(endpoints.auth.me, payload);
+    clearRequestCache();
+    return toAuthUser(data);
+  },
   async resetPassword(newPassword: string) {
     await api.post(endpoints.auth.resetPassword, { newPassword });
   },
@@ -31,6 +36,8 @@ export function toAuthUser(user: AuthMeResponse) {
     id: user.id,
     email: user.email,
     name: user.full_name || user.email,
+    fullName: user.full_name || "",
+    mobileNumber: typeof user.mobile_number === "string" && user.mobile_number ? user.mobile_number : null,
     avatarUrl: typeof user.avatar_url === "string" && user.avatar_url ? user.avatar_url : null,
     platformRole: user.role === "KAM" ? "TOFAA_TEAM" as const : user.role,
     tenant: user.tenant_id ? { id: user.tenant_id, name: "" } : undefined,

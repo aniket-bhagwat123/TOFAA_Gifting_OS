@@ -32,6 +32,7 @@ from src.modules.gift_requests.schemas import (
     SendEventGiftRequest,
     SendGiftsRequest,
     SendGiftsResult,
+    DuplicateRequest,
     UpcomingGiftItem,
 )
 from src.modules.tenants.service import tenant_service
@@ -363,6 +364,20 @@ class GiftRequestService:
             ))
         items.sort(key=lambda item: (item.date, item.recipient_name or ""))
         return items
+
+    def duplicates(
+        self, tenant_id: str, actor: UserProfileResponse, *, recipient_id: str, event_id: str | None, occasion_id: str | None,
+    ) -> list[DuplicateRequest]:
+        """Requests that are not cancelled for the same person and the same event (or occasion)."""
+        self._require_tenant_access(tenant_id, actor)
+        if not event_id and not occasion_id:
+            return []
+        query = (
+            self.database.table("gift_requests").select("id,request_code,status,title")
+            .eq("tenant_id", tenant_id).eq("recipient_id", recipient_id).neq("status", "CANCELLED")
+        )
+        query = query.eq("event_id", event_id) if event_id else query.eq("occasion_id", occasion_id)
+        return [DuplicateRequest.model_validate(row) for row in query.order("created_at", desc=True).limit(10).execute().data or []]
 
     @staticmethod
     def _next_birthday(born: date, today: date) -> date:

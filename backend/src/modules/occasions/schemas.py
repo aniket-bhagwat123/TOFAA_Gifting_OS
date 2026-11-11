@@ -1,10 +1,14 @@
 """Request and response schemas for tenant occasions."""
 
 from datetime import date, datetime
+from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.core.pagination import PaginationMeta
 from src.core.schema import to_camel
+
+
+Priority = Literal["NORMAL", "HIGH", "VIP"]
 
 
 class OccasionCreate(BaseModel):
@@ -14,6 +18,10 @@ class OccasionCreate(BaseModel):
     occasion_date: date
     description: str | None = Field(default=None, max_length=2000)
     is_active: bool = True
+    category: str | None = Field(default=None, min_length=1, max_length=60)
+    repeat_annually: bool | None = None
+    priority: Priority | None = None
+    notes: str | None = Field(default=None, max_length=2000)
 
 
 class OccasionUpdate(BaseModel):
@@ -23,12 +31,16 @@ class OccasionUpdate(BaseModel):
     occasion_date: date | None = None
     description: str | None = Field(default=None, max_length=2000)
     is_active: bool | None = None
+    category: str | None = Field(default=None, min_length=1, max_length=60)
+    repeat_annually: bool | None = None
+    priority: Priority | None = None
+    notes: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def validate_patch(self) -> "OccasionUpdate":
         if not self.model_fields_set:
             raise ValueError("At least one occasion field must be provided")
-        for field in ("occasion_name", "occasion_date", "is_active"):
+        for field in ("occasion_name", "occasion_date", "is_active", "repeat_annually", "priority"):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
         return self
@@ -43,6 +55,10 @@ class OccasionRead(BaseModel):
     occasion_date: date | None = None
     description: str | None = None
     is_active: bool
+    category: str | None = None
+    repeat_annually: bool = False
+    priority: Priority = "NORMAL"
+    notes: str | None = None
     created_by_user_id: str | None = None
     created_at: datetime | str
     updated_at: datetime | str
