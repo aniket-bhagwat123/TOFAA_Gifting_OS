@@ -51,6 +51,7 @@ export function ProfileForm() {
     finally { setSaving(false); }
   }
 
+  
   return <div className="mx-auto max-w-2xl">
     <PageHeader description="Your photo and contact details. You sign in with the email below." />
     <Card className="mb-6 p-6">
