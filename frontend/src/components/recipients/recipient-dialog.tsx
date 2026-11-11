@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { Sheet } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { ImageUpload, deleteImage, sendImage } from "@/components/ui/image-upload";
 import { recipientCreateSchema, recipientEditSchema } from "@/features/forms/schemas";
 import { mutateModule } from "@/features/modules/module.service";
 import { getApiErrorMessage, getApiFieldErrors } from "@/services/api-client";
@@ -23,12 +24,14 @@ const valuesFrom = (row: RecipientRow): RecipientFormInput => ({
 });
 
 /** One dialog for adding and editing a recipient. Only editing shows the budget. */
-export function RecipientDialog({ target, endpoint, onClose, onSaved, onDelete }: {
-  target: RecipientTarget | null; endpoint: string; onClose: () => void; onSaved: (addAnother: boolean) => void; onDelete: (row: RecipientRow) => void;
+export function RecipientDialog({ target, endpoint, onClose, onSaved, onDelete, onPhotoChanged }: {
+  target: RecipientTarget | null; endpoint: string; onClose: () => void; onSaved: (addAnother: boolean) => void; onDelete: (row: RecipientRow) => void; onPhotoChanged?: () => void;
 }) {
   const adding = target === "new";
   const row = target && target !== "new" ? target : null;
   const addAnother = useRef(false);
+  const [photo, setPhoto] = useState<string | null>(null);
+  useEffect(() => { setPhoto(row ? ((row.avatarUrl as string | null | undefined) ?? null) : null); }, [row]);
   const { register, control, handleSubmit, setError, setValue, watch, reset, setFocus, formState: { errors, isSubmitting } } = useForm<RecipientFormInput>({ resolver: zodResolver((adding ? recipientCreateSchema : recipientEditSchema) as never) as never, defaultValues: emptyRecipient });
   useEffect(() => {
     if (adding) reset(emptyRecipient);
@@ -63,6 +66,9 @@ export function RecipientDialog({ target, endpoint, onClose, onSaved, onDelete }
 
   return <Sheet open={!!target} locked={isSubmitting} onClose={onClose} labelledBy="recipient-dialog-title" className="max-w-3xl">
     <h2 id="recipient-dialog-title" className="text-xl font-semibold text-ink">{adding ? "Add recipient" : "Edit recipient"}</h2>
+    {row?.id && <div className="mt-4"><ImageUpload name={String(row.name ?? "")} src={photo} label="Choose a photo for this person"
+      onUpload={async (file) => { const saved = await sendImage<{ avatarUrl?: string | null }>("put", `${endpoint}/${row.id}/avatar`, file); setPhoto(saved.avatarUrl ?? null); onPhotoChanged?.(); toast.success("Photo saved."); }}
+      onRemove={async () => { await deleteImage(`${endpoint}/${row.id}/avatar`); setPhoto(null); onPhotoChanged?.(); toast.success("Photo removed."); }} /></div>}
     <form noValidate onSubmit={submit} className="mt-5">
       <RecipientFields register={register} control={control} errors={errors} setValue={setValue} budget={budget} birthdayRequired={adding} showBudget={!adding} />
       {adding

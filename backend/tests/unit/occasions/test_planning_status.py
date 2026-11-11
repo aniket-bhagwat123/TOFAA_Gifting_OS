@@ -11,14 +11,14 @@ def test_not_planned_and_budget_allocated():
 def test_request_stages():
     assert planning_status(has_budget=True, requests=[("IN_REVIEW", [])]) == S.REQUEST_SUBMITTED
     assert planning_status(has_budget=True, requests=[("PROPOSAL_READY", [])]) == S.AWAITING_APPROVAL
-    assert planning_status(has_budget=True, requests=[("APPROVED", ["PLANNED"])]) == S.IN_PROGRESS
-    assert planning_status(has_budget=True, requests=[("APPROVED", ["DELIVERED", "IN_TRANSIT"])]) == S.IN_PROGRESS
-    assert planning_status(has_budget=True, requests=[("APPROVED", ["DELIVERED", "DELIVERED"])]) == S.DELIVERED
+    assert planning_status(has_budget=True, requests=[("CONFIRMED", ["PLANNED"])]) == S.IN_PROGRESS
+    assert planning_status(has_budget=True, requests=[("CONFIRMED", ["DELIVERED", "IN_TRANSIT"])]) == S.IN_PROGRESS
+    assert planning_status(has_budget=True, requests=[("CONFIRMED", ["DELIVERED", "DELIVERED"])]) == S.DELIVERED
 
 
 def test_cancelled_ignored_and_least_advanced_wins():
     assert planning_status(has_budget=False, requests=[("CANCELLED", [])]) == S.NOT_PLANNED
-    mixed = [("APPROVED", ["DELIVERED"]), ("PROPOSAL_READY", [])]
+    mixed = [("CONFIRMED", ["DELIVERED"]), ("PROPOSAL_READY", [])]
     assert planning_status(has_budget=True, requests=mixed) == S.AWAITING_APPROVAL
 
 
@@ -36,5 +36,5 @@ def test_lead_request_is_the_one_holding_status_back():
     from src.modules.occasions.planning import lead_request_id
     assert lead_request_id([]) is None
     assert lead_request_id([("a", "DRAFT", [])]) is None
-    mixed = [("a", "APPROVED", ["DELIVERED"]), ("b", "PROPOSAL_READY", [])]
+    mixed = [("a", "CONFIRMED", ["DELIVERED"]), ("b", "PROPOSAL_READY", [])]
     assert lead_request_id(mixed) == "b"

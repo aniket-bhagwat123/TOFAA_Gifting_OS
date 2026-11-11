@@ -58,7 +58,7 @@ def test_gift_request_patch_requires_fields_and_rejects_null_required_fields():
     with pytest.raises(ValidationError):
         GiftRequestUpdate()
     with pytest.raises(ValidationError):
-        GiftRequestUpdate(title=None)
+        GiftRequestUpdate(recipient_id=None)
     with pytest.raises(ValidationError):
         GiftRequestUpdate(purpose="   ")
 
@@ -74,3 +74,29 @@ def test_gift_proposal_requires_named_nonnegative_options():
     proposal = GiftProposalUpdate(options=[{"name": "  Gift  ", "price": "25.00"}])
     assert proposal.options[0].name == "Gift"
     assert proposal.options[0].price == Decimal("25.00")
+
+
+def test_draft_only_needs_recipient_and_a_source():
+    draft = GiftRequestCreate(recipientId=RECIPIENT_ID, occasionId=OCCASION_ID)
+    assert draft.title is None and draft.purpose is None and draft.budget_mode == "SPECIFIC"
+
+
+def test_form_fields_are_validated():
+    base = {"recipientId": RECIPIENT_ID, "occasionId": OCCASION_ID}
+    with pytest.raises(ValidationError):  # min above max
+        GiftRequestCreate(**base, budgetMin="500000", budgetMax="300000")
+    with pytest.raises(ValidationError):  # unknown initiator
+        GiftRequestCreate(**base, initiatedVia="CARRIER_PIGEON")
+    with pytest.raises(ValidationError):  # message limit is 300
+        GiftRequestCreate(**base, message="x" * 301)
+    with pytest.raises(ValidationError):  # instructions limit is 500
+        GiftRequestCreate(**base, specialInstructions="x" * 501)
+    with pytest.raises(ValidationError):
+        GiftRequestCreate(**base, giftStyle="CHEAP")
+
+    request = GiftRequestCreate(
+        **base, budgetMin="300000", budgetMax="500000", initiatedVia="DIRECTOR_WHATSAPP",
+        interests=["Sports", " sports ", "Books", ""], giftStyle="PREMIUM", giftPurpose="BUSINESS_RELATIONSHIP",
+    )
+    assert request.interests == ["Sports", "Books"]
+    assert request.budget_max == Decimal("500000")

@@ -95,7 +95,7 @@ export function OccasionSend({ occasionId }: { occasionId: string }) {
   if (loadError) return <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-base text-rose-800">{loadError} <Link href="/occasions" className="font-semibold underline">Back to occasions</Link></div>;
   if (!ready || !occasion) return <div className="flex justify-center py-20"><Spinner /></div>;
 
-  return <div className="mx-auto max-w-3xl space-y-6">
+  return <div className="w-full space-y-6">
     <div>
       <Link href="/occasions" className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-ink"><ChevronLeft size={16} /> Occasions</Link>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">

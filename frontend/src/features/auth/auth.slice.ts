@@ -30,6 +30,9 @@ const authSlice = createSlice({
       state.user = null;
       state.session = null;
       state.status = "unauthenticated";
+    },
+    setUserAvatar(state, action: { payload: string | null }) {
+      if (state.user) state.user.avatarUrl = action.payload;
     }
   },
   extraReducers(builder) {
@@ -43,5 +46,5 @@ const authSlice = createSlice({
       .addCase(logoutUser.fulfilled, (state) => { state.user = null; state.session = null; state.status = "unauthenticated"; });
   }
 });
-export const { clearAuth } = authSlice.actions;
+export const { clearAuth, setUserAvatar } = authSlice.actions;
 export default authSlice.reducer;

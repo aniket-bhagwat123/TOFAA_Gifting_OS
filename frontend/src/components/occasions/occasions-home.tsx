@@ -23,7 +23,8 @@ const sectionEmpty = { approved: "No approved budgets yet. Once TOFAA's proposal
 
 /** Client home for Occasions: cards for what is coming up (occasions tall, events short), plus what happened after sending. */
 export function OccasionsHome() {
-  const { tenantId, isClient } = useTenantId();
+  const { user, tenantId, isClient } = useTenantId();
+  const canSend = user?.platformRole !== "SUPER_ADMIN";
   const [tab, setTab] = useState<"upcoming" | "activity">("upcoming");
   const [section, setSection] = useState<(typeof SECTIONS)[number][0]>("approved");
   const [occasions, setOccasions] = useState<UpcomingOccasion[] | null>(null);
@@ -95,7 +96,7 @@ export function OccasionsHome() {
               <p className="flex items-center gap-2 truncate font-bold text-ink"><span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${eventTint[card.event.kind]}`}>{eventIcon[card.event.kind]}</span><span className="truncate">{card.event.recipientName ?? "Someone"}</span></p>
               <p className="mt-0.5 truncate text-sm text-muted">{card.event.title} · {day(card.event.date)}</p>
             </div>
-            <button type="button" onClick={() => setSending(card.event)} className="inline-flex items-center justify-center gap-1 rounded-xl bg-brand-soft px-4 py-2 text-sm font-semibold text-brand hover:bg-brand/15">Send gift <ChevronRight size={16} /></button>
+            {canSend && <button type="button" onClick={() => setSending(card.event)} className="inline-flex items-center justify-center gap-1 rounded-xl bg-brand-soft px-4 py-2 text-sm font-semibold text-brand hover:bg-brand/15">Send gift <ChevronRight size={16} /></button>}
           </Card>)}
   </div>;
 

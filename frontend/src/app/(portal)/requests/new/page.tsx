@@ -1,6 +1,6 @@
 import { Suspense } from "react";
-import { GiftRequestForm } from "@/components/gift-requests/gift-request-form";
+import { GiftRequestsList } from "@/components/gift-requests/gift-requests-list";
 
 export default function NewGiftRequestPage() {
-  return <Suspense fallback={null}><GiftRequestForm /></Suspense>;
+  return <Suspense fallback={null}><GiftRequestsList startNew /></Suspense>;
 }

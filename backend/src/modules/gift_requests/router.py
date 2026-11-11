@@ -1,9 +1,11 @@
 """Tenant and staff gift request workflow endpoints."""
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Query, status
+from fastapi import APIRouter, Body, Query, Request, status
+from starlette.concurrency import run_in_threadpool
 
 from src.core.schema import ApiResponse
 from src.modules.auth.dependencies import CurrentUserDep
@@ -19,6 +21,8 @@ from src.modules.gift_requests.schemas import (
     GiftRequestSummary,
     GiftRequestUpdate,
     OccasionActivity,
+    ProposalImageRead,
+    ReferenceFileLink,
     SendEventGiftRequest,
     SendGiftsRequest,
     SendGiftsResult,
@@ -51,10 +55,14 @@ def list_gift_requests(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     request_status: Annotated[GiftRequestStatus | None, Query(alias="status")] = None,
     search: Annotated[str | None, Query(max_length=100)] = None,
+    recipient_id: Annotated[UUID | None, Query(alias="recipientId")] = None,
+    date_from: Annotated[date | None, Query(alias="dateFrom")] = None,
+    date_to: Annotated[date | None, Query(alias="dateTo")] = None,
 ) -> ApiResponse[GiftRequestPage]:
     return ApiResponse(
         data=gift_request_service.list_for_tenant(
-            str(tenant_id), actor, page=page, limit=limit, status_filter=request_status, search=search
+            str(tenant_id), actor, page=page, limit=limit, status_filter=request_status, search=search,
+            recipient_id=str(recipient_id) if recipient_id else None, date_from=date_from, date_to=date_to,
         ),
         message="Gift requests retrieved successfully.",
     )
@@ -132,6 +140,56 @@ def update_gift_request(
 
 
 @router.post(
+    "/tenants/{tenant_id}/gift-requests/{request_id}/reference",
+    response_model=ApiResponse[GiftRequestRead],
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_gift_request_reference(
+    tenant_id: UUID,
+    request_id: UUID,
+    request: Request,
+    actor: CurrentUserDep,
+    file_name: Annotated[str, Query(alias="fileName", min_length=1, max_length=200)] = "reference",
+) -> ApiResponse[GiftRequestRead]:
+    """Raw file body (Content-Type: image/png, image/jpeg or application/pdf, up to 5 MB)."""
+    content = await request.body()
+    data = await run_in_threadpool(
+        gift_request_service.upload_reference,
+        str(tenant_id), str(request_id), actor,
+        content=content,
+        content_type=request.headers.get("content-type", ""),
+        file_name=file_name,
+    )
+    return ApiResponse(data=data, message="Reference attached.")
+
+
+@router.delete(
+    "/tenants/{tenant_id}/gift-requests/{request_id}/reference",
+    response_model=ApiResponse[GiftRequestRead],
+)
+def remove_gift_request_reference(
+    tenant_id: UUID, request_id: UUID, actor: CurrentUserDep
+) -> ApiResponse[GiftRequestRead]:
+    return ApiResponse(
+        data=gift_request_service.remove_reference(str(tenant_id), str(request_id), actor),
+        message="Reference removed.",
+    )
+
+
+@router.get(
+    "/tenants/{tenant_id}/gift-requests/{request_id}/reference",
+    response_model=ApiResponse[ReferenceFileLink],
+)
+def gift_request_reference_link(
+    tenant_id: UUID, request_id: UUID, actor: CurrentUserDep
+) -> ApiResponse[ReferenceFileLink]:
+    return ApiResponse(
+        data=gift_request_service.reference_link(str(tenant_id), str(request_id), actor),
+        message="Reference link created.",
+    )
+
+
+@router.post(
     "/tenants/{tenant_id}/gift-requests/{request_id}/submit",
     response_model=ApiResponse[GiftRequestRead],
 )
@@ -142,7 +200,7 @@ def submit_gift_request(
         data=gift_request_service.transition(
             str(tenant_id), str(request_id), "submit", actor
         ),
-        message="Gift request submitted for review.",
+        message="Gift request submitted to TOFAA.",
     )
 
 
@@ -318,3 +376,50 @@ def reject_gift_request(
         ),
         message="Gift request rejected.",
     )
+
+
+@router.post(
+    "/admin/gift-requests/{request_id}/start-fulfilment",
+    response_model=ApiResponse[GiftRequestRead],
+)
+def start_gift_fulfilment(request_id: UUID, actor: CurrentUserDep) -> ApiResponse[GiftRequestRead]:
+    return ApiResponse(
+        data=gift_request_service.staff_transition(str(request_id), "start_fulfilment", actor),
+        message="Gift request is now in progress.",
+    )
+
+
+@router.post(
+    "/admin/gift-requests/{request_id}/dispatch",
+    response_model=ApiResponse[GiftRequestRead],
+)
+def dispatch_gift_request(request_id: UUID, actor: CurrentUserDep) -> ApiResponse[GiftRequestRead]:
+    return ApiResponse(
+        data=gift_request_service.staff_transition(str(request_id), "dispatch", actor),
+        message="Gift request dispatched.",
+    )
+
+
+@router.post(
+    "/admin/gift-requests/{request_id}/deliver",
+    response_model=ApiResponse[GiftRequestRead],
+)
+def deliver_gift_request(request_id: UUID, actor: CurrentUserDep) -> ApiResponse[GiftRequestRead]:
+    return ApiResponse(
+        data=gift_request_service.staff_transition(str(request_id), "deliver", actor),
+        message="Gift request delivered.",
+    )
+
+
+@router.post(
+    "/admin/gift-requests/{request_id}/proposal-image",
+    response_model=ApiResponse[ProposalImageRead],
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_proposal_image(request_id: UUID, request: Request, actor: CurrentUserDep) -> ApiResponse[ProposalImageRead]:
+    """Raw image body (Content-Type: image/png, image/jpeg or image/webp, up to 5 MB). Returns the photo's URL."""
+    data = await run_in_threadpool(
+        gift_request_service.upload_proposal_image, str(request_id), actor,
+        content=await request.body(), content_type=request.headers.get("content-type", ""),
+    )
+    return ApiResponse(data=data, message="Photo uploaded.")

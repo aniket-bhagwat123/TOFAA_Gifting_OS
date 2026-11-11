@@ -20,7 +20,7 @@ const groups: { title: string; items: NavItem[] }[] = [
     { label: "Home", href: "/home", icon: Home, roles: ["CLIENT", "TOFAA_TEAM", "SUPER_ADMIN"] },
     item("occasions", "Occasions", CalendarDays),
     item("recipients", "People", Users, ["/recipient-groups"]),
-    item("requests", "Gifting Activity", ClipboardList),
+    item("requests", "Gift requests", ClipboardList),
     item("credits", "Budgets", Wallet),
     item("activity", "Activity", History)
   ] },

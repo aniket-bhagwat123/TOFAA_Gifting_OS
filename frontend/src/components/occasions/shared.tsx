@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Cake, CalendarDays, Gift, Heart } from "lucide-react";
 import { getModuleRecords } from "@/features/modules/module.service";
 import { Button } from "@/components/ui/button";
-import { shortDay } from "@/components/gift-requests/shared";
+import { shortDay, useTenantId } from "@/components/gift-requests/shared";
 
 export type UpcomingOccasion = { id: string; occasionName: string; occasionDate: string; description?: string | null; daysAway: number; isGlobal: boolean; requestsSent: number };
 export type UpcomingEvent = { kind: "BIRTHDAY" | "ANNIVERSARY" | "EVENT"; recipientId: string; recipientName?: string | null; title: string; date: string; daysAway: number; eventId?: string | null; requestId?: string | null };
@@ -34,6 +34,7 @@ const tint = { BIRTHDAY: "bg-rose-50 text-rose-600", ANNIVERSARY: "bg-violet-50 
 
 /** Birthdays, anniversaries and other recipient events, each with a Send button. */
 export function EventList({ items, busyKey, onSend }: { items: UpcomingEvent[]; busyKey?: string | null; onSend: (item: UpcomingEvent) => void }) {
+  const canSend = useTenantId().user?.platformRole !== "SUPER_ADMIN";
   return <ul className="divide-y divide-line/70">
     {items.map((item) => {
       const key = `${item.recipientId}-${item.date}-${item.title}`;
@@ -45,7 +46,7 @@ export function EventList({ items, busyKey, onSend }: { items: UpcomingEvent[]; 
         </div>
         {item.requestId
           ? <Link href={`/requests/${item.requestId}`} className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200">Sent</Link>
-          : <Button size="sm" className="shrink-0" disabled={busyKey === key} onClick={() => onSend(item)}><Gift size={15} /> Send gift</Button>}
+          : !canSend ? null : <Button size="sm" className="shrink-0" disabled={busyKey === key} onClick={() => onSend(item)}><Gift size={15} /> Send gift</Button>}
       </li>;
     })}
   </ul>;

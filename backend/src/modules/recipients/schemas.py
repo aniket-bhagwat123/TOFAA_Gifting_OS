@@ -102,6 +102,7 @@ class RecipientRead(BaseModel):
     anniversary_date: date | None = None
     budget: Decimal | None = None
     remark: str | None = None
+    avatar_url: str | None = None
 
 
 class RecipientList(BaseModel):

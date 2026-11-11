@@ -1,8 +1,11 @@
 "use client";
 
 import { LogOut, Menu } from "lucide-react";
+import { Avatar } from "@/components/ui/avatar";
+import { ImageUpload, deleteImage, sendImage } from "@/components/ui/image-upload";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { logoutUser } from "@/features/auth/auth.slice";
+import { logoutUser, setUserAvatar } from "@/features/auth/auth.slice";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { displayName } from "@/lib/utils";
@@ -10,7 +13,7 @@ import { selectedTenantKey, setSelectedTenant } from "@/features/modules/modules
 
 const moduleTitles: Record<string, string> = {
   home: "Home",
-  requests: "Gifting Activity",
+  requests: "Gift requests",
   gifts: "Gifts",
   events: "Events",
   occasions: "Occasions",
@@ -38,7 +41,6 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
   }
 
   const shownName = displayName(user);
-  const initials = shownName.split(" ").map((x) => x[0]).slice(0, 2).join("") || "U";
   // Translucent chrome: content scrolls beneath it, separated by a hairline only.
   return <header className="material material-edge sticky top-0 z-20 flex h-[68px] items-center justify-between px-4 sm:px-6 lg:px-8">
     <div className="flex items-center gap-2">
@@ -54,7 +56,15 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
         </select>
       </label>}
       <div className="flex items-center gap-2.5 pl-1">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand/10 text-sm font-semibold text-brand uppercase" aria-hidden>{initials}</div>
+        <Popover>
+          <PopoverTrigger asChild><button type="button" aria-label="Change your photo" className="press rounded-full outline-none focus-visible:ring-4 focus-visible:ring-brand/20"><Avatar name={shownName} src={user?.avatarUrl} /></button></PopoverTrigger>
+          <PopoverContent align="end" className="w-80 p-4">
+            <p className="mb-3 text-sm font-semibold text-ink">Your photo</p>
+            <ImageUpload name={shownName} src={user?.avatarUrl} label="Choose your photo"
+              onUpload={async (file) => { const me = await sendImage<{ avatar_url?: string | null; avatarUrl?: string | null }>("put", "/me/avatar", file); dispatch(setUserAvatar(me.avatar_url ?? me.avatarUrl ?? null)); toast.success("Photo saved."); }}
+              onRemove={async () => { await deleteImage("/me/avatar"); dispatch(setUserAvatar(null)); toast.success("Photo removed."); }} />
+          </PopoverContent>
+        </Popover>
         <p className="hidden text-sm font-medium text-ink md:block capitalize">{shownName}</p>
         <button onClick={handleLogout} title="Sign out" className="press flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-medium text-slate-700 hover:bg-black/5"><LogOut size={18} /><span className="hidden md:inline">Sign out</span></button>
       </div>

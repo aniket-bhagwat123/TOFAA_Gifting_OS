@@ -7,7 +7,7 @@ import logging
 from fastapi import HTTPException
 from supabase import Client
 
-from src.core import audit
+from src.core import audit, images
 from src.core.config import settings
 from src.core.pagination import PaginationMeta, next_page_cursor
 from src.core.supabase import get_supabase_admin_client
@@ -115,6 +115,25 @@ class TenantService:
         )
         if not result.data:
             raise HTTPException(status_code=404, detail="Tenant not found.")
+        return TenantRead.model_validate(result.data[0])
+
+    def set_logo(
+        self, tenant_id: str, actor: UserProfileResponse, *, content: bytes | None, content_type: str = ""
+    ) -> TenantRead:
+        """Save (or, with no content, remove) the client's logo."""
+        self.require_access(tenant_id, actor)  # scope first, so another tenant's ID is just "not found"
+        require_permission(actor, Permission.TENANT_UPDATE)
+        current = self.get(tenant_id, actor)
+        url = images.store_image(self.database, f"tenants/{tenant_id}", content, content_type) if content is not None else None
+        audit.note(actor, tenant_id)
+        result = (
+            self.database.table("tenants").update({"logo_url": url}).eq("id", tenant_id)
+            .neq("status", TenantStatus.DEACTIVATED.value).neq("tenant_type", TenantType.INTERNAL.value).execute()
+        )
+        if not result.data:
+            images.remove_image(self.database, url)
+            raise HTTPException(status_code=404, detail="Tenant not found.")
+        images.remove_image(self.database, current.logo_url)
         return TenantRead.model_validate(result.data[0])
 
     def set_status(

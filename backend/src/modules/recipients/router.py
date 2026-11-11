@@ -3,7 +3,8 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, HTTPException, Query, status
+from fastapi import APIRouter, Body, HTTPException, Query, Request, status
+from starlette.concurrency import run_in_threadpool
 
 from src.core.schema import ApiResponse
 from src.modules.auth.dependencies import CurrentUserDep
@@ -86,6 +87,29 @@ def update_recipient(
         data=recipient_service.update_recipient(str(tenant_id), str(recipient_id), payload, actor),
         message="Recipient updated successfully.",
     )
+
+
+@router.put(
+    "/tenants/{tenant_id}/recipients/{recipient_id}/avatar",
+    response_model=ApiResponse[RecipientRead],
+)
+async def upload_recipient_avatar(
+    tenant_id: UUID, recipient_id: UUID, request: Request, actor: CurrentUserDep
+) -> ApiResponse[RecipientRead]:
+    """Raw image body (Content-Type: image/png, image/jpeg or image/webp, up to 2 MB)."""
+    data = await run_in_threadpool(
+        recipient_service.set_avatar, str(tenant_id), str(recipient_id), actor,
+        content=await request.body(), content_type=request.headers.get("content-type", ""),
+    )
+    return ApiResponse(data=data, message="Photo saved.")
+
+
+@router.delete(
+    "/tenants/{tenant_id}/recipients/{recipient_id}/avatar",
+    response_model=ApiResponse[RecipientRead],
+)
+def remove_recipient_avatar(tenant_id: UUID, recipient_id: UUID, actor: CurrentUserDep) -> ApiResponse[RecipientRead]:
+    return ApiResponse(data=recipient_service.clear_avatar(str(tenant_id), str(recipient_id), actor), message="Photo removed.")
 
 
 @router.delete(

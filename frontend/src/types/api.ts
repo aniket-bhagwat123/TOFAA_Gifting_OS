@@ -19,6 +19,7 @@ export interface AuthUser {
   name: string;
   email: string;
   platformRole: "CLIENT" | "TOFAA_TEAM" | "SUPER_ADMIN";
+  avatarUrl?: string | null;
   tenant?: { id: string; name: string };
   permissions: string[];
   /** True while the user is still on a temporary password (e.g. just invited). */

@@ -14,6 +14,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PeopleTabs } from "@/components/modules/people-tabs";
+import { Avatar } from "@/components/ui/avatar";
 import { RecipientDialog, type RecipientRow, type RecipientTarget } from "./recipient-dialog";
 import { GroupSheet, type RecipientGroup } from "./group-sheet";
 import { ImportCsvSheet } from "./import-csv-sheet";
@@ -156,7 +157,7 @@ export function RecipientsView() {
                   const id = String(r.id);
                   return <tr key={id} className={selected.has(id) ? "bg-brand/5" : "hover:bg-slate-50/70"}>
                     <td className="px-4 py-2.5"><input type="checkbox" aria-label={`Select ${r.name}`} checked={selected.has(id)} onChange={() => toggle(id)} className="h-4 w-4 accent-brand" /></td>
-                    <td className="px-2 py-2.5"><button type="button" onClick={() => setTarget(r)} className="press flex items-center gap-2.5 rounded-md text-left font-medium text-ink hover:text-brand"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[0.6875rem] font-semibold text-slate-600 uppercase" aria-hidden>{initials(r.name)}</span><span className="whitespace-nowrap capitalize">{String(r.name ?? "Unnamed")}</span></button></td>
+                    <td className="px-2 py-2.5"><button type="button" onClick={() => setTarget(r)} className="press flex items-center gap-2.5 rounded-md text-left font-medium text-ink hover:text-brand"><Avatar name={String(r.name ?? "")} src={r.avatarUrl as string | undefined} className="h-8 w-8 text-[0.6875rem]" /><span className="whitespace-nowrap capitalize">{String(r.name ?? "Unnamed")}</span></button></td>
                     <td className="whitespace-nowrap px-2 py-2.5 text-slate-600">{prettyMobile(r.mobileNumber)}</td>
                     <td className="whitespace-nowrap px-2 py-2.5 text-slate-600">{r.address?.city || "—"}</td>
                     <td className="whitespace-nowrap px-2 py-2.5 text-ink">{shortDate(r.dateOfBirth)}</td>
@@ -205,7 +206,7 @@ export function RecipientsView() {
       </aside>
     </div>
 
-    <RecipientDialog target={target} endpoint={ready?.recipients ?? ""} onClose={() => setTarget(null)} onSaved={(addAnother) => { if (!addAnother) setTarget(null); void load(); }} onDelete={(row) => setConfirm([row])} />
+    <RecipientDialog target={target} endpoint={ready?.recipients ?? ""} onClose={() => setTarget(null)} onPhotoChanged={() => void load()} onSaved={(addAnother) => { if (!addAnother) setTarget(null); void load(); }} onDelete={(row) => setConfirm([row])} />
     <GroupSheet group={groupSheet} endpoint={ready?.groups ?? ""} recipients={recipients} presetIds={groupPreset} onClose={() => setGroupSheet(null)} onSaved={() => { if (groupSheet === "new" && groupPreset.length) setSelected(new Set()); setGroupSheet(null); void load(); }} />
     <ImportCsvSheet open={importOpen} endpoint={ready?.recipients ?? ""} onClose={() => setImportOpen(false)} onDone={() => void load()} />
     <Sheet open={!!confirm} locked={deleting} zIndex="z-[90]" labelledBy="confirm-delete-title" className="max-w-md" onClose={() => setConfirm(null)}>

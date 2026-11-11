@@ -69,6 +69,7 @@ class UserRead(BaseModel):
     tenant_id: str
     email: str
     full_name: str | None = None
+    avatar_url: str | None = None
     role: UserRole
     is_active: bool
     tenant_status: TenantStatus

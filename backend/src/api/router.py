@@ -54,7 +54,7 @@ def reference_data(current_user: CurrentUserDep) -> dict[str, list[str]]:
         "slaTiers": ["VVIP", "EXECUTIVE", "STANDARD"],
         "requestStatuses": [
             "DRAFT", "SUBMITTED", "IN_REVIEW", "NEEDS_INFO", "PROPOSAL_READY",
-            "APPROVED", "REJECTED", "CANCELLED", "COMPLETED"
+            "CONFIRMED", "IN_PROGRESS", "DISPATCHED", "DELIVERED", "CANCELLED"
         ],
         "giftStatuses": [
             "PLANNED", "IN_PREPARATION", "DISPATCHED", "IN_TRANSIT", "DELIVERED", "ISSUE_REPORTED", "CANCELLED"

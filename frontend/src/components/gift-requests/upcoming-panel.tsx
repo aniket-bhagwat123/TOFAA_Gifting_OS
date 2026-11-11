@@ -18,7 +18,8 @@ const when = (days: number) => (days === 0 ? "Today" : days === 1 ? "Tomorrow" :
 
 /** Birthdays and events coming up, each with a one-click way to start a gift request. */
 export function UpcomingPanel() {
-  const { tenantId } = useTenantId();
+  const { user, tenantId } = useTenantId();
+  const canCreate = user?.platformRole !== "SUPER_ADMIN";
   const router = useRouter();
   const [items, setItems] = useState<Upcoming[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +68,7 @@ export function UpcomingPanel() {
             </div>
             {item.requestId
               ? <Link href={`/requests/${item.requestId}`} className="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200">Requested</Link>
-              : <Button size="sm" className="shrink-0" disabled={busy === key} onClick={() => void sendGift(item)}><Gift size={14} /> {busy === key ? "…" : "Send gift"}</Button>}
+              : !canCreate ? null : <Button size="sm" className="shrink-0" disabled={busy === key} onClick={() => void sendGift(item)}><Gift size={14} /> {busy === key ? "…" : "Send gift"}</Button>}
           </li>;
         })}
       </ul>

@@ -3,7 +3,8 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, HTTPException, Query, status
+from fastapi import APIRouter, Body, HTTPException, Query, Request, status
+from starlette.concurrency import run_in_threadpool
 
 from src.core import audit
 from src.core.schema import ApiResponse
@@ -70,6 +71,21 @@ def update_tenant(
         data=tenant_service.update(str(tenant_id), payload, actor),
         message="Tenant updated successfully.",
     )
+
+
+@router.put("/{tenant_id}/logo", response_model=ApiResponse[TenantRead])
+async def upload_tenant_logo(tenant_id: UUID, request: Request, actor: CurrentUserDep) -> ApiResponse[TenantRead]:
+    """Raw image body (Content-Type: image/png, image/jpeg or image/webp, up to 2 MB)."""
+    data = await run_in_threadpool(
+        lambda body, kind: tenant_service.set_logo(str(tenant_id), actor, content=body, content_type=kind),
+        await request.body(), request.headers.get("content-type", ""),
+    )
+    return ApiResponse(data=data, message="Logo saved.")
+
+
+@router.delete("/{tenant_id}/logo", response_model=ApiResponse[TenantRead])
+def remove_tenant_logo(tenant_id: UUID, actor: CurrentUserDep) -> ApiResponse[TenantRead]:
+    return ApiResponse(data=tenant_service.set_logo(str(tenant_id), actor, content=None), message="Logo removed.")
 
 
 @router.post("/{tenant_id}/activate", response_model=ApiResponse[TenantRead])

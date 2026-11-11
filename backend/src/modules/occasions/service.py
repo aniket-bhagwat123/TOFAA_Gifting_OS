@@ -83,7 +83,7 @@ class OccasionService:
                 .select("occasion_id")
                 .eq("tenant_id", tenant_id)
                 .in_("occasion_id", [row["id"] for row in rows])
-                .not_.in_("status", ["CANCELLED", "REJECTED"])
+                .neq("status", "CANCELLED")
                 .execute()
                 .data
                 or []

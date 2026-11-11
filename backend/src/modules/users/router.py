@@ -3,10 +3,12 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Header, Query, status
+from fastapi import APIRouter, Body, Header, Query, Request, status
+from starlette.concurrency import run_in_threadpool
 
 from src.core.schema import ApiResponse
 from src.modules.auth.dependencies import CurrentUserDep, TokenDep
+from src.modules.auth.schemas import UserProfileResponse
 from src.modules.auth.authorization import SuperAdminDep
 from src.core.security import decode_access_token
 from src.modules.tenants.service import tenant_service
@@ -83,6 +85,35 @@ def update_user(
         data=user_service.update_user(str(tenant_id), str(user_id), payload, actor),
         message="User updated successfully.",
     )
+
+
+@router.put("/me/avatar", response_model=ApiResponse[UserProfileResponse], tags=["Shared API"])
+async def upload_my_avatar(request: Request, actor: CurrentUserDep) -> ApiResponse[UserProfileResponse]:
+    """Raw image body (Content-Type: image/png, image/jpeg or image/webp, up to 2 MB)."""
+    data = await run_in_threadpool(
+        lambda body, kind: user_service.set_avatar(actor.id, content=body, content_type=kind),
+        await request.body(), request.headers.get("content-type", ""),
+    )
+    return ApiResponse(data=data, message="Photo saved.")
+
+
+@router.delete("/me/avatar", response_model=ApiResponse[UserProfileResponse], tags=["Shared API"])
+def remove_my_avatar(actor: CurrentUserDep) -> ApiResponse[UserProfileResponse]:
+    return ApiResponse(data=user_service.set_avatar(actor.id, content=None), message="Photo removed.")
+
+
+@router.put("/tenants/{tenant_id}/users/{user_id}/avatar", response_model=ApiResponse[UserRead])
+async def upload_member_avatar(tenant_id: UUID, user_id: UUID, request: Request, actor: CurrentUserDep) -> ApiResponse[UserRead]:
+    data = await run_in_threadpool(
+        lambda body, kind: user_service.set_member_avatar(str(tenant_id), str(user_id), actor, content=body, content_type=kind),
+        await request.body(), request.headers.get("content-type", ""),
+    )
+    return ApiResponse(data=data, message="Photo saved.")
+
+
+@router.delete("/tenants/{tenant_id}/users/{user_id}/avatar", response_model=ApiResponse[UserRead])
+def remove_member_avatar(tenant_id: UUID, user_id: UUID, actor: CurrentUserDep) -> ApiResponse[UserRead]:
+    return ApiResponse(data=user_service.set_member_avatar(str(tenant_id), str(user_id), actor, content=None), message="Photo removed.")
 
 
 @router.post(

@@ -3,6 +3,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -17,30 +18,87 @@ class GiftRequestStatus(StrEnum):
     IN_REVIEW = "IN_REVIEW"
     NEEDS_INFO = "NEEDS_INFO"
     PROPOSAL_READY = "PROPOSAL_READY"
-    APPROVED = "APPROVED"
-    REJECTED = "REJECTED"
+    CONFIRMED = "CONFIRMED"
+    IN_PROGRESS = "IN_PROGRESS"
+    DISPATCHED = "DISPATCHED"
+    DELIVERED = "DELIVERED"
     CANCELLED = "CANCELLED"
 
 
+class BudgetMode(StrEnum):
+    SPECIFIC = "SPECIFIC"
+    TOFAA_RECOMMEND = "TOFAA_RECOMMEND"
+
+
+class GiftStyle(StrEnum):
+    PREMIUM = "PREMIUM"
+    THOUGHTFUL = "THOUGHTFUL"
+    PERSONALISED = "PERSONALISED"
+
+
+# "How was this gift initiated?" options on step 1, and "Gift purpose" options on step 3.
+InitiatedVia = Literal[
+    "DIRECTOR_WHATSAPP", "DIRECTOR_EMAIL", "DIRECTOR_CALL", "DIRECTOR_MEETING", "SELF", "HR_REQUEST", "OTHER"
+]
+GiftPurpose = Literal[
+    "BUSINESS_RELATIONSHIP", "CLIENT_APPRECIATION", "EMPLOYEE_RECOGNITION", "FESTIVE_GREETING",
+    "PERSONAL_CELEBRATION", "THANK_YOU", "OTHER",
+]
+
+
+def _clean_interests(value: list[str] | None) -> list[str] | None:
+    if value is None:
+        return None
+    seen: dict[str, str] = {}
+    for item in value:
+        text = " ".join(item.split())
+        if text:
+            seen.setdefault(text.lower(), text)
+    return list(seen.values())
+
+
 class GiftRequestFields(BaseModel):
+    """Everything the 3-step form collects. A draft only needs a recipient; the rest is checked on submit."""
+
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 
-    title: str = Field(min_length=1, max_length=180)
+    title: str | None = Field(default=None, min_length=1, max_length=180)
     recipient_id: UUID
     event_id: UUID | None = None
     occasion_id: UUID | None = None
     requested_credits: int | None = Field(default=None, gt=0, le=1_000_000_000)
-    purpose: str = Field(min_length=1, max_length=2000)
+    purpose: str | None = Field(default=None, min_length=1, max_length=2000)
     gift_preferences: str | None = Field(default=None, max_length=2000)
     requested_budget: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    budget_mode: BudgetMode = BudgetMode.SPECIFIC
+    budget_min: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    budget_max: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     delivery_date: date | None = None
-    message: str | None = Field(default=None, max_length=1000)
-    special_instructions: str | None = Field(default=None, max_length=2000)
+    initiated_via: InitiatedVia | None = None
+    relationship: str | None = Field(default=None, min_length=1, max_length=60)
+    relationship_context: str | None = Field(default=None, max_length=200)
+    interests: list[Annotated[str, Field(max_length=40)]] | None = Field(default=None, max_length=12)
+    gift_style: GiftStyle | None = None
+    delivery_address: str | None = Field(default=None, min_length=1, max_length=600)
+    gift_purpose: GiftPurpose | None = None
+    message: str | None = Field(default=None, max_length=300)
+    special_instructions: str | None = Field(default=None, max_length=500)
 
-    @field_validator("title", "purpose", mode="before")
+    @field_validator("title", "purpose", "relationship", "delivery_address", mode="before")
     @classmethod
-    def strip_required_text(cls, value: str) -> str:
+    def strip_text(cls, value: str | None) -> str | None:
         return value.strip() if isinstance(value, str) else value
+
+    @field_validator("interests")
+    @classmethod
+    def tidy_interests(cls, value: list[str] | None) -> list[str] | None:
+        return _clean_interests(value)
+
+    @model_validator(mode="after")
+    def validate_budget(self) -> "GiftRequestFields":
+        if self.budget_min is not None and self.budget_max is not None and self.budget_min > self.budget_max:
+            raise ValueError("budget_min cannot be greater than budget_max")
+        return self
 
 
 class GiftRequestCreate(GiftRequestFields):
@@ -51,34 +109,21 @@ class GiftRequestCreate(GiftRequestFields):
         return self
 
 
-class GiftRequestUpdate(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
-
-    title: str | None = Field(default=None, min_length=1, max_length=180)
+class GiftRequestUpdate(GiftRequestFields):
     recipient_id: UUID | None = None
-    event_id: UUID | None = None
-    occasion_id: UUID | None = None
-    requested_credits: int | None = Field(default=None, gt=0, le=1_000_000_000)
-    purpose: str | None = Field(default=None, min_length=1, max_length=2000)
-    gift_preferences: str | None = Field(default=None, max_length=2000)
-    requested_budget: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
-    delivery_date: date | None = None
-    message: str | None = Field(default=None, max_length=1000)
-    special_instructions: str | None = Field(default=None, max_length=2000)
-
-    @field_validator("title", "purpose", mode="before")
-    @classmethod
-    def strip_required_text(cls, value: str | None) -> str | None:
-        return value.strip() if isinstance(value, str) else value
+    budget_mode: BudgetMode | None = None
 
     @model_validator(mode="after")
     def validate_patch(self) -> "GiftRequestUpdate":
         if not self.model_fields_set:
             raise ValueError("At least one gift request field must be provided")
-        for field in ("title", "recipient_id", "purpose"):
+        for field in ("recipient_id", "budget_mode"):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
-        if "event_id" in self.model_fields_set and "occasion_id" in self.model_fields_set and self.event_id is not None and self.occasion_id is not None:
+        if (
+            "event_id" in self.model_fields_set and "occasion_id" in self.model_fields_set
+            and self.event_id is not None and self.occasion_id is not None
+        ):
             raise ValueError("Only one of event_id or occasion_id may be set")
         return self
 
@@ -89,12 +134,18 @@ class GiftProposalOption(BaseModel):
     name: str = Field(min_length=1, max_length=180)
     description: str | None = Field(default=None, max_length=1000)
     price: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
-    image_url: str | None = Field(default=None, max_length=1000)
+    image_url: str | None = Field(default=None, max_length=1000, pattern=r"^https?://")
 
     @field_validator("name", mode="before")
     @classmethod
     def strip_name(cls, value: str) -> str:
         return value.strip() if isinstance(value, str) else value
+
+
+class ProposalImageRead(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    url: str
 
 
 class GiftProposal(BaseModel):
@@ -154,10 +205,26 @@ class SendGiftsResult(BaseModel):
     total_credits: int
 
 
+class ReferenceFileRead(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="ignore")
+
+    file_name: str
+    content_type: str
+    size_bytes: int
+
+
+class ReferenceFileLink(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    url: str
+    expires_in_seconds: int
+
+
 class GiftRequestRead(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     id: str
+    request_code: str | None = None
     tenant_id: str
     recipient_id: str
     event_id: str | None = None
@@ -168,18 +235,34 @@ class GiftRequestRead(BaseModel):
     gift_preferences: str | None = None
     requested_budget: Decimal | None = None
     requested_credits: int | None = None
+    budget_mode: BudgetMode = BudgetMode.SPECIFIC
+    budget_min: Decimal | None = None
+    budget_max: Decimal | None = None
     delivery_date: date | None = None
+    initiated_via: str | None = None
+    relationship: str | None = None
+    relationship_context: str | None = None
+    interests: list[str] = Field(default_factory=list)
+    gift_style: GiftStyle | None = None
+    delivery_address: str | None = None
+    gift_purpose: str | None = None
     message: str | None = None
     special_instructions: str | None = None
+    reference_file: ReferenceFileRead | None = None
     status: GiftRequestStatus
     proposal: GiftProposal | None = None
     status_note: str | None = None
     selected_option_index: int | None = None
     recipient_name: str | None = None
+    recipient_mobile: str | None = None
+    recipient_avatar_url: str | None = None
     occasion_name: str | None = None
+    occasion_date: date | None = None
     event_name: str | None = None
     event_date: date | None = None
     created_by_name: str | None = None
+    created_by_role: str | None = None
+    created_by_avatar_url: str | None = None
     created_at: datetime | str
     updated_at: datetime | str
 

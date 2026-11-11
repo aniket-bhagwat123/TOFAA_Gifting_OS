@@ -52,6 +52,7 @@ class TenantRead(BaseModel):
     legal_name: str | None = None
     gstin: str | None = None
     email_domain: str | None = None
+    logo_url: str | None = None
     status: TenantStatus
     created_at: str
     updated_at: str

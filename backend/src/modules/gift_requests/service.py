@@ -1,13 +1,16 @@
 """Tenant-scoped gift request use cases and workflow authorization."""
 
 import logging
+import re
 from datetime import date, timedelta
 from typing import Any
+from uuid import uuid4
 
 from fastapi import HTTPException
 from postgrest.exceptions import APIError
 from supabase import Client
 
+from src.core import images
 from src.core.concurrency import run_parallel
 from src.core.pagination import PaginationMeta, next_page_cursor
 from src.core.supabase import get_supabase_admin_client
@@ -22,6 +25,8 @@ from src.modules.gift_requests.schemas import (
     GiftRequestStatus,
     GiftRequestSummary,
     GiftRequestUpdate,
+    ProposalImageRead,
+    ReferenceFileLink,
     OccasionActivity,
     OccasionActivityItem,
     SendEventGiftRequest,
@@ -33,6 +38,32 @@ from src.modules.tenants.service import tenant_service
 
 logger = logging.getLogger(__name__)
 
+MINOR_PER_CREDIT = 100  # 1 credit = 1 rupee = 100 paise
+
+
+def credits_for(rupees: Any) -> int:
+    """Credits needed for an amount in rupees: 1 credit per rupee, rounded up to a whole credit."""
+    return max(-(-int(round(float(rupees) * 100)) // MINOR_PER_CREDIT), 1)
+
+
+REFERENCE_BUCKET = "gift-request-references"
+REFERENCE_MAX_BYTES = 5 * 1024 * 1024
+REFERENCE_URL_SECONDS = 300
+REFERENCE_TYPES = {"image/png": "png", "image/jpeg": "jpg", "application/pdf": "pdf"}
+EDITABLE_STATUSES = ("DRAFT", "NEEDS_INFO")
+# Where a request is considered "still open" (not finished or cancelled).
+OPEN_STATUSES = ["SUBMITTED", "IN_REVIEW", "NEEDS_INFO", "PROPOSAL_READY"]
+FULFILMENT_STATUSES = ["CONFIRMED", "IN_PROGRESS", "DISPATCHED"]
+STAFF_ACTIONS = {"start_review", "request_info", "publish_proposal", "reject", "start_fulfilment", "dispatch", "deliver"}
+SUBMIT_LABELS = {
+    "recipient_id": "who the gift is for",
+    "occasion": "an occasion or event",
+    "delivery_date": "the required delivery date",
+    "budget": "a gift budget (or let TOFAA recommend one)",
+    "initiated_via": "how this gift was initiated",
+    "relationship": "the relationship with the recipient",
+}
+
 
 class GiftRequestService:
     def __init__(self, database: Client | None = None) -> None:
@@ -41,15 +72,17 @@ class GiftRequestService:
     def create(
         self, tenant_id: str, payload: GiftRequestCreate, actor: UserProfileResponse
     ) -> GiftRequestRead:
-        require_permission(actor, Permission.GIFT_REQUEST_CREATE)
+        self._require_can_request(actor)
         self._require_tenant_access(tenant_id, actor)
         values = payload.model_dump(mode="json")
-        run_parallel(  # four independent checks: one wait instead of four
+        self._check_delivery_date(values.get("delivery_date"))
+        _, recipient_name, _, _ = run_parallel(  # independent checks: one wait instead of four
             lambda: self._require_active_tenant(tenant_id),
             lambda: self._require_recipient(tenant_id, values["recipient_id"]),
             lambda: self._require_event(tenant_id, values["event_id"], values["recipient_id"]),
             lambda: self._require_occasion(tenant_id, values["occasion_id"]),
         )
+        self._normalise_values(values, recipient_name=recipient_name)
         values.update({"tenant_id": tenant_id, "created_by_user_id": actor.id, "status": "DRAFT"})
         try:
             result = self.database.table("gift_requests").insert(values).select("*").execute()
@@ -68,6 +101,36 @@ class GiftRequestService:
             raise HTTPException(status_code=409, detail="Gift request could not be created.")
         return self._enrich([result.data[0]])[0]
 
+    @staticmethod
+    def _check_delivery_date(value: str | None) -> None:
+        if value and date.fromisoformat(value) < date.today():
+            raise HTTPException(status_code=422, detail="The delivery date cannot be in the past.")
+
+    @staticmethod
+    def _normalise_values(values: dict[str, Any], *, recipient_name: str | None = None, current: dict[str, Any] | None = None) -> None:
+        """Fill what the form leaves out: title, purpose and the single budget figure the credit flow uses."""
+        current = current or {}
+        if values.get("interests", "") is None:
+            values.pop("interests")
+        if values.get("budget_mode", "") is None:
+            values.pop("budget_mode")
+        mode = values.get("budget_mode", current.get("budget_mode", "SPECIFIC"))
+        if mode == "TOFAA_RECOMMEND":
+            values.update({"budget_min": None, "budget_max": None, "requested_budget": None, "requested_credits": None})
+        elif "budget_max" in values or "budget_min" in values:
+            high = values.get("budget_max", current.get("budget_max"))
+            low = values.get("budget_min", current.get("budget_min"))
+            if high is None and low is not None:
+                values["budget_max"] = high = low
+            if "requested_budget" not in values:
+                values["requested_budget"] = high
+            if values.get("requested_budget") is not None:
+                values["requested_credits"] = credits_for(values["requested_budget"])
+        if "title" in values and not values["title"] or ("title" not in values and not current.get("title")):
+            values["title"] = f"Gift for {recipient_name}" if recipient_name else "Gift request"
+        if "purpose" in values and not values["purpose"] or ("purpose" not in values and not current.get("purpose")):
+            values["purpose"] = (values.get("gift_purpose") or current.get("gift_purpose") or "Gift request").replace("_", " ").capitalize()
+
     def list_for_tenant(
         self,
         tenant_id: str,
@@ -77,11 +140,20 @@ class GiftRequestService:
         limit: int,
         status_filter: GiftRequestStatus | None,
         search: str | None = None,
+        recipient_id: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
     ) -> GiftRequestPage:
         self._require_tenant_access(tenant_id, actor)
         query = self.database.table("gift_requests").select("*", count="exact").eq("tenant_id", tenant_id)
         if status_filter:
             query = query.eq("status", status_filter.value)
+        if recipient_id:
+            query = query.eq("recipient_id", recipient_id)
+        if date_from:
+            query = query.gte("created_at", date_from.isoformat())
+        if date_to:
+            query = query.lt("created_at", (date_to + timedelta(days=1)).isoformat())
         query = self._apply_search(query, tenant_id, search)
         return self._page(query, page, limit)
 
@@ -101,7 +173,7 @@ class GiftRequestService:
         actor: UserProfileResponse,
     ) -> SendGiftsResult:
         """Set each chosen recipient's budget and send a gift request to TOFAA for each, in one step."""
-        require_permission(actor, Permission.GIFT_REQUEST_CREATE)
+        self._require_can_request(actor)
         require_permission(actor, Permission.GIFT_SPEND_MANAGE)
         self._require_tenant_access(tenant_id, actor)
         self._require_active_tenant(tenant_id)
@@ -135,11 +207,8 @@ class GiftRequestService:
         if not recipient_ids:
             raise HTTPException(status_code=422, detail="Pick at least one group or person.")
 
-        unit = self._unit_price_minor()
-        if not unit:
-            raise HTTPException(status_code=503, detail="Credit pricing is not configured.")
         rupees = payload.budget_per_recipient
-        credits = max(-(-int(round(float(rupees) * 100)) // unit), 1)
+        credits = credits_for(rupees)
 
         result = self._rpc("send_gifts", {
             "p_tenant_id": tenant_id,
@@ -172,7 +241,7 @@ class GiftRequestService:
         requests, delivered_rows = run_parallel(
             lambda: (
                 db.table("gift_requests").select("*").eq("tenant_id", tenant_id)
-                .in_("status", ["SUBMITTED", "IN_REVIEW", "NEEDS_INFO", "PROPOSAL_READY", "APPROVED"])
+                .in_("status", [*OPEN_STATUSES, "CONFIRMED", "IN_PROGRESS", "DISPATCHED"])
                 .or_("occasion_id.not.is.null,event_id.not.is.null")
                 .order("updated_at", desc=True).limit(100).execute().data or []
             ),
@@ -195,7 +264,7 @@ class GiftRequestService:
                 status=request.status.value,
                 happened_at=request.updated_at,
             )
-            if request.status == GiftRequestStatus.APPROVED:
+            if request.status.value in FULFILMENT_STATUSES:
                 if request.id not in delivered_request_ids:
                     approved.append(item)
             else:
@@ -249,7 +318,7 @@ class GiftRequestService:
                 .select("id,event_id,status")
                 .eq("tenant_id", tenant_id)
                 .in_("event_id", event_ids)
-                .not_.in_("status", ["CANCELLED", "REJECTED"])
+                .neq("status", "CANCELLED")
                 .execute()
                 .data
                 or []
@@ -370,12 +439,14 @@ class GiftRequestService:
         require_permission(actor, Permission.GIFT_REQUEST_UPDATE)
         self._require_tenant_access(tenant_id, actor)
         values = payload.model_dump(mode="json", exclude_unset=True)
-        current, _ = run_parallel(
+        current, recipient_name = run_parallel(
             lambda: self._get_row(tenant_id, request_id),
             lambda: self._require_recipient(tenant_id, values["recipient_id"]) if "recipient_id" in values else None,
         )
-        if current["status"] not in (GiftRequestStatus.DRAFT.value, GiftRequestStatus.NEEDS_INFO.value):
+        if current["status"] not in EDITABLE_STATUSES:
             raise HTTPException(status_code=409, detail="Only draft or clarification requests can be edited.")
+        self._check_delivery_date(values.get("delivery_date"))
+        self._normalise_values(values, recipient_name=recipient_name, current=current)
         event_id = values.get("event_id", current["event_id"])
         occasion_id = values.get("occasion_id", current.get("occasion_id"))
         if event_id is not None and occasion_id is not None:
@@ -389,7 +460,7 @@ class GiftRequestService:
             .update(values)
             .eq("tenant_id", tenant_id)
             .eq("id", request_id)
-            .in_("status", ["DRAFT", "NEEDS_INFO"])
+            .in_("status", list(EDITABLE_STATUSES))
             .select("*")
             .execute()
         )
@@ -416,6 +487,8 @@ class GiftRequestService:
             require_permission(actor, Permission.GIFT_REQUEST_UPDATE)
         else:
             require_permission(actor, Permission.GIFT_REQUEST_REVIEW)
+        if action == "submit":
+            self._require_complete(self._get_row(tenant_id, request_id))
         previous = self._apply_selected_option(tenant_id, request_id, selected_option_index) if action == "approve" else None
         try:
             return self._transition_rpc(tenant_id, request_id, action, actor, note=note)
@@ -423,6 +496,30 @@ class GiftRequestService:
             if previous:
                 self._restore_option(tenant_id, request_id, previous)
             raise
+
+    @staticmethod
+    def _require_complete(row: dict[str, Any]) -> None:
+        """A request can only go to TOFAA once the required form fields are filled in."""
+        missing = []
+        if not row.get("recipient_id"):
+            missing.append("recipient_id")
+        if not (row.get("occasion_id") or row.get("event_id")):
+            missing.append("occasion")
+        if not row.get("delivery_date"):
+            missing.append("delivery_date")
+        elif date.fromisoformat(str(row["delivery_date"])) < date.today():
+            raise HTTPException(status_code=422, detail="The delivery date is in the past. Pick a new date before submitting.")
+        if row.get("budget_mode", "SPECIFIC") == "SPECIFIC" and not (row.get("budget_max") or row.get("requested_budget")):
+            missing.append("budget")
+        if not row.get("initiated_via"):
+            missing.append("initiated_via")
+        if not row.get("relationship"):
+            missing.append("relationship")
+        if missing:
+            raise HTTPException(
+                status_code=422,
+                detail="Please add " + ", ".join(SUBMIT_LABELS[item] for item in missing) + " before submitting.",
+            )
 
     def staff_transition(
         self,
@@ -469,6 +566,88 @@ class GiftRequestService:
             )
         return self._enrich([row])[0]
 
+    def upload_reference(
+        self, tenant_id: str, request_id: str, actor: UserProfileResponse,
+        *, content: bytes, content_type: str, file_name: str,
+    ) -> GiftRequestRead:
+        require_permission(actor, Permission.GIFT_REQUEST_UPDATE)
+        self._require_tenant_access(tenant_id, actor)
+        row = self._get_row(tenant_id, request_id)
+        if row["status"] not in EDITABLE_STATUSES:
+            raise HTTPException(status_code=409, detail="A reference can only be attached to a draft or clarification request.")
+        content_type = (content_type or "").split(";")[0].strip().lower()
+        if content_type not in REFERENCE_TYPES:
+            raise HTTPException(status_code=415, detail="Attach a JPG, PNG or PDF file.")
+        if not content:
+            raise HTTPException(status_code=422, detail="The file is empty.")
+        if len(content) > REFERENCE_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="The file is too large. Attach one under 5 MB.")
+        safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", file_name or "reference")[:80] or "reference"
+        path = f"{tenant_id}/{request_id}/{uuid4().hex}.{REFERENCE_TYPES[content_type]}"
+        storage = self.database.storage.from_(REFERENCE_BUCKET)
+        try:
+            storage.upload(path, content, {"content-type": content_type})
+        except Exception as exc:  # the storage client raises its own error types
+            logger.exception("Could not store gift request reference")
+            raise HTTPException(status_code=503, detail="The file could not be saved. Please try again.") from exc
+        reference = {"path": path, "fileName": safe_name, "contentType": content_type, "sizeBytes": len(content)}
+        updated = self.database.table("gift_requests").update({"reference_file": reference}).eq("tenant_id", tenant_id).eq("id", request_id).in_("status", list(EDITABLE_STATUSES)).select("*").execute().data
+        if not updated:
+            self._remove_reference_object(path)
+            raise HTTPException(status_code=409, detail="Gift request changed state and cannot be edited.")
+        old = (row.get("reference_file") or {}).get("path")
+        if old:
+            self._remove_reference_object(old)
+        return self._enrich([updated[0]])[0]
+
+    def remove_reference(self, tenant_id: str, request_id: str, actor: UserProfileResponse) -> GiftRequestRead:
+        require_permission(actor, Permission.GIFT_REQUEST_UPDATE)
+        self._require_tenant_access(tenant_id, actor)
+        row = self._get_row(tenant_id, request_id)
+        if row["status"] not in EDITABLE_STATUSES:
+            raise HTTPException(status_code=409, detail="The reference can only be removed from a draft or clarification request.")
+        updated = self.database.table("gift_requests").update({"reference_file": None}).eq("tenant_id", tenant_id).eq("id", request_id).select("*").execute().data
+        old = (row.get("reference_file") or {}).get("path")
+        if old:
+            self._remove_reference_object(old)
+        return self._enrich([updated[0] if updated else row])[0]
+
+    def reference_link(self, tenant_id: str, request_id: str, actor: UserProfileResponse) -> ReferenceFileLink:
+        self._require_tenant_access(tenant_id, actor)
+        path = (self._get_row(tenant_id, request_id).get("reference_file") or {}).get("path")
+        if not path:
+            raise HTTPException(status_code=404, detail="No reference file was attached.")
+        try:
+            signed = self.database.storage.from_(REFERENCE_BUCKET).create_signed_url(path, REFERENCE_URL_SECONDS)
+        except Exception as exc:
+            logger.exception("Could not sign gift request reference link")
+            raise HTTPException(status_code=503, detail="The file could not be opened right now.") from exc
+        url = signed.get("signedURL") or signed.get("signedUrl")
+        if not url:
+            raise HTTPException(status_code=503, detail="The file could not be opened right now.")
+        return ReferenceFileLink(url=url, expires_in_seconds=REFERENCE_URL_SECONDS)
+
+    def _remove_reference_object(self, path: str) -> None:
+        try:
+            self.database.storage.from_(REFERENCE_BUCKET).remove([path])
+        except Exception:  # an orphaned file is harmless; never fail the request over it
+            logger.warning("Could not delete gift request reference %s", path)
+
+    def upload_proposal_image(
+        self, request_id: str, actor: UserProfileResponse, *, content: bytes, content_type: str
+    ) -> ProposalImageRead:
+        """TOFAA staff attach a photo to a proposal option; the URL goes into the option's imageUrl."""
+        self._require_staff(actor)
+        tenant_id = self._request_tenant_id(request_id)
+        tenant_service.require_context(tenant_id, actor, write=True)
+        status_now = self._get_row(tenant_id, request_id)["status"]
+        if status_now not in ("IN_REVIEW", "PROPOSAL_READY"):
+            raise HTTPException(status_code=409, detail="Photos can only be added while the proposal is being prepared.")
+        url = images.store_image(
+            self.database, f"proposals/{tenant_id}/{request_id}", content, content_type, max_bytes=images.PHOTO_MAX_BYTES
+        )
+        return ProposalImageRead(url=url)
+
     def _page(self, query: Any, page: int, limit: int) -> GiftRequestPage:
         result = (
             query.order("created_at", desc=True)
@@ -503,10 +682,10 @@ class GiftRequestService:
             raise HTTPException(status_code=404, detail="Gift request not found.")
         return result.data[0]["tenant_id"]
 
-    def _require_recipient(self, tenant_id: str, recipient_id: str) -> None:
+    def _require_recipient(self, tenant_id: str, recipient_id: str) -> str | None:
         result = (
             self.database.table("recipients")
-            .select("id")
+            .select("id,name")
             .eq("tenant_id", tenant_id)
             .eq("id", recipient_id)
             .is_("deleted_at", "null")
@@ -515,6 +694,7 @@ class GiftRequestService:
         )
         if not result.data:
             raise HTTPException(status_code=404, detail="Recipient not found in this tenant.")
+        return result.data[0].get("name")
 
     def _require_event(
         self, tenant_id: str, event_id: str | None, recipient_id: str
@@ -572,7 +752,10 @@ class GiftRequestService:
             .data
             or []
         )
-        clauses = [f"title.ilike.%{term}%"]
+        clauses = [f"title.ilike.%{term}%", f"request_code.ilike.%{term.lstrip('#')}%"]
+        number = re.fullmatch(r"#?(?:tg-?)?(\d{1,9})", term, re.IGNORECASE)  # "TG-0008", "#8" or "8" find request 8
+        if number:
+            clauses.append(f"request_number.eq.{int(number.group(1))}")
         if recipients:
             clauses.append(f"recipient_id.in.({','.join(row['id'] for row in recipients)})")
         return query.or_(",".join(clauses))
@@ -581,7 +764,7 @@ class GiftRequestService:
         ids = list({item for item in ids if item})
         if not ids:
             return {}
-        rows = self.database.table("profiles").select("id,full_name,role").in_("id", ids).execute().data or []
+        rows = self.database.table("profiles").select("id,full_name,role,avatar_url").in_("id", ids).execute().data or []
         return {row["id"]: row for row in rows}
 
     def _enrich(self, rows: list[dict[str, Any]]) -> list[GiftRequestRead]:
@@ -592,12 +775,12 @@ class GiftRequestService:
         event_ids = list({row["event_id"] for row in rows if row.get("event_id")})
         db = self.database
         recipient_rows, occasion_rows, event_rows, creators = run_parallel(
-            lambda: db.table("recipients").select("id,name").in_("id", list({row["recipient_id"] for row in rows})).execute().data or [],
+            lambda: db.table("recipients").select("id,name,mobile_number,avatar_url").in_("id", list({row["recipient_id"] for row in rows})).execute().data or [],
             lambda: db.table("occasions").select("id,occasion_name,occasion_date").in_("id", occasion_ids).execute().data or [] if occasion_ids else [],
             lambda: db.table("events").select("id,event_name,event_date").in_("id", event_ids).execute().data or [] if event_ids else [],
             lambda: self._profiles([row["created_by_user_id"] for row in rows]),
         )
-        recipients = {row["id"]: row.get("name") for row in recipient_rows}
+        recipients = {row["id"]: row for row in recipient_rows}
         occasions = {row["id"]: row for row in occasion_rows}
         events = {row["id"]: row for row in event_rows}
         items = []
@@ -606,18 +789,19 @@ class GiftRequestService:
             items.append(
                 GiftRequestRead.model_validate({
                     **row,
-                    "recipient_name": recipients.get(row["recipient_id"]),
+                    "recipient_name": recipients.get(row["recipient_id"], {}).get("name"),
+                    "recipient_mobile": recipients.get(row["recipient_id"], {}).get("mobile_number"),
+                    "recipient_avatar_url": recipients.get(row["recipient_id"], {}).get("avatar_url"),
                     "occasion_name": occasions.get(row.get("occasion_id"), {}).get("occasion_name"),
+                    "occasion_date": occasions.get(row.get("occasion_id"), {}).get("occasion_date"),
                     "event_name": event.get("event_name"),
                     "event_date": event.get("event_date"),
                     "created_by_name": creators.get(row["created_by_user_id"], {}).get("full_name"),
+                    "created_by_role": creators.get(row["created_by_user_id"], {}).get("role"),
+                    "created_by_avatar_url": creators.get(row["created_by_user_id"], {}).get("avatar_url"),
                 })
             )
         return items
-
-    def _unit_price_minor(self) -> int | None:
-        result = self.database.table("credit_pricing").select("minor_units_per_credit").eq("id", 1).limit(1).execute()
-        return result.data[0]["minor_units_per_credit"] if result.data else None
 
     def _apply_selected_option(self, tenant_id: str, request_id: str, index: int | None) -> dict[str, Any] | None:
         """Record the chosen option and set the credits to spend from its price (one recipient)."""
@@ -632,11 +816,9 @@ class GiftRequestService:
         if index >= len(options):
             raise HTTPException(status_code=422, detail="That option does not exist.")
         values: dict[str, Any] = {"selected_option_index": index}
-        unit = self._unit_price_minor()
         price = options[index].get("price")
-        if unit and price is not None:
-            minor = int(round(float(price) * 100))
-            values["requested_credits"] = max(-(-minor // unit), 1)
+        if price is not None:
+            values["requested_credits"] = credits_for(price)
             values["requested_budget"] = float(price)
         previous = {key: row.get(key) for key in values}
         self.database.table("gift_requests").update(values).eq("tenant_id", tenant_id).eq("id", request_id).execute()
@@ -649,6 +831,13 @@ class GiftRequestService:
     def _require_tenant_access(tenant_id: str, actor: UserProfileResponse) -> None:
         require_permission(actor, Permission.GIFT_REQUEST_READ)
         tenant_service.require_access(tenant_id, actor)
+
+    @staticmethod
+    def _require_can_request(actor: UserProfileResponse) -> None:
+        """Gift requests are raised by the client's team (or their KAM), never by a super admin."""
+        if actor.role == Role.SUPER_ADMIN:
+            raise HTTPException(status_code=403, detail="Super admins cannot create gift requests.")
+        require_permission(actor, Permission.GIFT_REQUEST_CREATE)
 
     @staticmethod
     def _require_staff(actor: UserProfileResponse) -> None:

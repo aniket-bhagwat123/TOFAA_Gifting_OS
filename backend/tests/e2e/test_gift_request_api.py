@@ -73,7 +73,7 @@ async def test_gift_request_list_keeps_success_response_contract(
     monkeypatch.setattr(
         gift_request_service,
         "list_for_tenant",
-        lambda tenant, actor, *, page, limit, status_filter: GiftRequestPage(
+        lambda tenant, actor, *, page, limit, status_filter, **_filters: GiftRequestPage(
             items=[gift_request],
             pagination={"page": page, "limit": limit, "total_records": 1},
         ),

@@ -22,7 +22,7 @@ _RANK = {
     PlanningStatus.DELIVERED: 5,
 }
 _SUBMITTED = {"SUBMITTED", "IN_REVIEW", "NEEDS_INFO"}
-_IGNORED = {"CANCELLED", "REJECTED"}
+_IGNORED = {"CANCELLED"}
 
 
 def _request_stage(request_status: str, gift_statuses: list[str]) -> PlanningStatus | None:
@@ -32,7 +32,7 @@ def _request_stage(request_status: str, gift_statuses: list[str]) -> PlanningSta
         return PlanningStatus.REQUEST_SUBMITTED
     if request_status == "PROPOSAL_READY":
         return PlanningStatus.AWAITING_APPROVAL
-    if request_status == "APPROVED":
+    if request_status in ("CONFIRMED", "IN_PROGRESS", "DISPATCHED", "DELIVERED"):
         if gift_statuses and all(status == "DELIVERED" for status in gift_statuses):
             return PlanningStatus.DELIVERED
         return PlanningStatus.IN_PROGRESS

@@ -31,6 +31,7 @@ export function toAuthUser(user: AuthMeResponse) {
     id: user.id,
     email: user.email,
     name: user.full_name || user.email,
+    avatarUrl: typeof user.avatar_url === "string" && user.avatar_url ? user.avatar_url : null,
     platformRole: user.role === "KAM" ? "TOFAA_TEAM" as const : user.role,
     tenant: user.tenant_id ? { id: user.tenant_id, name: "" } : undefined,
     permissions: [],

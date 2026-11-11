@@ -10,6 +10,7 @@ from uuid import uuid4
 from fastapi import HTTPException, status
 from supabase import Client
 
+from src.core import images
 from src.core.config import settings
 from src.core.pagination import PaginationMeta, next_page_cursor
 from src.core.supabase import get_supabase_admin_client
@@ -273,6 +274,29 @@ class UserService:
             raise HTTPException(status_code=404, detail="User not found.")
         return self.get_user(tenant_id, user_id, actor)
 
+    def set_avatar(self, user_id: str, *, content: bytes | None, content_type: str = "") -> UserProfileResponse:
+        """Save (or, with no content, remove) a user's profile picture. Callers check who may do this."""
+        rows = self.database.table("profiles").select("*").eq("id", user_id).limit(1).execute().data
+        if not rows:
+            raise HTTPException(status_code=404, detail="User not found.")
+        url = images.store_image(self.database, f"users/{user_id}", content, content_type) if content is not None else None
+        result = self.database.table("profiles").update({"avatar_url": url}).eq("id", user_id).execute()
+        if not result.data:
+            images.remove_image(self.database, url)
+            raise HTTPException(status_code=404, detail="User not found.")
+        images.remove_image(self.database, rows[0].get("avatar_url"))
+        return UserProfileResponse.model_validate(result.data[0])
+
+    def set_member_avatar(
+        self, tenant_id: str, user_id: str, actor: UserProfileResponse, *, content: bytes | None, content_type: str = ""
+    ) -> UserRead:
+        """A tenant admin changes a team member's picture (people change their own through /me/avatar)."""
+        require_permission(actor, Permission.USER_UPDATE)
+        tenant_service.require_access(tenant_id, actor)
+        self.get_user(tenant_id, user_id, actor)
+        self.set_avatar(user_id, content=content, content_type=content_type)
+        return self.get_user(tenant_id, user_id, actor)
+
     def _set_password(self, user_id: str, password: str) -> None:
         """Replace a user's password."""
         try:
@@ -447,7 +471,7 @@ class UserService:
             self.database.table("tenant_memberships")
             .select(
                 "tenant_id,user_id,status,created_at,updated_at,"
-                "profiles!inner(id,email,full_name,role,is_active,created_at,updated_at),"
+                "profiles!inner(id,email,full_name,avatar_url,role,is_active,created_at,updated_at),"
                 "tenants!inner(status)",
                 count=count,
             )
@@ -463,6 +487,7 @@ class UserService:
             tenant_id=row["tenant_id"],
             email=profile["email"],
             full_name=profile.get("full_name"),
+            avatar_url=profile.get("avatar_url"),
             role=profile["role"],
             is_active=profile["is_active"],
             tenant_status=row["tenants"]["status"],

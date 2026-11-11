@@ -20,7 +20,7 @@ type Action = { title: string; href: string; icon: LucideIcon };
 const statsForRole: Record<Role, string[]> = { CLIENT: [], TOFAA_TEAM: ["requests", "gifts", "events"], SUPER_ADMIN: ["clients", "requests", "gifts", "credits"] };
 
 const statMeta: Record<string, { label: string; icon: LucideIcon; tint: string }> = {
-  requests: { label: "Gifting Activity", icon: ClipboardList, tint: "bg-rose-500" },
+  requests: { label: "Gift requests", icon: ClipboardList, tint: "bg-rose-500" },
   gifts: { label: "Gifts", icon: Gift, tint: "bg-violet-500" },
   credits: { label: "Credit requests", icon: Wallet, tint: "bg-emerald-500" },
   clients: { label: "Clients", icon: Building2, tint: "bg-indigo-500" },
@@ -43,7 +43,7 @@ const stageMeta: Record<Stage, { label: string; chip: string; note: string; cta:
   IN_PROGRESS: { label: "Gift in Progress", chip: "bg-sky-50 text-sky-700", note: "On track for delivery", cta: "Track" }
 };
 const requestStage = (status: GiftStatus): Stage | null =>
-  status === "SUBMITTED" || status === "IN_REVIEW" || status === "NEEDS_INFO" ? "REQUEST_SUBMITTED" : status === "PROPOSAL_READY" ? "AWAITING_APPROVAL" : status === "APPROVED" ? "IN_PROGRESS" : null;
+  status === "SUBMITTED" || status === "IN_REVIEW" || status === "NEEDS_INFO" ? "REQUEST_SUBMITTED" : status === "PROPOSAL_READY" ? "AWAITING_APPROVAL" : status === "CONFIRMED" || status === "IN_PROGRESS" || status === "DISPATCHED" ? "IN_PROGRESS" : null;
 
 type Coming = { key: string; kind: "occasion" | "birthday" | "event"; title: string; subtitle: string; date: string; daysAway: number; stage: Stage; requestId?: string; planHref: string; attention: boolean; priority: "High Priority" | "High" | "Medium" };
 type Tab = "priority" | "month" | "next";
@@ -147,7 +147,7 @@ export default function DashboardPage() {
     return [...fromRequests, ...fromStaff].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 4);
   }, [requests, activity]);
 
-  const giftsThisMonth = (requests ?? []).filter((r) => r.status !== "DRAFT" && r.status !== "CANCELLED" && r.status !== "REJECTED" && monthOf(r.createdAt)).length;
+  const giftsThisMonth = (requests ?? []).filter((r) => r.status !== "DRAFT" && r.status !== "CANCELLED" && monthOf(r.createdAt)).length;
   const important = useMemo(() => (coming ?? []).filter((c) => c.stage !== "IN_PROGRESS").slice(0, 5), [coming]);
   const current = important[slide % Math.max(important.length, 1)];
   useEffect(() => {

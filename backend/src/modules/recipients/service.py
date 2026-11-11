@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import HTTPException
 from supabase import Client
 
+from src.core import images
 from src.core.pagination import PaginationMeta, next_page_cursor
 from src.core.supabase import get_supabase_admin_client
 from src.modules.auth.rbac import Permission, Role, require_permission
@@ -15,7 +16,7 @@ from src.modules.recipients.schemas import RecipientCreate, RecipientList, Recip
 
 
 RECIPIENT_RESPONSE_COLUMNS = (
-    "id,tenant_id,name,mobile_number,address,date_of_birth,anniversary_date,budget,remark"
+    "id,tenant_id,name,mobile_number,address,date_of_birth,anniversary_date,budget,remark,avatar_url"
 )
 class RecipientService:
     """Manage recipient records with tenant checks on every lookup."""
@@ -175,6 +176,34 @@ class RecipientService:
         if not result.data:
             raise HTTPException(status_code=404, detail="Recipient not found.")
         return result.data[0]
+
+    def set_avatar(
+        self, tenant_id: str, recipient_id: str, actor: UserProfileResponse, *, content: bytes, content_type: str
+    ) -> RecipientRead:
+        """Save a photo for this person (replacing the old one)."""
+        require_permission(actor, Permission.RECIPIENT_UPDATE)
+        old = self._get_scoped_recipient(tenant_id, recipient_id, actor).get("avatar_url")
+        url = images.store_image(self.database, f"recipients/{tenant_id}/{recipient_id}", content, content_type)
+        return self._write_avatar(tenant_id, recipient_id, actor, url, old)
+
+    def clear_avatar(self, tenant_id: str, recipient_id: str, actor: UserProfileResponse) -> RecipientRead:
+        require_permission(actor, Permission.RECIPIENT_UPDATE)
+        old = self._get_scoped_recipient(tenant_id, recipient_id, actor).get("avatar_url")
+        return self._write_avatar(tenant_id, recipient_id, actor, None, old)
+
+    def _write_avatar(self, tenant_id: str, recipient_id: str, actor: UserProfileResponse, url: str | None, old: str | None) -> RecipientRead:
+        result = (
+            self.database.table("recipients")
+            .update({"avatar_url": url, "updated_by_user_id": actor.id})
+            .eq("id", recipient_id).eq("tenant_id", tenant_id).is_("deleted_at", "null")
+            .select(RECIPIENT_RESPONSE_COLUMNS)
+            .execute()
+        )
+        if not result.data:
+            images.remove_image(self.database, url)
+            raise HTTPException(status_code=404, detail="Recipient not found.")
+        images.remove_image(self.database, old)
+        return RecipientRead.model_validate(result.data[0])
 
     def _require_tenant_access(self, tenant_id: str, actor: UserProfileResponse) -> None:
         require_permission(actor, Permission.RECIPIENT_READ)

@@ -18,6 +18,8 @@ import { Switch } from "@/components/ui/switch";
 import { RecipientMultiSelect } from "./recipient-multi-select";
 import { PasswordField } from "@/components/ui/password-field";
 import { RequiredMark } from "@/components/ui/required-mark";
+import { Avatar } from "@/components/ui/avatar";
+import { ImageUpload, deleteImage, sendImage } from "@/components/ui/image-upload";
 import { generatePassword, PASSWORD_MIN } from "@/lib/password";
 import { rowsOf, loadAllModuleRecords, formatTimestamp, labelOf, moneyColumns, dateColumns } from "@/features/modules/module-utils";
 import Link from "next/link";
@@ -259,6 +261,9 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
 
   const hasActions = canEdit || !!config.deletePath || !!config.actions;
   const actionsFor = (row: Record<string, unknown>): ModuleAction[] => { try { return user ? config.actions?.(row, user, selectedTenantId) ?? [] : []; } catch { return []; } };
+  /** Clients have a logo and team users a photo; everyone else shows no picture. */
+  const pictureOf = (row: Record<string, unknown>) => (moduleKey === "clients" || moduleKey === "team-users" ? { url: (row.logoUrl ?? row.avatarUrl) as string | undefined } : null);
+  const pictureEndpoint = (row: Record<string, unknown>) => (moduleKey === "clients" ? `/tenants/${row.id}/logo` : `/tenants/${selectedTenantId}/users/${row.id}/avatar`);
   const renderCell = (col: string, value: unknown): React.ReactNode => {
     if (col === "role") return value === "CLIENT" ? "Client" : titleCase(String(value ?? "—"));
     if (moduleKey === "recipient-groups" && col === "recipientIds" && Array.isArray(value)) {
@@ -301,7 +306,7 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
           <thead className="bg-slate-50/80 text-sm text-slate-600"><tr>{columns.map((col) => <th key={col} className="px-5 py-3.5 font-semibold">{labelOf(col)}</th>)}{hasActions && <th className="px-5 py-3.5 text-right font-semibold">Actions</th>}</tr></thead>
           <tbody className="divide-y divide-line/70">
             {loadingFirst ? Array.from({ length: 5 }).map((_, i) => <tr key={i}>{columns.map((col) => <td key={col} className="px-5 py-5"><div className="h-4 w-24 animate-pulse rounded bg-slate-100" /></td>)}</tr>)
-              : filteredRows.map((row, i) => <tr key={String(row.id || i)} className="hover:bg-slate-50/70">{columns.map((col, index) => <td key={col} className={`px-5 py-4 ${index === 0 ? "font-medium text-ink" : "text-slate-600"} ${col.toLowerCase().endsWith("name") ? "capitalize" : ""}`}>{renderCell(col, row[col])}</td>)}{hasActions && <td className="px-5 py-4"><div className="flex flex-wrap justify-end gap-2">{rowButtons(row)}</div></td>}</tr>)}
+              : filteredRows.map((row, i) => <tr key={String(row.id || i)} className="hover:bg-slate-50/70">{columns.map((col, index) => <td key={col} className={`px-5 py-4 ${index === 0 ? "font-medium text-ink" : "text-slate-600"} ${col.toLowerCase().endsWith("name") ? "capitalize" : ""}`}>{index === 0 && pictureOf(row) ? <span className="flex items-center gap-3"><Avatar name={String(row[col] ?? "")} src={pictureOf(row)?.url} shape={moduleKey === "clients" ? "square" : "circle"} className="h-9 w-9 text-xs" />{renderCell(col, row[col])}</span> : renderCell(col, row[col])}</td>)}{hasActions && <td className="px-5 py-4"><div className="flex flex-wrap justify-end gap-2">{rowButtons(row)}</div></td>}</tr>)}
           </tbody>
         </table></div>
         <ul className="divide-y divide-line/70 md:hidden">
@@ -318,6 +323,9 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
     </Card>
     <Sheet open={editor !== undefined} locked={saving} zIndex="z-[50]" labelledBy="module-form-title" className={modalWidthClasses[config.modalWidth ?? "md"]} onClose={() => { setEditor(undefined); setFieldErrors({}); setSelectedRecipientIds([]); }}>
         <h2 id="module-form-title" className="text-2xl font-semibold text-ink">{editor ? `Edit ${noun}` : `Add ${noun}`}</h2>
+        {editor && pictureOf(editor) && <div className="mt-4"><ImageUpload shape={moduleKey === "clients" ? "square" : "circle"} name={String(editor.name ?? editor.fullName ?? "")} src={(editor.logoUrl ?? editor.avatarUrl) as string | null | undefined} label={moduleKey === "clients" ? "Choose a logo" : "Choose a photo"}
+          onUpload={async (file) => { const saved = await sendImage<Record<string, unknown>>("put", pictureEndpoint(editor), file); setEditor({ ...editor, logoUrl: saved.logoUrl, avatarUrl: saved.avatarUrl }); load(); }}
+          onRemove={async () => { const saved = await deleteImage(pictureEndpoint(editor)) as Record<string, unknown>; setEditor({ ...editor, logoUrl: saved?.logoUrl ?? null, avatarUrl: saved?.avatarUrl ?? null }); load(); }} /></div>}
         <form noValidate onSubmit={saveRecord} className="mt-5 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             {(editor ? editableFields : config.createFields)?.map((field: ModuleField) => {
