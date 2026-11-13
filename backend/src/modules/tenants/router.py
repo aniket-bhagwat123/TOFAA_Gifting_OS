@@ -10,6 +10,7 @@ from src.core import audit
 from src.core.schema import ApiResponse
 from src.modules.auth.authorization import SuperAdminDep
 from src.modules.auth.dependencies import CurrentUserDep
+from src.modules.auth.rbac import Role
 from src.modules.tenants.models import TenantStatus
 from src.modules.tenants.schemas import TenantCreate, TenantList, TenantRead, TenantUpdate
 from src.modules.tenants.service import tenant_service
@@ -111,5 +112,5 @@ def tenant_activity(
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> audit.ActivityList:
-    """Changes TOFAA staff made for this tenant (who made them is not shown)."""
-    return audit.list_staff_changes(str(tenant_id), page=page, limit=limit)
+    """Everything changed in this tenant. TOFAA staff appear to clients only as "TOFAA", never by name."""
+    return audit.list_activity(str(tenant_id), actor.role != Role.CLIENT, page=page, limit=limit)

@@ -85,7 +85,7 @@ export default function DashboardPage() {
   const [requests, setRequests] = useState<GiftRequest[] | null>(null);
   const [occasions, setOccasions] = useState<UpcomingOccasion[] | null>(null);
   const [events, setEvents] = useState<UpcomingEvent[] | null>(null);
-  const [activity, setActivity] = useState<{ id: string; summary: string; changedAt: string }[]>([]);
+  const [activity, setActivity] = useState<{ id: string; summary: string; title?: string; description?: string; actorName?: string; changedAt: string }[]>([]);
   const [tab, setTab] = useState<Tab | null>(null);
   const [slide, setSlide] = useState(0);
 
@@ -108,7 +108,7 @@ export default function DashboardPage() {
       guard<UpcomingOccasion[]>(`${base}/occasions/upcoming`, { days: 60 }, []),
       guard<UpcomingEvent[]>(`${base}/gift-requests/upcoming`, { days: 60 }, []),
       guard<{ items?: GiftRequest[] }>(`${base}/gift-requests`, { page: 1, limit: 100 }, { items: [] }),
-      guard<{ items?: { id: string; summary: string; changedAt: string }[] }>(`${base}/activity`, { page: 1, limit: 5 }, { items: [] }),
+      guard<{ items?: { id: string; summary: string; title?: string; description?: string; actorName?: string; changedAt: string }[] }>(`${base}/activity`, { page: 1, limit: 5 }, { items: [] }),
     ]).then(([o, e, r, a]) => {
       if (cancelled) return;
       setOccasions(Array.isArray(o) ? o : []); setEvents(Array.isArray(e) ? e : []); setRequests(r?.items ?? []); setActivity(a?.items ?? []);
@@ -143,7 +143,7 @@ export default function DashboardPage() {
 
   const recent = useMemo<Feed[]>(() => {
     const fromRequests = (requests ?? []).map((r): Feed => ({ key: `r-${r.id}`, title: `Gift request ${STATUS_META[r.status]?.label.toLowerCase() ?? r.status.toLowerCase()}`, hint: r.title, at: r.updatedAt, href: `/requests/${r.id}`, icon: Gift, tint: "bg-rose-50 text-rose-500" }));
-    const fromStaff = activity.map((a): Feed => ({ key: `a-${a.id}`, title: "Updated by TOFAA", hint: a.summary, at: a.changedAt, href: "/activity", icon: Activity, tint: "bg-emerald-50 text-emerald-600" }));
+    const fromStaff = activity.map((a): Feed => ({ key: `a-${a.id}`, title: a.title ?? "Updated by TOFAA", hint: a.description ?? a.summary, at: a.changedAt, href: "/activity", icon: Activity, tint: "bg-emerald-50 text-emerald-600" }));
     return [...fromRequests, ...fromStaff].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 4);
   }, [requests, activity]);
 

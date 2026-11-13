@@ -26,7 +26,7 @@ export function RecipientMultiSelect({ options, selectedIds, loading, loadError,
   const visibleOptions = options.filter((recipient) => `${recipient.name ?? ""} ${recipient.mobileNumber ?? ""}`.toLowerCase().includes(search.toLowerCase()));
   const selectedNames = options.filter((recipient) => selectedIds.includes(String(recipient.id ?? ""))).map((recipient) => String(recipient.name ?? "Unnamed recipient"));
   return <div ref={rootRef} className="relative">
-    <button type="button" aria-labelledby={labelId} aria-expanded={open} onClick={() => setOpen((current) => !current)} className={`flex w-full items-center justify-between gap-3 rounded-xl border bg-white min-h-12 px-4 py-3 text-left text-base ${error ? "border-rose-400" : "border-line"}`}>
+    <button type="button" aria-labelledby={labelId} aria-expanded={open} onClick={() => setOpen((current) => !current)} className={`flex w-full items-center justify-between gap-3 rounded-[9px] border bg-white min-h-10 px-3 py-2 text-left text-sm ${error ? "border-rose-400" : "border-line"}`}>
       <span className={selectedNames.length && !loading ? "truncate text-ink" : "text-muted"}>{loading ? "Loading recipients…" : selectedNames.length ? `${selectedNames.length} selected${selectedNames.length <= 2 ? `: ${selectedNames.join(", ")}` : `: ${selectedNames.slice(0, 2).join(", ")}…`}` : "Select recipients"}</span>
       <ChevronDown size={16} className={`shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`} />
     </button>

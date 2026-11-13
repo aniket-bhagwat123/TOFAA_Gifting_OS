@@ -90,3 +90,27 @@ def test_without_ids_there_is_no_id_filter():
     database = Recorder()
     RecipientService(database=database).list_recipients("tenant-1", admin(), page=1, limit=10)
     assert not any(name == "in_" for name, _ in database.calls)
+
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_a_possible_duplicate_reaches_the_client_with_its_matches(e2e_client, tenant_id, monkeypatch):
+    from src.core.errors import ApiError
+
+    def refuse(*_args, **_kwargs):
+        raise ApiError(409, "This person may already be in your recipients.", {"duplicates": [{"id": A, "name": "Rohan Mehta", "reasons": ["SAME_MOBILE"]}]})
+
+    monkeypatch.setattr(recipient_service, "create_recipient", refuse)
+    response = await e2e_client.post(f"/api/v1/tenants/{tenant_id}/recipients", json={"name": "Rohan Mehta"})
+    assert response.status_code == 409
+    body = response.json()
+    assert body["message"] == "This person may already be in your recipients."
+    assert body["data"]["duplicates"][0]["reasons"] == ["SAME_MOBILE"]
+
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_the_duplicate_check_route_is_not_mistaken_for_a_recipient_id(e2e_client, tenant_id, monkeypatch):
+    monkeypatch.setattr(recipient_service, "find_duplicates", lambda *_a, **kw: [{"id": A, "name": kw["name"], "reasons": ["SAME_NAME"]}])
+    response = await e2e_client.get(f"/api/v1/tenants/{tenant_id}/recipients/duplicates?name=Rohan")
+    assert response.status_code == 200 and response.json()["data"][0]["name"] == "Rohan"

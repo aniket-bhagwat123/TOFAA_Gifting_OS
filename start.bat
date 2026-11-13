@@ -10,7 +10,7 @@ echo.
 
 :: 1. Start Backend with uv
 echo [1/2] Launching Backend Server (FastAPI + uv)...
-start "Tofaa Backend (FastAPI)" cmd /k "cd /d "%~dp0backend" && echo Starting FastAPI Backend on http://127.0.0.1:8000 ... && uv run python -m uvicorn src.main:app --reload --port 8000"
+start "Tofaa Backend (FastAPI)" cmd /k "cd /d "%~dp0backend" && echo Starting FastAPI Backend on http://127.0.0.1:8000 ... && uv run --python-preference only-system python -m uvicorn src.main:app --reload --port 8000"
 
 :: 2. Start Frontend with npm
 echo [2/2] Launching Frontend Server (Next.js)...

@@ -71,7 +71,7 @@ export function Sidebar({ mobileOpen = false, onClose = () => {} }: { mobileOpen
   }, [mobileOpen, onClose]);
 
   return <>
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-line/70 bg-white lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 flex-col border-r border-line/70 bg-white lg:flex">
       <div className="flex h-[76px] shrink-0 items-center px-6"><Brand /></div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2"><NavList /></div>
     </aside>

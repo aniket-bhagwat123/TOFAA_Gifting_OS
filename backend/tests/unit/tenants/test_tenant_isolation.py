@@ -430,6 +430,19 @@ async def test_a_staff_change_is_recorded_against_the_client(audit_rows, monkeyp
     assert len(audit_rows) == 1
     row = audit_rows[0]
     assert (row["tenant_id"], row["actor_role"], row["on_behalf"], row["resource"]) == (TENANT_A, "KAM", True, "recipients")
+    assert row["details"]["recipientId"] == "eeeeeeee-0000-4000-8000-000000000005"
+
+
+@pytest.mark.asyncio
+async def test_the_facts_of_a_change_are_saved_and_the_response_is_untouched(audit_rows, monkeypatch):
+    from src.modules.recipients.schemas import RecipientRead
+
+    saved = RecipientRead(id="eeeeeeee-0000-4000-8000-000000000005", tenant_id=TENANT_A, name="Rohan Mehta", mobile_number="+919999999999")
+    monkeypatch.setattr(recipient_service, "update_recipient", lambda *_args, **_kw: saved)
+    response = await request_as(actor("KAM"), "PATCH", RECIPIENT_PATH, json={"remark": "Likes tea"})
+    assert response.status_code == 200 and response.json()["data"]["name"] == "Rohan Mehta"
+    assert response.headers["content-length"] == str(len(response.content))
+    assert audit_rows[0]["details"]["name"] == "Rohan Mehta" and "mobileNumber" not in audit_rows[0]["details"]
 
 
 @pytest.mark.asyncio
@@ -455,20 +468,37 @@ async def test_failed_changes_and_reads_are_not_recorded(audit_rows, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_clients_see_staff_changes_but_never_who_made_them(database, monkeypatch):
+async def test_clients_see_their_tenants_activity_but_staff_only_as_tofaa(database, monkeypatch):
     rows = [
-        {"id": 1, "tenant_id": TENANT_A, "on_behalf": True, "resource": "gift-spend",
+        {"id": 1, "tenant_id": TENANT_A, "on_behalf": True, "resource": "gift-spend", "method": "PUT", "route": "/api/v1/tenants/{tenant_id}/gift-spend/default-budgets",
          "created_at": "2026-11-04T10:00:00Z", "actor_user_id": "secret-staff-id"},
-        {"id": 2, "tenant_id": TENANT_A, "on_behalf": False, "resource": "events",
+        {"id": 2, "tenant_id": TENANT_A, "on_behalf": False, "resource": "recipients", "method": "POST", "route": "/api/v1/tenants/{tenant_id}/recipients",
          "created_at": "2026-11-04T09:00:00Z", "actor_user_id": "the-client"},
-        {"id": 3, "tenant_id": TENANT_B, "on_behalf": True, "resource": "credits",
+        {"id": 3, "tenant_id": TENANT_B, "on_behalf": True, "resource": "credits", "method": "POST", "route": "/api/v1/admin/tenants/{tenant_id}/credits/adjustments",
          "created_at": "2026-11-04T08:00:00Z", "actor_user_id": "other-tenant-staff"},
     ]
-    monkeypatch.setattr("src.core.audit.get_supabase_admin_client", lambda: FakeDatabase({"audit_log": rows}))
+    profiles = [{"id": "the-client", "full_name": "Priya Sharma", "email": "priya@acme.com"}, {"id": "secret-staff-id", "full_name": "Secret Staffer", "email": "s@tofaa.in"}]
+    monkeypatch.setattr("src.core.audit.get_supabase_admin_client", lambda: FakeDatabase({"audit_log": rows, "profiles": profiles}))
     response = await request_as(actor("CLIENT", TENANT_A), "GET", f"/api/v1/tenants/{TENANT_A}/activity")
     assert response.status_code == 200
-    assert [item["summary"] for item in response.json()["items"]] == ["TOFAA made a change in gift spend"]
-    assert "secret-staff-id" not in response.text and "other-tenant" not in response.text
+    items = response.json()["items"]
+    assert [(i["title"], i["actorName"], i["actorKind"], i["category"]) for i in items] == [
+        ("Default budget updated", "TOFAA", "TOFAA", "budget"),
+        ("New recipient added", "Priya Sharma", "USER", "people"),
+    ]
+    assert items[1]["description"] == "A new person was added to your recipients."
+    assert "Secret" not in response.text and "secret-staff-id" not in response.text and "other-tenant" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_staff_see_who_made_each_change(database, monkeypatch):
+    rows = [{"id": 1, "tenant_id": TENANT_A, "on_behalf": True, "resource": "recipients", "method": "DELETE", "route": "/api/v1/tenants/{tenant_id}/recipients/{recipient_id}",
+             "created_at": "2026-11-04T10:00:00Z", "actor_user_id": "staff-1", "entity_id": "eeeeeeee-0000-4000-8000-000000000005"}]
+    fake = FakeDatabase({"audit_log": rows, "profiles": [{"id": "staff-1", "full_name": "Asha Rao", "email": "a@tofaa.in"}],
+                         "recipients": [{"id": "eeeeeeee-0000-4000-8000-000000000005", "name": "Rohan Mehta"}]})
+    monkeypatch.setattr("src.core.audit.get_supabase_admin_client", lambda: fake)
+    item = (await request_as(actor("KAM"), "GET", f"/api/v1/tenants/{TENANT_A}/activity")).json()["items"][0]
+    assert (item["actorName"], item["title"]) == ("Asha Rao", "Rohan Mehta removed from your recipients")
 
 
 def invite_service(monkeypatch, tenant_type, members=()):

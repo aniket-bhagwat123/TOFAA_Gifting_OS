@@ -18,5 +18,5 @@ export function StatusBadge({ value }: { value?: string | boolean | null }) {
   const dot = bad ? "bg-rose-500" : good ? "bg-emerald-500" : wait ? "bg-amber-500" : "bg-slate-400";
   const label = friendly[status] ?? status.charAt(0) + status.slice(1).toLowerCase().replaceAll("_", " ");
   // Colour is never the only signal: the dot + word both carry meaning.
-  return <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold", tone)}><span className={cn("h-1.5 w-1.5 rounded-full", dot)} />{label}</span>;
+  return <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold", tone)}><span className={cn("h-1.5 w-1.5 rounded-full", dot)} />{label}</span>;
 }

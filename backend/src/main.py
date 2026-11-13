@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 import logging
@@ -13,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
 from src.api.router import api_router
-from src.core import audit, telemetry
+from src.core import activity, audit, telemetry
 from src.core.config import settings
 from src.core.ttl_cache import lookups
 
@@ -38,6 +39,26 @@ app = FastAPI(
 )
 
 
+MAX_FACT_BODY_BYTES = 64 * 1024
+
+
+async def _read_facts(response: Response) -> tuple[Response, dict]:
+    """The few facts (names, amounts) a small JSON success response holds, for the activity feed.
+
+    The body is read once and an identical response is returned, so the client sees no difference.
+    """
+    length = response.headers.get("content-length", "")
+    if "application/json" not in response.headers.get("content-type", "") or not length.isdigit() or int(length) > MAX_FACT_BODY_BYTES:
+        return response, {}
+    body = b"".join([chunk async for chunk in response.body_iterator])  # type: ignore[attr-defined]
+    rebuilt = Response(content=body, status_code=response.status_code, media_type=response.media_type, background=getattr(response, "background", None))
+    rebuilt.raw_headers = list(response.raw_headers)
+    try:
+        return rebuilt, activity.pick_details(json.loads(body))
+    except ValueError:
+        return rebuilt, {}
+
+
 @app.middleware("http")
 async def request_pipeline(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     """One middleware for everything per-request: timing, audit trail, cache refresh, security headers."""
@@ -51,7 +72,11 @@ async def request_pipeline(request: Request, call_next: Callable[[Request], Awai
         if context:
             route = getattr(request.scope.get("route"), "path", "")
             # Fire and forget: the change already committed, and a slow audit insert must not delay the reply.
-            asyncio.get_running_loop().run_in_executor(None, audit.write, request.method, route, response.status_code, context)
+            response, facts = await _read_facts(response)
+            facts.update(audit.path_details(request.path_params))
+            asyncio.get_running_loop().run_in_executor(
+                None, audit.write, request.method, route, response.status_code, context, audit.entity_id_of(request.path_params), facts
+            )
     calls, db_ms, total_ms = telemetry.summarize(stats)
     response.headers["Server-Timing"] = f'db;desc="{calls} calls";dur={db_ms:.0f}, total;dur={total_ms:.0f}'
     if total_ms > 300 or calls > 6:
@@ -72,7 +97,7 @@ async def api_http_error(request: Request, exc: StarletteHTTPException) -> JSONR
     message = exc.detail if isinstance(exc.detail, str) else "Request could not be completed."
     return JSONResponse(
         status_code=exc.status_code,
-        content={"data": {}, "message": message},
+        content={"data": jsonable_encoder(getattr(exc, "data", None) or {}), "message": message},
         headers=exc.headers,
     )
 

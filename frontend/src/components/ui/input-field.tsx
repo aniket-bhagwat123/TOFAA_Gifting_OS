@@ -17,7 +17,7 @@ export function InputField({ label, registration, error, hint, className, id, re
       <label htmlFor={fieldId} className="flex items-baseline justify-between text-sm font-medium text-ink">
         <span>{label}{required && <RequiredMark />}</span>
       </label>
-      <input id={fieldId} aria-required={required || undefined} aria-invalid={error ? "true" : undefined} aria-describedby={describedBy} className={cn("min-h-12 w-full rounded-xl border bg-white px-4 py-3 text-base text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-4 focus:ring-brand/15", error ? "border-rose-400" : "border-line", className)} {...registration} {...props} />
+      <input id={fieldId} aria-required={required || undefined} aria-invalid={error ? "true" : undefined} aria-describedby={describedBy} className={cn("min-h-10 w-full rounded-[9px] border bg-white px-3 py-2 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/25", error ? "border-rose-400" : "border-line", className)} {...registration} {...props} />
       {error ? <p id={`${fieldId}-error`} role="alert" className="text-sm text-rose-600">{error}</p> : hint ? <p id={`${fieldId}-hint`} className="text-sm text-muted">{hint}</p> : null}
     </div>
   );

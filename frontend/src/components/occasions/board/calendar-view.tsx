@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
+import { HoverScrollX } from "@/components/ui/hover-scroll-x";
 import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -34,7 +35,7 @@ export function CalendarView({ month, items, loading, onSelect }: { month: Date;
   const weeks = days[35].getMonth() === month.getMonth() ? 6 : 5; // drop a trailing week that is entirely next month
 
   return <Card className="overflow-hidden">
-    <div className="overflow-x-auto">
+    <HoverScrollX>
       <div className="min-w-[44rem]" role="grid" aria-label={month.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}>
         <div role="row" className="grid grid-cols-7 bg-brand-soft/60 text-center text-sm font-semibold text-slate-700">{WEEKDAYS.map((name) => <div key={name} role="columnheader" className="py-3">{name}</div>)}</div>
         {loading ? <div className="flex h-72 items-center justify-center"><Spinner /></div> : <div className="grid grid-cols-7">
@@ -54,6 +55,6 @@ export function CalendarView({ month, items, loading, onSelect }: { month: Date;
           })}
         </div>}
       </div>
-    </div>
+    </HoverScrollX>
   </Card>;
 }

@@ -71,7 +71,7 @@ async def test_recipient_create_api_contract(e2e_client, monkeypatch, tenant_id)
     monkeypatch.setattr(
         recipient_service,
         "create_recipient",
-        lambda tenant, payload, actor: RecipientRead(
+        lambda tenant, payload, actor, **_kw: RecipientRead(
             id="recipient-1",
             tenant_id=tenant,
             name=payload.name,

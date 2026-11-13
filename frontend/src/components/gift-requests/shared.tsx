@@ -105,7 +105,7 @@ export function useTenantId() {
   return { user, tenantId: user?.platformRole === "CLIENT" ? user.tenant?.id : selected, isClient: user?.platformRole === "CLIENT" };
 }
 
-export const inputClass = "min-h-12 w-full rounded-xl border border-line bg-white px-4 py-3 text-base outline-none focus:border-brand focus:ring-4 focus:ring-brand/15";
+export const inputClass = "min-h-10 w-full rounded-[9px] border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
 
 export function StatusChip({ status }: { status: GiftStatus }) {
   const meta = STATUS_META[status] ?? STATUS_META.DRAFT;

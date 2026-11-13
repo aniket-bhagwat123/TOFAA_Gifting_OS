@@ -8,6 +8,8 @@ import { moduleConfig } from "@/features/modules/module-config";
 import { loadAllModuleRecords } from "@/features/modules/module-utils";
 import { getModuleRecords, mutateModule } from "@/features/modules/module.service";
 import { getApiErrorMessage } from "@/services/api-client";
+import { control, table } from "@/components/ui/table-styles";
+import { SearchInput } from "@/components/ui/search-input";
 import { Button } from "@/components/ui/button";
 import { PeopleTabs } from "@/components/modules/people-tabs";
 import { BudgetSheet, type BudgetTarget, type DefaultBudget } from "@/components/occasions/occasion-budget-sheet";
@@ -78,6 +80,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const ready = urls && !("error" in urls) ? urls : null;
 
   const [groups, setGroups] = useState<RecipientGroup[]>([]);
+  const [recipientCount, setRecipientCount] = useState<number | undefined>(undefined);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [members, setMembers] = useState<Record<string, Members>>({});
   const [memberSearch, setMemberSearch] = useState<Record<string, string>>({});
@@ -102,8 +105,14 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
     if (!ready) { setLoading(false); return; }
     setLoading(true); setError(null);
     try {
-      const list = await loadAllModuleRecords(ready.groups);
-      if (loadId === latest.current) setGroups(list as unknown as RecipientGroup[]);
+      const [list, summary] = await Promise.all([
+        loadAllModuleRecords(ready.groups),
+        getModuleRecords(`${ready.recipients}/summary`, {}).catch(() => null),
+      ]);
+      if (loadId === latest.current) {
+        setGroups(list as unknown as RecipientGroup[]);
+        if (summary) setRecipientCount((summary as { active?: number }).active);
+      }
     } catch (err) { if (loadId === latest.current) setError(getApiErrorMessage(err)); }
     finally { if (loadId === latest.current) setLoading(false); }
   }, [ready]);
@@ -196,7 +205,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
 
   return <>
     <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      {embedded ? <span /> : <PeopleTabs active="recipient-groups" className="w-fit" />}
+      {embedded ? <span /> : <PeopleTabs active="recipient-groups" counts={{ recipients: recipientCount, groups: groups.length }} className="w-fit" />}
       <Button disabled={!ready} onClick={() => openSheet("new")}><Plus size={16} /> New group</Button>
     </div>
 
@@ -206,8 +215,8 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
     <section className="overflow-hidden rounded-2xl border border-line bg-white" aria-label="Recipient groups">
       <div className="flex flex-col gap-3 border-b border-line px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div className="relative w-full sm:max-w-sm">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search groups" placeholder="Search groups" className="min-h-11 w-full rounded-xl border border-line bg-slate-50 py-2 pl-10 pr-3 text-base outline-none focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/15" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search groups" placeholder="Search groups" className={`${control} w-full pl-9`} />
         </div>
         <p className="text-sm text-muted" aria-live="polite">{loading ? "Loading…" : `${groups.length} ${groups.length === 1 ? "group" : "groups"} · ${people(uniquePeople)}`}</p>
       </div>
@@ -227,7 +236,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
               return <li key={group.id} className="border-t border-line first:border-t-0">
                 <button type="button" aria-expanded={expanded} onClick={() => toggle(group.id)} className="press flex w-full items-center gap-4 px-4 py-4 text-left hover:bg-slate-50/60 sm:px-6">
                   {expanded ? <ChevronDown className="size-5 shrink-0 text-muted" /> : <ChevronRight className="size-5 shrink-0 text-muted" />}
-                  <span className="min-w-0 flex-1"><span className="block truncate text-lg font-semibold text-ink">{group.name}</span><span className="block text-sm text-muted">{people(group.recipientIds.length)}</span></span>{canBudget && groupTotal(budgets, group) === undefined && <span className="hidden shrink-0 rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700 sm:block">Budget not set</span>}{canBudget && groupTotal(budgets, group) !== undefined && <span className="hidden shrink-0 rounded-full bg-brand/10 px-3 py-1 text-sm font-semibold text-brand sm:block">{credits(groupTotal(budgets, group)!)} credits{budgets[`GROUP:${group.id}`]?.budgetMode === "SHARED_POOL" ? " · shared" : ""}</span>}
+                  <span className="min-w-0 flex-1"><span className="block truncate text-base font-semibold text-ink">{group.name}</span><span className="block text-sm text-muted">{people(group.recipientIds.length)}</span></span>{canBudget && groupTotal(budgets, group) === undefined && <span className="hidden shrink-0 rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700 sm:block">Budget not set</span>}{canBudget && groupTotal(budgets, group) !== undefined && <span className="hidden shrink-0 rounded-full bg-brand/10 px-3 py-1 text-sm font-semibold text-brand sm:block">{credits(groupTotal(budgets, group)!)} credits{budgets[`GROUP:${group.id}`]?.budgetMode === "SHARED_POOL" ? " · shared" : ""}</span>}
                   <span className="hidden shrink-0 text-sm text-muted sm:block">{updated(group.updatedAt)}</span>
                 </button>
 
@@ -248,18 +257,18 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
                     : state.status === "error" ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><span>We couldn&apos;t load these recipients. {state.error}</span><Button size="sm" variant="secondary" onClick={() => void loadMembers(group)}>Try again</Button></div>
                       : !shown.length ? <p className="rounded-xl border border-line px-4 py-8 text-center text-muted">No recipients match your search.</p>
                         : <div className="overflow-hidden rounded-xl border border-line">
-                          <table className="hidden w-full text-left text-sm md:table">
-                            <thead className="border-b border-line text-muted"><tr>
-                              <th className="px-5 py-3.5 font-medium">Recipient</th><th className="px-3 py-3.5 font-medium">Mobile</th><th className="px-3 py-3.5 font-medium">City</th><th className="px-3 py-3.5 font-medium">Birthday</th>{canBudget && <th className="px-3 py-3.5 font-medium">Budget</th>}<th className="px-5 py-3.5 text-right font-medium">Actions</th>
+                          <table className={`${table.root} hidden md:table`}>
+                            <thead className={table.head}><tr className={table.headRow}>
+                              <th className={table.th}>Recipient</th><th className={table.th}>Mobile</th><th className={table.th}>City</th><th className={table.th}>Birthday</th>{canBudget && <th className={table.th}>Budget</th>}<th className={`${table.th} text-right`}>Actions</th>
                             </tr></thead>
-                            <tbody className="divide-y divide-line">
-                              {shown.map(({ id, row }) => <tr key={id}>
-                                <td className="px-5 py-4 text-base font-medium capitalize text-ink">{row ? String(row.name ?? "Unnamed") : <span className="text-muted">Removed recipient</span>}</td>
-                                <td className="whitespace-nowrap px-3 py-4 text-slate-600">{prettyMobile(row?.mobileNumber)}</td>
-                                <td className="px-3 py-4 text-slate-600">{cityOf(row)}</td>
-                                <td className="whitespace-nowrap px-3 py-4 text-slate-600">{shortDate(row?.dateOfBirth)}</td>
-                                {canBudget && <td className="whitespace-nowrap px-3 py-4 font-medium text-ink">{memberBudget(budgets, group, id) !== undefined ? `${credits(memberBudget(budgets, group, id)!)} credits` : <span className="font-normal text-muted">Not set</span>}</td>}
-                                <td className="space-x-2 whitespace-nowrap px-5 py-3 text-right">{canBudget && row && <Button size="sm" variant="secondary" disabled={!budgets[`GROUP:${group.id}`]} title={budgets[`GROUP:${group.id}`] ? undefined : "Set the group budget first"} onClick={() => openPersonBudget(group, id, String(row.name ?? "Recipient"))}>{memberBudget(budgets, group, id) !== undefined ? "Edit budget" : "Set budget"}</Button>}<Button size="sm" variant="secondary" className="text-rose-700" disabled={removing === id || !canRemove} title={canRemove ? undefined : "A group needs at least one recipient"} aria-label={`Remove ${String(row?.name ?? "recipient")} from ${group.name}`} onClick={() => void removeMember(group, id, String(row?.name ?? ""))}>Remove</Button></td>
+                            <tbody>
+                              {shown.map(({ id, row }) => <tr key={id} className={table.rowCompact}>
+                                <td className={`${table.td} text-sm font-semibold capitalize text-ink`}>{row ? String(row.name ?? "Unnamed") : <span className="text-muted">Removed recipient</span>}</td>
+                                <td className={`${table.td} whitespace-nowrap tabular-nums text-slate-600`}>{prettyMobile(row?.mobileNumber)}</td>
+                                <td className={`${table.td} text-slate-600`}>{cityOf(row)}</td>
+                                <td className={`${table.td} whitespace-nowrap tabular-nums text-slate-600`}>{shortDate(row?.dateOfBirth)}</td>
+                                {canBudget && <td className={`${table.td} whitespace-nowrap font-semibold tabular-nums text-ink`}>{memberBudget(budgets, group, id) !== undefined ? `${credits(memberBudget(budgets, group, id)!)} credits` : <span className="font-normal text-muted">Not set</span>}</td>}
+                                <td className={`${table.td} space-x-2 whitespace-nowrap text-right`}>{canBudget && row && <Button size="sm" variant="secondary" disabled={!budgets[`GROUP:${group.id}`]} title={budgets[`GROUP:${group.id}`] ? undefined : "Set the group budget first"} onClick={() => openPersonBudget(group, id, String(row.name ?? "Recipient"))}>{memberBudget(budgets, group, id) !== undefined ? "Edit budget" : "Set budget"}</Button>}<Button size="sm" variant="secondary" className="text-rose-700" disabled={removing === id || !canRemove} title={canRemove ? undefined : "A group needs at least one recipient"} aria-label={`Remove ${String(row?.name ?? "recipient")} from ${group.name}`} onClick={() => void removeMember(group, id, String(row?.name ?? ""))}>Remove</Button></td>
                               </tr>)}
                             </tbody>
                           </table>

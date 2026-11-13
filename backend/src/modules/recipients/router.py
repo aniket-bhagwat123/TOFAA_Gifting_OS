@@ -1,6 +1,6 @@
 """Tenant-scoped recipient API routes."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request, status
@@ -8,7 +8,16 @@ from starlette.concurrency import run_in_threadpool
 
 from src.core.schema import ApiResponse
 from src.modules.auth.dependencies import CurrentUserDep
-from src.modules.recipients.schemas import RecipientCreate, RecipientList, RecipientRead, RecipientUpdate
+from src.modules.recipients import trail
+from src.modules.recipients.schemas import (
+    Relationship,
+    RecipientCreate,
+    RecipientList,
+    RecipientRead,
+    RecipientStatus,
+    RecipientSummary,
+    RecipientUpdate,
+)
 from src.modules.recipients.service import recipient_service
 
 
@@ -44,11 +53,56 @@ def list_recipients(
             description="Only these recipients, as comma-separated IDs (at most 100), e.g. a group's members.",
         ),
     ] = None,
+    search: Annotated[str | None, Query(max_length=100, description="Matches name, mobile number or city.")] = None,
+    relationship: Annotated[Relationship | None, Query()] = None,
+    city: Annotated[str | None, Query(max_length=100)] = None,
+    group_id: Annotated[UUID | None, Query(alias="groupId", description="Only members of this recipient group.")] = None,
+    status_filter: Annotated[RecipientStatus | None, Query(alias="status")] = None,
+    upcoming_days: Annotated[
+        int | None,
+        Query(alias="upcomingDays", ge=1, le=366, description="Only people whose next birthday/anniversary is within this many days."),
+    ] = None,
+    sort: Annotated[Literal["name", "city", "mobile", "created", "nextOccasion"], Query()] = "created",
+    order: Annotated[Literal["asc", "desc"] | None, Query()] = None,
 ) -> RecipientList:
-    """List recipients visible to a user in the requested tenant, optionally only the given IDs."""
+    """List recipients visible to a user in the requested tenant. Every filter is optional."""
     return recipient_service.list_recipients(
-        str(tenant_id), actor, page=page, limit=limit, recipient_ids=parse_recipient_ids(recipient_ids)
+        str(tenant_id),
+        actor,
+        page=page,
+        limit=limit,
+        recipient_ids=parse_recipient_ids(recipient_ids),
+        search=search,
+        relationship=relationship,
+        city=city,
+        group_id=str(group_id) if group_id else None,
+        status=status_filter,
+        upcoming_days=upcoming_days,
+        sort=sort,
+        # Newest first unless told otherwise; names, cities and dates read best A→Z / soonest first.
+        descending=(order == "desc") if order else sort == "created",
     )
+
+
+@router.get("/tenants/{tenant_id}/recipients/duplicates", response_model=ApiResponse[list[dict]])
+def possible_duplicates(
+    tenant_id: UUID,
+    actor: CurrentUserDep,
+    name: Annotated[str | None, Query(max_length=200)] = None,
+    mobile_number: Annotated[str | None, Query(alias="mobileNumber", max_length=20)] = None,
+    email: Annotated[str | None, Query(max_length=254)] = None,
+) -> ApiResponse[list[dict]]:
+    """Recipients that look like the person being added (same mobile, same email or a very similar name)."""
+    return ApiResponse(
+        data=recipient_service.find_duplicates(str(tenant_id), actor, name=name, mobile_number=mobile_number, email=email),
+        message="Possible duplicates retrieved.",
+    )
+
+
+@router.get("/tenants/{tenant_id}/recipients/summary", response_model=RecipientSummary)
+def recipients_summary(tenant_id: UUID, actor: CurrentUserDep) -> RecipientSummary:
+    """Totals plus the cities and relationships to offer in the page's filters."""
+    return recipient_service.summary(str(tenant_id), actor)
 
 
 @router.post(
@@ -60,10 +114,16 @@ def create_recipient(
     tenant_id: UUID,
     payload: Annotated[RecipientCreate, Body()],
     actor: CurrentUserDep,
+    request: Request,
 ) -> ApiResponse[RecipientRead]:
-    """Create a recipient under the authorized tenant."""
+    """Create a recipient under the authorized tenant. Only the name is required.
+
+    Answers 409 with the possible matches in ``data.duplicates`` when the person may already exist; send
+    ``allowDuplicate: true`` once the user has confirmed they are different. ``X-Change-Source`` records where
+    the information came from (MANUAL, EXCEL_IMPORT, CALL, WHATSAPP, MEETING, EMAIL, OTHER).
+    """
     return ApiResponse(
-        data=recipient_service.create_recipient(str(tenant_id), payload, actor),
+        data=recipient_service.create_recipient(str(tenant_id), payload, actor, source=trail.source_of(request.headers.get(trail.SOURCE_HEADER))),
         message="Recipient added successfully.",
     )
 
@@ -82,9 +142,13 @@ def update_recipient(
     recipient_id: UUID,
     payload: Annotated[RecipientUpdate, Body()],
     actor: CurrentUserDep,
+    request: Request,
 ) -> ApiResponse[RecipientRead]:
+    """Edit a recipient. Send the ``version`` you loaded: if someone saved first the API answers 409 with their copy."""
     return ApiResponse(
-        data=recipient_service.update_recipient(str(tenant_id), str(recipient_id), payload, actor),
+        data=recipient_service.update_recipient(
+            str(tenant_id), str(recipient_id), payload, actor, source=trail.source_of(request.headers.get(trail.SOURCE_HEADER))
+        ),
         message="Recipient updated successfully.",
     )
 

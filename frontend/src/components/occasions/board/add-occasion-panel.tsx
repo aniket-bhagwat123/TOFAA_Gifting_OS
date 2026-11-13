@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, CalendarPlus, Check, X } from "lucide-react";
+import { Building2, CalendarPlus, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DatePickerField } from "@/components/ui/date-picker-field";
 import { RequiredMark } from "@/components/ui/required-mark";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { SidePanel } from "@/components/ui/side-panel";
+import { FormPanel } from "@/components/ui/form-panel";
 import { cn } from "@/lib/utils";
 import { RELATIONSHIPS, inputClass } from "@/components/gift-requests/shared";
 import { mutateModule } from "@/features/modules/module.service";
@@ -106,14 +106,8 @@ export function AddOccasionPanel({ open, editing, tenantId, onClose, onSaved }: 
   const error = (key: string) => errors[key] ? <p role="alert" className="mt-1 text-sm text-rose-600">{errors[key]}</p> : null;
   const HeaderIcon = company ? Building2 : CalendarPlus;
 
-  return <SidePanel open={open} onClose={onClose} labelledBy="occ-add-title" locked={saving} className="max-w-[28rem]">
-    <form noValidate onSubmit={save} className="space-y-5">
-      <div className="flex items-start gap-4">
-        <span aria-hidden className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand"><HeaderIcon size={26} /></span>
-        <div className="min-w-0 flex-1"><h2 id="occ-add-title" className="text-xl font-bold text-ink">{editing ? "Edit Occasion" : "Add Occasion"}</h2><p className="text-sm text-muted">{editing ? "Change the details of this occasion." : "Add an important date to your company's gifting calendar."}</p></div>
-        <button type="button" aria-label="Close" disabled={saving} onClick={onClose} className="press flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-600 hover:bg-black/5"><X size={20} /></button>
-      </div>
-
+  return <FormPanel open={open} onClose={onClose} width="md" locked={saving} onSubmit={save} icon={<HeaderIcon size={26} />} title={editing ? "Edit Occasion" : "Add Occasion"} description={editing ? "Change the details of this occasion." : "Add an important date to your company's gifting calendar."}
+    submitLabel={editing ? "Save changes" : "Save Occasion"}>
       {!editing && <div role="tablist" aria-label="Occasion type" className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1">
         {([["RECIPIENT", "Recipient Occasion"], ["COMPANY", "Company Occasion"]] as const).map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={form.mode === value} onClick={() => set({ mode: value })} className={cn("press min-h-11 rounded-xl px-3 text-sm font-semibold", form.mode === value ? "border border-brand bg-white text-brand shadow-sm" : "text-slate-700")}>{label}</button>)}
       </div>}
@@ -134,7 +128,7 @@ export function AddOccasionPanel({ open, editing, tenantId, onClose, onSaved }: 
       </> : <>
         <section className="space-y-4"><h3 className={sectionTitle}>1. Recipient Details</h3>
           <div><span id="occ-recipient-label" className={fieldLabel}>Recipient<RequiredMark /></span>
-            {editing ? <p className="min-h-12 rounded-xl border border-line bg-slate-50 px-4 py-3 text-base capitalize text-ink">{editing.name}</p>
+            {editing ? <p className="min-h-10 rounded-[9px] border border-line bg-slate-50 px-3 py-2 text-sm capitalize text-ink">{editing.name}</p>
               : <SearchableSelect name="recipientId" labelId="occ-recipient-label" options={(recipients ?? []).map((row) => ({ id: String(row.id), label: String(row.name ?? "Unnamed"), searchText: String(row.mobileNumber ?? "") }))} value={form.recipientId} loading={!recipients && !loadError} loadError={loadError} placeholder="Search and select recipient…" error={errors.recipientId} required onChange={(value) => set({ recipientId: value })} />}
             {error("recipientId")}</div>
           <div><label htmlFor="occ-relationship" className={fieldLabel}>Relationship</label>
@@ -155,11 +149,5 @@ export function AddOccasionPanel({ open, editing, tenantId, onClose, onSaved }: 
         <div><label htmlFor="occ-notes" className={fieldLabel}>Internal Notes <span className="font-normal text-muted">(Optional)</span></label>
           <textarea id="occ-notes" rows={3} maxLength={2000} value={form.notes} onChange={(event) => set({ notes: event.target.value })} placeholder="Add any useful context…" className={inputClass} /></div>
       </section>
-
-      <div className="flex gap-3 border-t border-line/70 pt-5">
-        <Button type="button" variant="secondary" className="flex-1 rounded-full" disabled={saving} onClick={onClose}>Cancel</Button>
-        <Button type="submit" className="flex-1 rounded-full" disabled={saving}>{saving ? "Saving…" : editing ? "Save changes" : "Save Occasion"}</Button>
-      </div>
-    </form>
-  </SidePanel>;
+  </FormPanel>;
 }

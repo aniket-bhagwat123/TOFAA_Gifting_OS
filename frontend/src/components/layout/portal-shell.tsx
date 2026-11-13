@@ -39,5 +39,5 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   }
   if (status !== "authenticated") return null;
 
-  return <div className="min-h-screen bg-canvas"><a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-xl focus:bg-white focus:px-4 focus:py-2">Skip to content</a><Sidebar mobileOpen={menuOpen} onClose={() => setMenuOpen(false)} /><div className="lg:pl-64"><Topbar onMenu={() => setMenuOpen(true)} /><main id="main" className="mx-auto max-w-[1280px] animate-rise-in p-5 pb-5 sm:p-5 lg:p-5">{children}</main></div></div>;
+  return <div className="min-h-screen bg-canvas"><a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-xl focus:bg-white focus:px-4 focus:py-2">Skip to content</a><Sidebar mobileOpen={menuOpen} onClose={() => setMenuOpen(false)} /><div className="lg:pl-56"><Topbar onMenu={() => setMenuOpen(true)} /><main id="main" className="mx-auto max-w-[1280px] animate-rise-in p-5 pb-5 sm:p-5 lg:p-5">{children}</main></div></div>;
 }

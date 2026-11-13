@@ -10,6 +10,7 @@ from src.modules.events.router import router as events_router
 from src.modules.gift_requests.router import router as gift_requests_router
 from src.modules.gift_spend.router import router as gift_spend_router
 from src.modules.occasions.router import router as occasions_router
+from src.modules.recipients.profile import router as recipient_profile_router
 from src.modules.recipients.router import router as recipients_router
 from src.modules.tenants.guard import enforce_tenant_scope
 from src.modules.tenants.router import activity_router, router as tenants_router
@@ -32,6 +33,7 @@ api_router.include_router(gift_requests_router, dependencies=tenant_scoped)
 api_router.include_router(gift_spend_router, dependencies=tenant_scoped)
 api_router.include_router(occasions_router, dependencies=tenant_scoped)
 api_router.include_router(recipients_router, dependencies=tenant_scoped)
+api_router.include_router(recipient_profile_router, dependencies=tenant_scoped)
 api_router.include_router(users_router, dependencies=tenant_scoped)
 api_router.include_router(activity_router, dependencies=tenant_scoped)
 

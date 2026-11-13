@@ -79,7 +79,7 @@ export function OccasionDetails({ item, tenantId, canPlan, onClose, onAct, onEdi
 
       <div className="space-y-3 pt-1">
         {action.kind !== "details" && <Button size="lg" className="w-full" disabled={(action.kind === "plan" || action.kind === "create") && !canPlan} onClick={() => onAct(item, action.kind)}><Gift size={18} /> {action.label}</Button>}
-        {canPlan && editPath && <button type="button" onClick={() => onEdit(item)} className="press flex min-h-[3.25rem] w-full items-center justify-center gap-2 rounded-xl border border-brand/60 bg-white text-base font-semibold text-brand hover:bg-brand-soft"><Pencil size={17} />Edit Occasion</button>}
+        {canPlan && editPath && <button type="button" onClick={() => onEdit(item)} className="press flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-brand/60 bg-white text-base font-semibold text-brand hover:bg-brand-soft"><Pencil size={17} />Edit Occasion</button>}
         {!item.eventId && item.sourceType === "RECIPIENT" && <p className="flex items-center gap-2 text-xs text-muted"><CalendarDays size={14} aria-hidden />This date comes from the person's profile. Change it there.</p>}
         {canPlan && editPath && <div className="text-center">
           <button type="button" aria-expanded={more} onClick={() => setMore(!more)} className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-700 hover:text-ink">More options <ChevronDown size={16} className={cn("transition-transform", more && "rotate-180")} /></button>

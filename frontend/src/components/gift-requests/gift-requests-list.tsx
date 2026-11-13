@@ -1,17 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check, ChevronDown, Eye, Gift, MoreVertical, Plus, Search, Calendar as CalendarIcon, ListFilter, Users } from "lucide-react";
+import { Eye, Gift, MoreVertical, Plus, Search, Calendar as CalendarIcon, ListFilter, Users } from "lucide-react";
 import { moduleConfig } from "@/features/modules/module-config";
 import { loadAllModuleRecords } from "@/features/modules/module-utils";
 import { getModuleRecords } from "@/features/modules/module.service";
 import { getApiErrorMessage } from "@/services/api-client";
+import { Tab, TabBar } from "@/components/ui/tab-bar";
+import { SearchInput } from "@/components/ui/search-input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { FilterMenu } from "@/components/ui/filter-menu";
+import { HoverScrollX } from "@/components/ui/hover-scroll-x";
+import { control, iconButton, pageButton, table } from "@/components/ui/table-styles";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -50,39 +55,12 @@ function createdLabel(value: string) {
   return when.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-/** A filter button that opens a short list of options (with a search box when there are many). */
-function FilterMenu({ icon, label, value, options, onChange, searchable, width = "w-60" }: {
-  icon: ReactNode; label: string; value: string; options: Array<{ value: string; label: string; hint?: string }>; onChange: (value: string) => void; searchable?: boolean; width?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [term, setTerm] = useState("");
-  const selected = options.find((option) => option.value === value);
-  const shown = options.filter((option) => `${option.label} ${option.hint ?? ""}`.toLowerCase().includes(term.trim().toLowerCase()));
-  return <Popover open={open} onOpenChange={(next) => { setOpen(next); if (!next) setTerm(""); }}>
-    <PopoverTrigger asChild>
-      <button type="button" aria-label={label} aria-haspopup="listbox" className="flex min-h-11 w-full items-center gap-2 rounded-full border border-line bg-white px-4 text-sm text-ink outline-none transition hover:bg-slate-50 focus-visible:ring-4 focus-visible:ring-brand/15 data-[state=open]:border-brand sm:w-auto">
-        <span className="text-muted">{icon}</span><span className="max-w-[10rem] truncate font-medium">{selected?.label ?? label}</span><ChevronDown size={15} className="text-muted" />
-      </button>
-    </PopoverTrigger>
-    <PopoverContent align="start" className={cn("p-2", width)}>
-      {searchable && <div className="relative mb-2"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" /><input autoFocus type="search" value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Search by name" aria-label={`Search ${label}`} className="min-h-10 w-full rounded-lg border border-line py-2 pl-9 pr-3 text-sm outline-none focus:border-brand" /></div>}
-      <div role="listbox" aria-label={label} className="scroll-clean max-h-64 overflow-y-auto">
-        {shown.map((option) => <button key={option.value} type="button" role="option" aria-selected={option.value === value} onClick={() => { onChange(option.value); setOpen(false); }} className="flex min-h-10 w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm text-ink hover:bg-slate-50">
-          <span className="min-w-0"><span className="block truncate">{option.label}</span>{option.hint && <span className="block truncate text-xs text-muted">{option.hint}</span>}</span>
-          {option.value === value && <Check size={15} className="shrink-0 text-brand" />}
-        </button>)}
-        {!shown.length && <p className="p-3 text-sm text-muted">No matches.</p>}
-      </div>
-    </PopoverContent>
-  </Popover>;
-}
-
 function RowMenu({ request, canEdit, onEdit }: { request: GiftRequest; canEdit: boolean; onEdit: () => void }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const item = "flex min-h-10 w-full items-center rounded-lg px-3 text-left text-sm text-ink hover:bg-slate-50";
+  const item = "flex min-h-9 w-full items-center rounded-lg px-3 text-left text-sm text-ink hover:bg-slate-50";
   return <Popover open={open} onOpenChange={setOpen}>
-    <PopoverTrigger asChild><button type="button" aria-label={`More actions for ${codeOf(request)}`} onClick={(event) => event.stopPropagation()} className="flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-white text-muted hover:bg-slate-50 hover:text-ink"><MoreVertical size={17} /></button></PopoverTrigger>
+    <PopoverTrigger asChild><button type="button" aria-label={`More actions for ${codeOf(request)}`} onClick={(event) => event.stopPropagation()} className={iconButton}><MoreVertical size={16} /></button></PopoverTrigger>
     <PopoverContent align="end" className="w-44 p-1.5" onClick={(event) => event.stopPropagation()}>
       <button type="button" className={item} onClick={() => router.push(`/requests/${request.id}`)}>View details</button>
       {canEdit && <button type="button" className={item} onClick={() => { setOpen(false); onEdit(); }}>Edit request</button>}
@@ -154,47 +132,42 @@ export function GiftRequestsList({ startNew = false }: { startNew?: boolean }) {
   const from = total ? (page - 1) * PAGE_SIZE + 1 : 0;
   const statusOptions = [{ value: "ALL", label: "All statuses" }, ...STATUS_ORDER.map((key) => ({ value: key, label: STATUS_META[key].label }))];
 
-  const tabBar = <div role="tablist" aria-label="Filter by status" className="scroll-clean flex gap-2 overflow-x-auto pb-1">
-    {TABS.map((key) => {
-      const active = status === key;
-      return <button key={key} type="button" role="tab" aria-selected={active} onClick={() => { setStatus(key); setPage(1); }} className={cn("flex min-h-11 shrink-0 items-center rounded-full border px-4 text-sm font-medium transition", active ? "border-line bg-white font-semibold text-brand shadow-sm" : "border-line/70 bg-white/60 text-muted hover:bg-white hover:text-ink")}>
-        {tabLabel(key)}{key !== "UPCOMING" && ` (${countOf(key)})`}
-      </button>;
-    })}
-  </div>;
+  const tabBar = <TabBar label="Filter by status" wrapperClassName="min-w-0 max-w-full">
+    {TABS.map((key) => <Tab key={key} active={status === key} count={key === "UPCOMING" ? undefined : countOf(key)} onClick={() => { setStatus(key); setPage(1); }}>{tabLabel(key)}</Tab>)}
+  </TabBar>;
 
   return <div className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0 flex-1">{tabBar}</div>
-      {canCreate && <Button size="lg" onClick={() => setWizard({})}><Plus size={18} /> New gift request</Button>}
+      {canCreate && <Button onClick={() => setWizard({})}><Plus size={16} /> New request</Button>}
     </div>
 
     <div className="grid items-start gap-6">
       <div className="min-w-0">
         {status === "UPCOMING" ? <UpcomingPanel /> : counts === null ? <Card className="flex min-h-[22rem] items-center justify-center"><Spinner /></Card> : counts.total === 0 ? <Card className="p-4">
-          <EmptyState title="No gift requests yet" description="Ready to send something special? Start a gift request." action={canCreate ? <Button onClick={() => setWizard({})}><Plus size={17} /> New gift request</Button> : undefined} />
+          <EmptyState title="No gift requests yet" description="Ready to send something special? Start a gift request." action={canCreate ? <Button onClick={() => setWizard({})}><Plus size={17} /> New request</Button> : undefined} />
         </Card> : <Card className="overflow-hidden">
-          <div className="flex flex-wrap items-center gap-3 p-4 sm:p-5">
-            <div className="relative min-w-[14rem] flex-1">
-              <Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by recipient, occasion or request ID…" aria-label="Search gift requests" className="min-h-11 w-full rounded-xl border border-line bg-white pl-11 pr-3 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/15" />
+          <div className="flex flex-wrap items-center gap-3 border-b border-line/70 px-4 py-3 sm:px-5">
+            <div className="relative min-w-full flex-1 sm:min-w-[17.5rem] sm:max-w-[26rem]">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by recipient, occasion or request ID…" aria-label="Search gift requests" className={cn(control, "w-full pl-9")} />
             </div>
             <FilterMenu icon={<CalendarIcon size={16} />} label="Any date" value={dateKey} options={DATE_OPTIONS} onChange={(value) => { setDateKey(value as DateKey); setPage(1); }} />
             {dateKey === "CUSTOM" && <div className="flex items-center gap-2 text-sm">
-              <input type="date" aria-label="From date" value={customFrom} max={customTo || undefined} onChange={(event) => { setCustomFrom(event.target.value); setPage(1); }} className="min-h-11 rounded-xl border border-line bg-white px-3 outline-none focus:border-brand" />
+              <input type="date" aria-label="From date" value={customFrom} max={customTo || undefined} onChange={(event) => { setCustomFrom(event.target.value); setPage(1); }} className={control} />
               <span className="text-muted">to</span>
-              <input type="date" aria-label="To date" value={customTo} min={customFrom || undefined} onChange={(event) => { setCustomTo(event.target.value); setPage(1); }} className="min-h-11 rounded-xl border border-line bg-white px-3 outline-none focus:border-brand" />
+              <input type="date" aria-label="To date" value={customTo} min={customFrom || undefined} onChange={(event) => { setCustomTo(event.target.value); setPage(1); }} className={control} />
             </div>}
             <FilterMenu icon={<Users size={16} />} label="Any recipient" searchable width="w-72" value={recipientId} options={[{ value: "", label: "Any recipient" }, ...recipients]} onChange={(value) => { setRecipientId(value); setPage(1); }} />
             <FilterMenu icon={<ListFilter size={16} />} label="Any status" value={status === "ALL" ? "" : status} options={[{ value: "", label: "Any status" }, ...statusOptions.slice(1)]} onChange={(value) => { setStatus((value || "ALL") as StatusKey); setPage(1); }} />
-            <Button variant="secondary" className="rounded-full" onClick={reset} disabled={!filtered}>Reset</Button>
+            <Button variant="ghost" className="min-h-9 px-3 text-sm" onClick={reset} disabled={!filtered}>Reset</Button>
           </div>
 
           {error && <div role="alert" className="mx-4 mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">We couldn't load your requests. {error}</div>}
-          <div className="overflow-x-auto px-3 pb-2 sm:px-4">
-            <table className="w-full min-w-[60rem] border-separate border-spacing-y-2 text-left text-sm">
-              <thead className="text-xs uppercase tracking-wide text-muted"><tr>
-                {["Request", "Recipient", "Occasion", "Requested by", "Budget", "Status", "Actions"].map((heading, index) => <th key={heading} scope="col" className={cn("px-4 py-3 font-semibold", index === 6 && "text-right")}>{heading}</th>)}
+          <HoverScrollX>
+            <table className={cn(table.root, "min-w-[62rem]")}>
+              <thead className={table.head}><tr className={table.headRow}>
+                {["Request", "Recipient", "Occasion", "Requested by", "Budget", "Status", "Actions"].map((heading, index) => <th key={heading} scope="col" className={cn(table.th, index === 6 && "text-right")}>{heading}</th>)}
               </tr></thead>
               <tbody>
                 {items === null ? <tr><td colSpan={7} className="h-72 p-0"><div className="flex h-72 w-full items-center justify-center"><Spinner /></div></td></tr> : !items.length ? <tr><td colSpan={7} className="p-2">
@@ -203,25 +176,26 @@ export function GiftRequestsList({ startNew = false }: { startNew?: boolean }) {
                   const occasion = request.occasionName ?? request.eventName;
                   const occasionDate = request.occasionDate ?? request.eventDate ?? request.deliveryDate;
                   const editable = isClient && (request.status === "DRAFT" || request.status === "NEEDS_INFO");
-                  return <tr key={request.id} onClick={() => router.push(`/requests/${request.id}`)} className="group cursor-pointer">
-                    <td className="rounded-l-2xl border-y border-l border-line/70 bg-white px-4 py-3.5 group-hover:bg-slate-50/70">
-                      <Link href={`/requests/${request.id}`} onClick={(event) => event.stopPropagation()} className="block whitespace-nowrap font-bold text-ink hover:underline">{codeOf(request)}</Link>
-                      <span className="mt-0.5 block whitespace-nowrap text-xs text-muted">{createdLabel(request.createdAt)}</span>
+                  const cell = table.td;
+                  return <tr key={request.id} onClick={() => router.push(`/requests/${request.id}`)} className={cn(table.row, "group cursor-pointer")}>
+                    <td className={cell}>
+                      <Link href={`/requests/${request.id}`} onClick={(event) => event.stopPropagation()} className="block whitespace-nowrap text-sm font-semibold text-ink hover:underline">{codeOf(request)}</Link>
+                      <span className="mt-1 block whitespace-nowrap text-xs tabular-nums text-muted">{createdLabel(request.createdAt)}</span>
                     </td>
-                    <td className="border-y border-line/70 bg-white px-4 py-3.5 group-hover:bg-slate-50/70">
-                      <div className="flex items-center gap-3"><Avatar name={request.recipientName} src={request.recipientAvatarUrl} /><div className="min-w-0"><p className="truncate font-medium text-ink">{request.recipientName ?? "—"}</p><p className="truncate text-xs text-muted">{request.relationship ?? ""}</p></div></div>
+                    <td className={cell}>
+                      <div className="flex items-center gap-3"><Avatar name={request.recipientName} src={request.recipientAvatarUrl} className="h-9 w-9 text-xs" /><div className="min-w-0"><p className="max-w-[11rem] truncate text-sm font-semibold text-ink">{request.recipientName ?? "—"}</p><p className="max-w-[11rem] truncate text-xs text-muted">{request.relationship ?? ""}</p></div></div>
                     </td>
-                    <td className="border-y border-line/70 bg-white px-4 py-3.5 group-hover:bg-slate-50/70">
-                      <div className="flex items-center gap-3"><span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700"><Gift size={18} /></span><div className="min-w-0"><p className="truncate font-medium text-ink">{occasion ?? "—"}</p><p className="whitespace-nowrap text-xs text-muted">{occasionDate ? day(occasionDate) : ""}</p></div></div>
+                    <td className={cell}>
+                      <div className="flex items-center gap-3"><span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700"><Gift size={20} /></span><div className="min-w-0"><p className="max-w-[11rem] truncate text-sm font-medium text-ink">{occasion ?? "—"}</p><p className="whitespace-nowrap text-xs tabular-nums text-muted">{occasionDate ? day(occasionDate) : ""}</p></div></div>
                     </td>
-                    <td className="border-y border-line/70 bg-white px-4 py-3.5 group-hover:bg-slate-50/70">
-                      <div className="flex items-center gap-3"><Avatar name={request.createdByName} src={request.createdByAvatarUrl} className="h-9 w-9 text-xs" /><div className="min-w-0"><p className="truncate font-medium text-ink">{request.createdByName ?? "—"}</p><p className="text-xs text-muted">{roleShort(request.createdByRole) ? `( ${roleShort(request.createdByRole)} )` : ""}</p></div></div>
+                    <td className={cell}>
+                      <div className="flex items-center gap-3"><Avatar name={request.createdByName} src={request.createdByAvatarUrl} className="h-9 w-9 text-xs" /><div className="min-w-0"><p className="max-w-[10rem] truncate text-sm font-medium text-ink">{request.createdByName ?? "—"}</p><p className="text-xs text-muted">{roleShort(request.createdByRole)}</p></div></div>
                     </td>
-                    <td className="whitespace-nowrap border-y border-line/70 bg-white px-4 py-3.5 font-medium tabular-nums text-ink group-hover:bg-slate-50/70">{budgetLabel(request)}</td>
-                    <td className="border-y border-line/70 bg-white px-4 py-3.5 group-hover:bg-slate-50/70"><StatusChip status={request.status} /></td>
-                    <td className="rounded-r-2xl border-y border-r border-line/70 bg-white px-4 py-3.5 group-hover:bg-slate-50/70">
-                      <div className="flex items-center justify-end gap-2">
-                        <Link href={`/requests/${request.id}`} onClick={(event) => event.stopPropagation()}><Button size="sm" variant="secondary"><Eye size={16} /> View</Button></Link>
+                    <td className={cn(cell, "whitespace-nowrap text-sm font-semibold tabular-nums text-ink")}>{budgetLabel(request)}</td>
+                    <td className={cell}><StatusChip status={request.status} /></td>
+                    <td className={cell}>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Link href={`/requests/${request.id}`} onClick={(event) => event.stopPropagation()}><Button size="sm" variant="secondary" className="min-h-9 rounded-lg px-3 text-sm"><Eye size={16} /> View</Button></Link>
                         <RowMenu request={request} canEdit={editable} onEdit={() => setWizard({ editId: request.id })} />
                       </div>
                     </td>
@@ -229,16 +203,16 @@ export function GiftRequestsList({ startNew = false }: { startNew?: boolean }) {
                 })}
               </tbody>
             </table>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line/70 px-5 py-3.5">
-            <p className="text-sm text-muted">{items?.length ? `Showing ${from}–${from + items.length - 1} of ${total} request${total === 1 ? "" : "s"}` : items ? "Showing 0 requests" : ""}</p>
-            <nav aria-label="Pagination" className="flex items-center gap-2">
-              <Button size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Previous</Button>
-              {pageNumbers.map((number, index) => <span key={number} className="flex items-center gap-2">
+          </HoverScrollX>
+          <div className={table.footer}>
+            <p className="text-sm tabular-nums text-muted">{items?.length ? `Showing ${from}–${from + items.length - 1} of ${total} request${total === 1 ? "" : "s"}` : items ? "Showing 0 requests" : ""}</p>
+            <nav aria-label="Pagination" className="flex items-center gap-1.5">
+              <Button size="sm" variant="secondary" className="min-h-9 rounded-lg px-3" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Previous</Button>
+              {pageNumbers.map((number, index) => <span key={number} className="flex items-center gap-1.5">
                 {index > 0 && number - pageNumbers[index - 1] > 1 && <span className="text-muted">…</span>}
-                <button type="button" aria-label={`Page ${number}`} aria-current={number === page ? "page" : undefined} onClick={() => setPage(number)} className={cn("flex h-10 w-10 items-center justify-center rounded-xl text-sm font-semibold", number === page ? "bg-brand text-white" : "border border-line bg-white text-ink hover:bg-slate-50")}>{number}</button>
+                <button type="button" aria-label={`Page ${number}`} aria-current={number === page ? "page" : undefined} onClick={() => setPage(number)} className={cn(pageButton, number === page ? "bg-brand text-white" : "border border-line bg-white text-ink hover:bg-slate-50")}>{number}</button>
               </span>)}
-              <Button size="sm" variant="secondary" disabled={page >= pages} onClick={() => setPage((value) => value + 1)}>Next</Button>
+              <Button size="sm" variant="secondary" className="min-h-9 rounded-lg px-3" disabled={page >= pages} onClick={() => setPage((value) => value + 1)}>Next</Button>
             </nav>
           </div>
         </Card>}

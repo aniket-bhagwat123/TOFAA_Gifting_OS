@@ -30,7 +30,7 @@ export function SearchableSelect({ name, labelId, options, value, loading, loadE
   const filteredOptions = options.filter((option) => `${option.label} ${option.searchText ?? ""}`.toLowerCase().includes(search.toLowerCase()));
   return <div ref={rootRef} className="relative">
     <input type="hidden" name={name} value={value} />
-    <button type="button" aria-labelledby={labelId} aria-haspopup="listbox" aria-expanded={open} aria-invalid={!!error} disabled={loading || !!loadError} onClick={() => setOpen((current) => !current)} className={`flex w-full items-center justify-between gap-3 rounded-xl border bg-white min-h-12 px-4 py-3 text-left text-base disabled:bg-slate-50 ${error ? "border-rose-400" : "border-line"}`}>
+    <button type="button" aria-labelledby={labelId} aria-haspopup="listbox" aria-expanded={open} aria-invalid={!!error} disabled={loading || !!loadError} onClick={() => setOpen((current) => !current)} className={`flex w-full items-center justify-between gap-3 rounded-[9px] border bg-white min-h-10 px-3 py-2 text-left text-sm disabled:bg-slate-50 ${error ? "border-rose-400" : "border-line"}`}>
       <span className={selected ? "truncate text-ink" : "text-muted"}>{selected?.label ?? (loadError ? "Unable to load options" : loading ? "Loading options…" : placeholder)}</span>
       <ChevronDown size={16} className={`shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`} />
     </button>

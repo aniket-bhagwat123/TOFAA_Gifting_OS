@@ -1,14 +1,10 @@
-import Link from "next/link";
-import { cn } from "@/lib/utils";
-
-const tabs = [
-  { key: "recipients", label: "Recipients", href: "/recipients" },
-  { key: "recipient-groups", label: "Groups", href: "/recipient-groups" }
-];
+import { Building2, Users } from "lucide-react";
+import { Tab, TabBar } from "@/components/ui/tab-bar";
 
 /** People and Groups live under one sidebar entry; these tabs switch between them. */
-export function PeopleTabs({ active, className = "mb-6" }: { active: string; className?: string }) {
-  return <div role="tablist" aria-label="People and groups" className={cn("inline-flex rounded-2xl bg-black/5 p-1", className)}>
-    {tabs.map((tab) => <Link key={tab.key} role="tab" aria-selected={active === tab.key} href={tab.href} className={cn("press flex min-h-10 items-center rounded-xl px-5 text-sm font-semibold transition", active === tab.key ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink")}>{tab.label}</Link>)}
-  </div>;
+export function PeopleTabs({ active, counts, className }: { active: string; counts?: { recipients?: number; groups?: number }; className?: string }) {
+  return <TabBar label="People and groups" className={className}>
+    <Tab variant="solid" href="/recipients" active={active === "recipients"} icon={<Users size={16} />} count={counts?.recipients}>Recipients</Tab>
+    <Tab variant="solid" href="/recipient-groups" active={active === "recipient-groups"} icon={<Building2 size={16} />} count={counts?.groups}>Groups</Tab>
+  </TabBar>;
 }

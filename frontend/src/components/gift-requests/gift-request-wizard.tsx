@@ -39,7 +39,7 @@ const STEPS = [
 ];
 const FILE_TYPES = ["image/jpeg", "image/png", "application/pdf"];
 const MAX_FILE = 5 * 1024 * 1024;
-const control = "min-h-12 w-full rounded-xl border bg-white px-4 py-3 text-[0.9375rem] text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-4 focus:ring-brand/15 disabled:bg-slate-50 disabled:text-slate-400";
+const control = "min-h-10 w-full rounded-[9px] border bg-white px-3 py-2 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/25 disabled:bg-slate-50 disabled:text-slate-400";
 const today = () => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), now.getDate()); };
 const isoToday = () => { const now = today(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`; };
 const addressOf = (row?: Row) => {
@@ -98,6 +98,7 @@ export function GiftRequestWizard({ requestId, onClose, onChanged }: { requestId
   const [savedFile, setSavedFile] = useState<GiftRequest["referenceFile"]>(null);
   const [removeSaved, setRemoveSaved] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const editing = !!requestId;
 
@@ -255,7 +256,7 @@ export function GiftRequestWizard({ requestId, onClose, onChanged }: { requestId
   };
 
   const next = () => { if (validate(step)) setStep((value) => Math.min(value + 1, 2)); };
-  const requestClose = () => { if (busy) return; if (dirty && !done && !window.confirm("Close without saving? Your changes on this request will be lost.")) return; onClose(); };
+  const requestClose = () => { if (busy) return; if (dirty && !done) { setConfirmClose(true); return; } onClose(); };
 
   const chooseFile = (picked?: File | null) => {
     if (!picked) return;
@@ -296,7 +297,7 @@ export function GiftRequestWizard({ requestId, onClose, onChanged }: { requestId
     </Sheet>;
   }
 
-  return <Sheet open onClose={requestClose} locked={!!busy} labelledBy="gr-wizard-title" className="flex max-w-5xl flex-col overflow-hidden !p-0">
+  return <><Sheet open onClose={requestClose} locked={!!busy} labelledBy="gr-wizard-title" className="flex max-w-5xl flex-col overflow-hidden !p-0">
     <header className="flex items-start gap-4 px-6 pb-4 pt-6 sm:px-8">
       <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand"><Gift size={26} /></span>
       <div className="min-w-0 flex-1"><h2 id="gr-wizard-title" className="text-2xl font-bold text-ink">{editing ? "Edit gift request" : "New gift request"}</h2>
@@ -490,7 +491,17 @@ export function GiftRequestWizard({ requestId, onClose, onChanged }: { requestId
         </div>
       </footer>
     </form>}
-  </Sheet>;
+  </Sheet>
+
+  <Sheet open={confirmClose} onClose={() => setConfirmClose(false)} labelledBy="gr-confirm-close-title" className="max-w-md">
+    <h2 id="gr-confirm-close-title" className="text-xl font-semibold text-ink">Close without saving?</h2>
+    <p className="mt-2 text-sm text-muted">Your changes on this request will be lost. Use &ldquo;Save draft&rdquo; to keep them.</p>
+    <div className="mt-6 flex items-center justify-end gap-3">
+      <Button variant="secondary" className="shrink-0" onClick={() => setConfirmClose(false)}>Keep editing</Button>
+      <Button variant="danger" className="shrink-0" onClick={() => { setConfirmClose(false); onClose(); }}>Discard changes</Button>
+    </div>
+  </Sheet>
+  </>;
 }
 
 /** The delivery address with a Change button that turns it into an editable box. */

@@ -4,6 +4,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
+// Count how many Sheet instances are open so scroll is only restored when the last one closes.
+let _openSheets = 0;
+
 /**
  * Modal sheet: dims the background (modal task), animates in with Apple's sheet curve,
  * and closes on Escape or scrim tap. Always centred on screen.
@@ -13,11 +16,15 @@ export function Sheet({ open, onClose, labelledBy, children, className, locked =
 }) {
   useEffect(() => {
     if (!open) return;
+    _openSheets++;
+    document.body.style.overflow = "hidden";
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !locked) onClose(); };
     document.addEventListener("keydown", onKey);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = previous; };
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      _openSheets--;
+      if (_openSheets === 0) document.body.style.overflow = "";
+    };
   }, [open, onClose, locked]);
   // Rendered on <body> so the dialog centres on the whole screen, never inside the page content area.
   const [mounted, setMounted] = useState(false);

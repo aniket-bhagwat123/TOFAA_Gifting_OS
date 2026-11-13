@@ -6,7 +6,10 @@ import { toast } from "sonner";
 import { useAppSelector } from "@/store/hooks";
 import { getApiErrorMessage } from "@/services/api-client";
 import { getModuleRecords, mutateModule } from "@/features/modules/module.service";
+import { table } from "@/components/ui/table-styles";
+import { Tab, TabBar } from "@/components/ui/tab-bar";
 import { Button } from "@/components/ui/button";
+import { HoverScrollX } from "@/components/ui/hover-scroll-x";
 import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet } from "@/components/ui/sheet";
@@ -29,7 +32,7 @@ const num = (value: number) => value.toLocaleString("en-IN");
 const rupees = (minor: number, decimals = 0) => `₹${(minor / 100).toLocaleString("en-IN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 const day = (value: string) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
-const inputClass = "min-h-11 w-full rounded-xl border border-line bg-white px-3.5 text-[0.9375rem] outline-none focus:border-brand focus:ring-4 focus:ring-brand/15";
+const inputClass = "min-h-10 w-full rounded-[9px] border border-line bg-white px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
 
 const sourceLabel: Record<string, string> = { gift_request: "Gift request", contract_gift: "Contract gift", credit_request: "Credit request", adjustment: "Adjustment", gift: "Gift" };
 const usageLabel: Record<string, string> = { gift_request: "Gift requests", contract_gift: "Contract gifts", adjustment: "Adjustments", gift: "Gifts" };
@@ -139,9 +142,9 @@ export function CreditsView() {
     finally { setSending(false); }
   };
 
-  if (!tenantId) return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900">{isClient ? "Your account isn't linked to an organisation yet. Please contact TOFAA." : "Choose a client from the “Viewing” menu at the top first."}</div>;
+  if (!tenantId) return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{isClient ? "Your account isn't linked to an organisation yet. Please contact TOFAA." : "Choose a client from the “Viewing” menu at the top first."}</div>;
   if (loading && !balance) return <div className="flex justify-center py-20"><Spinner /></div>;
-  if (error && !balance) return <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-base text-rose-800">{error}</div>;
+  if (error && !balance) return <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error}</div>;
 
   const updated = balance ? new Date(balance.asOf) : null;
   const updatedText = updated ? `${updated.toDateString() === new Date().toDateString() ? "today" : day(balance!.asOf)}, ${updated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : "";
@@ -186,11 +189,11 @@ export function CreditsView() {
     </div>
 
     <Card className="overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/70 px-5 pt-2">
-        <div role="tablist" className="flex gap-6">
-          {([["ledger", "Ledger"], ["requests", "Credit requests"]] as const).map(([key, text]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`-mb-px min-h-12 border-b-2 text-sm font-semibold ${tab === key ? "border-brand text-brand" : "border-transparent text-muted hover:text-ink"}`}>{text}</button>)}
-        </div>
-        {tab === "ledger" && <div className="flex flex-wrap items-center gap-2 pb-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/70 px-4 py-3 sm:px-5">
+        <TabBar label="Credits" className="bg-slate-50 ring-0">
+          {([["ledger", "Ledger"], ["requests", "Credit requests"]] as const).map(([key, text]) => <Tab key={key} active={tab === key} onClick={() => setTab(key)}>{text}</Tab>)}
+        </TabBar>
+        {tab === "ledger" && <div className="flex flex-wrap items-center gap-2">
           <DatePickerField id="ledger-from" label="From date" placeholder="From date" compact value={from} maxDate={asDate(to)} onChange={(value) => { setFrom(value); setPage(1); }} />
           <DatePickerField id="ledger-to" label="To date" placeholder="To date" compact value={to} minDate={asDate(from)} onChange={(value) => { setTo(value); setPage(1); }} />
           {(from || to) && <button type="button" onClick={() => { setFrom(""); setTo(""); setPage(1); }} className="inline-flex min-h-10 items-center gap-1 px-2 text-sm font-medium text-brand"><X size={14} /> Clear</button>}
@@ -198,51 +201,51 @@ export function CreditsView() {
       </div>
 
       {tab === "ledger" ? <>
-        <div className="overflow-x-auto"><table className="w-full text-left text-sm">
-          <thead className="bg-slate-50/80 text-muted"><tr><th className="px-5 py-3 font-medium">Date</th><th className="px-5 py-3 font-medium">Description</th><th className="px-5 py-3 font-medium">Type</th><th className="px-5 py-3 font-medium">Source</th><th className="px-5 py-3 text-right font-medium">Change</th><th className="px-5 py-3 text-right font-medium">Balance</th></tr></thead>
-          <tbody className="divide-y divide-line/70">
+        <HoverScrollX><table className={table.root}>
+          <thead className={table.head}><tr className={table.headRow}><th className={table.th}>Date</th><th className={table.th}>Description</th><th className={table.th}>Type</th><th className={table.th}>Source</th><th className={`${table.th} text-right`}>Change</th><th className={`${table.th} text-right`}>Balance</th></tr></thead>
+          <tbody>
             {!ledger ? <tr><td colSpan={6} className="py-12 text-center"><Spinner /></td></tr> : !ledger.items.length ? <tr><td colSpan={6} className="px-5 py-12 text-center text-muted">{from || to ? "No entries in these dates." : "No credit activity yet."}</td></tr> : ledger.items.map((entry) => {
               const chip = typeChip(entry);
-              return <tr key={entry.id} className="hover:bg-slate-50/60">
-                <td className="whitespace-nowrap px-5 py-3.5 text-muted">{day(entry.createdAt)}</td>
-                <td className="px-5 py-3.5 font-medium text-ink">{entry.description}</td>
-                <td className="px-5 py-3.5"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${chip.cls}`}><span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />{chip.text}</span></td>
-                <td className="px-5 py-3.5 text-muted">{label(sourceLabel, entry.sourceType)}</td>
-                <td className={`px-5 py-3.5 text-right font-semibold tabular-nums ${entry.creditsDelta < 0 ? "text-rose-700" : "text-emerald-700"}`}>{entry.creditsDelta < 0 ? "−" : "+"}{num(Math.abs(entry.creditsDelta))}</td>
-                <td className="px-5 py-3.5 text-right tabular-nums text-ink">{num(entry.balanceAfter)}</td>
+              return <tr key={entry.id} className={table.rowCompact}>
+                <td className="whitespace-nowrap px-4 py-2 text-muted">{day(entry.createdAt)}</td>
+                <td className="px-4 py-2 font-medium text-ink">{entry.description}</td>
+                <td className="px-4 py-2"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${chip.cls}`}><span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />{chip.text}</span></td>
+                <td className="px-4 py-2 text-muted">{label(sourceLabel, entry.sourceType)}</td>
+                <td className={`px-4 py-2 text-right font-semibold tabular-nums ${entry.creditsDelta < 0 ? "text-rose-700" : "text-emerald-700"}`}>{entry.creditsDelta < 0 ? "−" : "+"}{num(Math.abs(entry.creditsDelta))}</td>
+                <td className="px-4 py-2 text-right tabular-nums text-ink">{num(entry.balanceAfter)}</td>
               </tr>;
             })}
           </tbody>
-        </table></div>
+        </table></HoverScrollX>
         {totalPages > 1 && <div className="flex items-center justify-between gap-3 border-t border-line/70 px-5 py-3">
           <Button size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}><ChevronLeft size={16} /> Previous</Button>
           <span className="text-sm text-muted">Page {page} of {totalPages}</span>
           <Button size="sm" variant="secondary" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)}>Next <ChevronRight size={16} /></Button>
         </div>}
-      </> : <div className="overflow-x-auto"><table className="w-full text-left text-sm">
-        <thead className="bg-slate-50/80 text-muted"><tr><th className="px-5 py-3 font-medium">Requested</th><th className="px-5 py-3 text-right font-medium">Credits</th><th className="px-5 py-3 text-right font-medium">Value</th><th className="px-5 py-3 font-medium">Status</th><th className="px-5 py-3 font-medium">Note</th>{!isClient && <th className="px-5 py-3 text-right font-medium">Actions</th>}</tr></thead>
-        <tbody className="divide-y divide-line/70">
+      </> : <HoverScrollX><table className={table.root}>
+        <thead className={table.head}><tr className={table.headRow}><th className={table.th}>Requested</th><th className={`${table.th} text-right`}>Credits</th><th className={`${table.th} text-right`}>Value</th><th className={table.th}>Status</th><th className={table.th}>Note</th>{!isClient && <th className={`${table.th} text-right`}>Actions</th>}</tr></thead>
+        <tbody>
           {!requests.length ? <tr><td colSpan={6} className="px-5 py-12 text-center text-muted">No credit requests yet.</td></tr> : requests.map((request) => {
             const status = requestStatus[request.status] ?? { text: titleCase(request.status.replace(/_/g, " ")), cls: "bg-slate-100 text-slate-700" };
-            return <tr key={request.id}>
-              <td className="whitespace-nowrap px-5 py-3.5 text-muted">{day(request.createdAt)}</td>
-              <td className="px-5 py-3.5 text-right font-semibold tabular-nums text-ink">{num(request.requestedCredits)}</td>
-              <td className="px-5 py-3.5 text-right tabular-nums">{rupees(request.amountDueMinor)}</td>
-              <td className="px-5 py-3.5"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${status.cls}`}>{status.text}</span></td>
-              <td className="max-w-xs truncate px-5 py-3.5 text-muted">{request.status === "rejected" && request.reviewNote ? `Reason: ${request.reviewNote}` : request.note || "—"}</td>
-              {!isClient && <td className="px-5 py-3.5"><div className="flex flex-wrap justify-end gap-2">
+            return <tr key={request.id} className={table.rowCompact}>
+              <td className="whitespace-nowrap px-4 py-2 text-muted">{day(request.createdAt)}</td>
+              <td className="px-4 py-2 text-right font-semibold tabular-nums text-ink">{num(request.requestedCredits)}</td>
+              <td className="px-4 py-2 text-right tabular-nums">{rupees(request.amountDueMinor)}</td>
+              <td className="px-4 py-2"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${status.cls}`}>{status.text}</span></td>
+              <td className="max-w-xs truncate px-4 py-2 text-muted">{request.status === "rejected" && request.reviewNote ? `Reason: ${request.reviewNote}` : request.note || "—"}</td>
+              {!isClient && <td className="px-4 py-2"><div className="flex flex-wrap justify-end gap-2">
                 {["pending_review", "awaiting_payment", "payment_submitted"].includes(request.status) && <Button size="sm" onClick={() => openReview(request, "approve")}>Approve</Button>}
                 {request.status === "pending_review" && <Button size="sm" variant="secondary" className="text-rose-700" onClick={() => openReview(request, "reject")}>Reject</Button>}
               </div></td>}
             </tr>;
           })}
         </tbody>
-      </table></div>}
+      </table></HoverScrollX>}
     </Card>
     <Sheet open={!!review} locked={reviewing} labelledBy="credit-review-title" className="max-w-md" onClose={() => setReview(null)}>
       {review && <form noValidate onSubmit={submitReview} className="space-y-5">
         <div>
-          <h2 id="credit-review-title" className="text-2xl font-semibold text-ink">{review.action === "approve" ? "Approve request" : "Reject request"}</h2>
+          <h2 id="credit-review-title" className="text-xl font-semibold text-ink">{review.action === "approve" ? "Approve request" : "Reject request"}</h2>
           <p className="mt-1 text-sm text-muted">{num(review.request.requestedCredits)} credits requested</p>
         </div>
         {review.action === "approve" && <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-muted">Approving adds {num(review.request.requestedCredits)} credits to the client’s balance straight away.</p>}

@@ -67,7 +67,7 @@ export function ProfileForm() {
         <InputField label="Mobile number" name="mobileNumber" type="tel" value={form.mobileNumber} onChange={set("mobileNumber")} error={errors.mobileNumber} autoComplete="tel" placeholder="+919876543210" />
         <div className="space-y-1.5">
           <p className="text-sm font-medium text-ink">Role</p>
-          <p className="min-h-12 rounded-xl border border-line bg-slate-50 px-4 py-3 text-base text-muted">{ROLE_LABEL[user.platformRole]}</p>
+          <p className="min-h-10 rounded-[9px] border border-line bg-slate-50 px-3 py-2 text-sm text-muted">{ROLE_LABEL[user.platformRole]}</p>
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" disabled={!dirty || saving} onClick={() => { setForm(saved); setErrors({}); }}>Reset</Button>

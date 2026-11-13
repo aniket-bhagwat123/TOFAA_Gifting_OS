@@ -20,7 +20,7 @@ const aliases: Record<string, string[]> = {
   anniversaryDate: ["anniversary", "anniversary date"],
   remark: ["remark", "note", "notes"]
 };
-const template = "Name,Mobile,Address,City,PIN code,Birthday,Anniversary,Remark\nRohan Mehta,+919876543210,12 Marine Drive,Mumbai,400020,1990-11-09,,Prefers single malt\n";
+export const RECIPIENT_TEMPLATE = "Name,Mobile,Address,City,PIN code,Birthday,Anniversary,Remark\nRohan Mehta,+919876543210,12 Marine Drive,Mumbai,400020,1990-11-09,,Prefers single malt\n";
 
 interface ParsedRow { line: number; name: string; payload?: Record<string, unknown>; error?: string }
 
@@ -84,7 +84,7 @@ export function ImportCsvSheet({ open, endpoint, onClose, onDone }: { open: bool
   return <Sheet open={open} locked={busy} onClose={close} labelledBy="import-title" className="max-w-xl">
     <h2 id="import-title" className="text-xl font-semibold text-ink">Import recipients from CSV</h2>
     <p className="mt-1 text-base text-muted">Add many recipients at once. Dates can be 2025-11-09 or 09/11/2025.</p>
-    <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(template)}`} download="recipients-template.csv" className="press mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl border border-line px-3.5 text-sm font-medium text-ink hover:bg-slate-50"><Download size={16} /> Download template</a>
+    <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(RECIPIENT_TEMPLATE)}`} download="recipients-template.csv" className="press mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl border border-line px-3.5 text-sm font-medium text-ink hover:bg-slate-50"><Download size={16} /> Download template</a>
 
     <label className="mt-5 flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-line px-6 py-8 text-center transition hover:border-brand/50 hover:bg-brand/5">
       <FileUp size={26} className="text-brand" />

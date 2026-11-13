@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Info, List as ListIcon, MoreVertical, Plus, Search } from "lucide-react";
+import { control, iconButton, table } from "@/components/ui/table-styles";
+import { Tab as TabItem, TabBar } from "@/components/ui/tab-bar";
+import { SearchInput } from "@/components/ui/search-input";
 import { Button } from "@/components/ui/button";
+import { HoverScrollX } from "@/components/ui/hover-scroll-x";
 import { Card } from "@/components/ui/card";
 import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Sheet } from "@/components/ui/sheet";
@@ -79,34 +83,30 @@ export function OccasionsBoard() {
     else proceed(item, kind);
   };
 
-  if (!tenantId) return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900">{isClient ? "Your account isn't linked to an organisation yet. Please contact TOFAA." : "Choose a client from the “Viewing” menu at the top first."}</div>;
+  if (!tenantId) return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{isClient ? "Your account isn't linked to an organisation yet. Please contact TOFAA." : "Choose a client from the “Viewing” menu at the top first."}</div>;
 
   const months = Array.from({ length: 24 }, (_, i) => new Date(new Date().getFullYear(), new Date().getMonth() - 6 + i, 1));
-  const controlClass = "min-h-11 rounded-2xl border border-line bg-white px-4 text-sm text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15";
-  const selectIcon = <CalendarDays size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-brand" aria-hidden />;
-  const chevron = <ChevronDown size={15} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden />;
+  const controlClass = control;
+  const selectIcon = <CalendarDays size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-brand" aria-hidden />;
+  const chevron = <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden />;
 
   return <div className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div role="tablist" aria-label="View" className="inline-flex gap-1 rounded-2xl bg-white p-1 shadow-soft ring-1 ring-line/60">
-        {([["calendar", "Calendar", CalendarDays], ["list", "List", ListIcon]] as const).map(([key, label, Icon]) => <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)} className={cn("press flex min-h-10 items-center gap-2 rounded-xl px-5 text-sm font-semibold", view === key ? "bg-brand text-white" : "text-slate-700 hover:bg-black/5")}><Icon size={16} />{label}</button>)}
-      </div>
+      <TabBar label="View">
+        {([["calendar", "Calendar", CalendarDays], ["list", "List", ListIcon]] as const).map(([key, label, Icon]) => <TabItem key={key} variant="solid" active={view === key} onClick={() => setView(key)} icon={<Icon size={16} />}>{label}</TabItem>)}
+      </TabBar>
       <div className="flex flex-1 flex-wrap items-center justify-end gap-2.5">
-        <label className="relative block min-w-0 flex-1 sm:w-72 sm:flex-none">
-          <span className="sr-only">Search recipient or occasion</span>
-          <Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" aria-hidden />
-          <input type="search" value={text} onChange={(event) => setText(event.target.value)} placeholder="Search recipient or occasion…" className={cn(controlClass, "w-full pl-11")} />
-        </label>
+        <SearchInput value={text} onChange={setText} placeholder="Search recipient or occasion…" />
         {view === "calendar"
           ? <label className="relative"><span className="sr-only">Month</span>{selectIcon}
-            <select value={`${month.getFullYear()}-${month.getMonth()}`} onChange={(event) => { const [y, m] = event.target.value.split("-").map(Number); setMonth(new Date(y, m, 1)); }} className={cn(controlClass, "appearance-none pl-10 pr-9 font-medium")}>
+            <select value={`${month.getFullYear()}-${month.getMonth()}`} onChange={(event) => { const [y, m] = event.target.value.split("-").map(Number); setMonth(new Date(y, m, 1)); }} className={cn(controlClass, "appearance-none pl-9 pr-8 font-medium")}>
               {months.map((value) => <option key={`${value.getFullYear()}-${value.getMonth()}`} value={`${value.getFullYear()}-${value.getMonth()}`}>{value.toLocaleDateString("en-GB", { month: "short", year: "numeric" })}</option>)}
             </select>{chevron}</label>
           : <label className="relative"><span className="sr-only">Date range</span>{selectIcon}
-            <select value={range} onChange={(event) => { setRange(event.target.value); setPage(1); }} className={cn(controlClass, "appearance-none pl-10 pr-9 font-medium")}>
+            <select value={range} onChange={(event) => { setRange(event.target.value); setPage(1); }} className={cn(controlClass, "appearance-none pl-9 pr-8 font-medium")}>
               {RANGES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>{chevron}</label>}
-        {canPlan && <Button size="lg" className="min-h-11 rounded-2xl" onClick={() => setForm({ item: null })}><Plus size={18} /> Add Occasion</Button>}
+        {canPlan && <Button size="lg" onClick={() => setForm({ item: null })}><Plus size={16} /> Add Occasion</Button>}
       </div>
     </div>
 
@@ -129,48 +129,48 @@ export function OccasionsBoard() {
     {view === "calendar"
       ? <CalendarView month={month} items={data?.items ?? []} loading={loading && !data} onSelect={setSelected} />
       : <>
-        <div className="flex items-center gap-2 rounded-2xl bg-white p-1.5 shadow-soft ring-1 ring-line/60">
-        <div role="tablist" aria-label="Status" className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {TABS.map(({ key, label }) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setPage(1); }} className={cn("press relative min-h-10 shrink-0 whitespace-nowrap rounded-xl px-3 text-sm font-semibold xl:px-4", tab === key ? "bg-brand-soft text-brand" : "text-slate-700 hover:bg-black/5")}>{label} <span className="tabular-nums">({count(key)})</span></button>)}
-        </div>
+        <div className="flex items-center gap-2 rounded-xl bg-white p-1.5 ring-1 ring-line/70">
+        <TabBar bare label="Status" wrapperClassName="min-w-0 flex-1">
+          {TABS.map(({ key, label }) => <TabItem key={key} active={tab === key} count={count(key)} onClick={() => { setTab(key); setPage(1); }}>{label}</TabItem>)}
+        </TabBar>
         <div className="flex shrink-0 items-center gap-2 border-l border-line/70 pl-2 pr-0.5 text-sm text-muted">
           <label htmlFor="occ-sort" className="hidden 2xl:block">Sort by:</label>
-          <select id="occ-sort" value={sort} onChange={(event) => { setSort(event.target.value as Sort); setPage(1); }} aria-label="Sort by" className="min-h-10 rounded-xl border border-line bg-white px-2.5 py-1.5 text-sm font-medium text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15">{SORTS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select>
+          <select id="occ-sort" value={sort} onChange={(event) => { setSort(event.target.value as Sort); setPage(1); }} aria-label="Sort by" className={cn(control, "h-9 px-2.5 font-medium")}>{SORTS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select>
         </div>
         </div>
 
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[56rem] text-left text-sm">
-              <thead className="bg-brand-soft/60 text-slate-700"><tr>{["Recipient / Event", "Occasion", "Date & Countdown", "Status", "Budget", "Action"].map((heading) => <th key={heading} scope="col" className="px-5 py-3.5 font-semibold">{heading}</th>)}</tr></thead>
-              <tbody className="divide-y divide-line/60">
+          <HoverScrollX>
+            <table className={cn(table.root, "min-w-[56rem]")}>
+              <thead className={table.head}><tr className={table.headRow}>{["Recipient / Event", "Occasion", "Date & Countdown", "Status", "Budget", "Action"].map((heading) => <th key={heading} scope="col" className={table.th}>{heading}</th>)}</tr></thead>
+              <tbody>
                 {loading && !data ? <tr><td colSpan={6} className="px-5 py-16"><div className="flex justify-center"><Spinner /></div></td></tr>
                   : !data?.items.length ? <tr><td colSpan={6} className="px-5 py-16 text-center"><CalendarDays size={28} className="mx-auto text-slate-400" /><p className="mt-3 text-base font-semibold text-ink">{q || tab !== "ALL" ? "Nothing matches" : "No occasions in this range"}</p><p className="mt-1 text-sm text-muted">{q || tab !== "ALL" ? "Try another search or status." : "Add an occasion, or choose a longer range."}</p></td></tr>
                   : data.items.map((item) => {
                     const action = actionFor(item);
                     const { icon: KindIcon, tint } = KIND_META[item.kind];
                     const primary = action.kind === "plan";
-                    return <tr key={item.key} tabIndex={0} onClick={() => setSelected(item)} onKeyDown={(event) => { if (event.key === "Enter" && event.target === event.currentTarget) setSelected(item); }} className={cn("cursor-pointer transition-colors hover:bg-slate-50/80 focus-visible:bg-slate-50 focus-visible:outline-none", loading && "opacity-60")}>
-                      <td className="px-5 py-3.5"><div className="flex items-center gap-3.5"><Subject item={item} /><div className="min-w-0"><p className="truncate font-semibold capitalize text-ink">{item.name}</p><p className="truncate text-xs text-muted">{item.sourceType === "COMPANY" ? "Company Event" : item.relationship ?? ""}</p></div></div></td>
-                      <td className="px-5 py-3.5"><span className="flex items-center gap-2.5 font-medium text-ink"><span aria-hidden className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full", tint)}><KindIcon size={17} /></span>{item.label}</span></td>
-                      <td className="px-5 py-3.5"><p className="font-semibold text-ink">{day(item.date)}</p><p className={cn("text-xs", item.daysAway >= 0 && item.daysAway <= 7 ? "font-medium text-amber-700" : "text-muted")}>{countdownText(item.daysAway)}</p></td>
-                      <td className="px-5 py-3.5"><StatusPill status={item.status} /></td>
+                    return <tr key={item.key} tabIndex={0} onClick={() => setSelected(item)} onKeyDown={(event) => { if (event.key === "Enter" && event.target === event.currentTarget) setSelected(item); }} className={cn(table.row, "cursor-pointer focus-visible:bg-slate-50 focus-visible:outline-none", loading && "opacity-60")}>
+                      <td className={table.td}><div className="flex items-center gap-3"><Subject item={item} /><div className="min-w-0"><p className="truncate font-semibold capitalize text-ink">{item.name}</p><p className="truncate text-xs text-muted">{item.sourceType === "COMPANY" ? "Company Event" : item.relationship ?? ""}</p></div></div></td>
+                      <td className={table.td}><span className="flex items-center gap-3 text-sm font-medium text-ink"><span aria-hidden className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full", tint)}><KindIcon size={20} /></span>{item.label}</span></td>
+                      <td className={table.td}><p className="text-sm font-semibold tabular-nums text-ink">{day(item.date)}</p><p className={cn("text-xs", item.daysAway >= 0 && item.daysAway <= 7 ? "font-medium text-amber-700" : "text-muted")}>{countdownText(item.daysAway)}</p></td>
+                      <td className={table.td}><StatusPill status={item.status} /></td>
                       <td className="px-5 py-3.5 font-semibold tabular-nums text-ink">{item.budget ? inr(item.budget) : "—"}</td>
-                      <td className="px-5 py-3.5"><div className="flex items-center gap-2">
-                        <button type="button" disabled={(action.kind === "plan" || action.kind === "create") && !canPlan} onClick={(event) => { event.stopPropagation(); act(item); }} className={cn("press inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border px-4 text-sm font-semibold disabled:opacity-50", primary ? "border-brand bg-brand text-white hover:bg-brand-dark" : "border-brand/60 bg-white text-brand hover:bg-brand-soft")}>{action.label}<ArrowRight size={15} aria-hidden /></button>
-                        <button type="button" aria-label={`More for ${item.name}`} onClick={(event) => { event.stopPropagation(); setSelected(item); }} className="press flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"><MoreVertical size={16} /></button>
+                      <td className={table.td}><div className="flex items-center gap-1.5">
+                        <button type="button" disabled={(action.kind === "plan" || action.kind === "create") && !canPlan} onClick={(event) => { event.stopPropagation(); act(item); }} className={cn("press inline-flex min-h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-sm font-semibold disabled:opacity-50", primary ? "border-brand bg-brand text-white hover:bg-brand-dark" : "border-brand/60 bg-white text-brand hover:bg-brand-soft")}>{action.label}<ArrowRight size={15} aria-hidden /></button>
+                        <button type="button" aria-label={`More for ${item.name}`} onClick={(event) => { event.stopPropagation(); setSelected(item); }} className={iconButton}><MoreVertical size={16} /></button>
                       </div></td>
                     </tr>;
                   })}
               </tbody>
             </table>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line/60 px-5 py-3.5 text-sm text-muted">
+          </HoverScrollX>
+          <div className={cn(table.footer, "text-sm text-muted")}>
             <p className="flex items-center gap-2"><Info size={16} aria-hidden />{total ? `Showing ${(page - 1) * PAGE_SIZE + 1} – ${Math.min(page * PAGE_SIZE, total)} of ${total} occasions` : "No occasions to show"}</p>
             {pages > 1 && <nav aria-label="Pages" className="flex items-center gap-1.5">
-              <button type="button" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage(page - 1)} className="press flex h-9 w-9 items-center justify-center rounded-full border border-line bg-white disabled:opacity-40"><ChevronLeft size={16} /></button>
-              {Array.from({ length: pages }, (_, i) => i + 1).filter((n) => n === 1 || n === pages || Math.abs(n - page) <= 1).map((n, i, list) => <span key={n} className="flex items-center gap-1.5">{i > 0 && n - list[i - 1] > 1 && <span aria-hidden>…</span>}<button type="button" aria-current={n === page ? "page" : undefined} onClick={() => setPage(n)} className={cn("press h-9 min-w-9 rounded-full px-2 text-sm font-semibold", n === page ? "bg-brand text-white" : "border border-line bg-white text-slate-700")}>{n}</button></span>)}
-              <button type="button" aria-label="Next page" disabled={page >= pages} onClick={() => setPage(page + 1)} className="press flex h-9 w-9 items-center justify-center rounded-full border border-line bg-white disabled:opacity-40"><ChevronRight size={16} /></button>
+              <button type="button" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage(page - 1)} className="press flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-white disabled:opacity-40"><ChevronLeft size={16} /></button>
+              {Array.from({ length: pages }, (_, i) => i + 1).filter((n) => n === 1 || n === pages || Math.abs(n - page) <= 1).map((n, i, list) => <span key={n} className="flex items-center gap-1.5">{i > 0 && n - list[i - 1] > 1 && <span aria-hidden>…</span>}<button type="button" aria-current={n === page ? "page" : undefined} onClick={() => setPage(n)} className={cn("press h-9 min-w-9 rounded-lg px-2 text-sm font-semibold tabular-nums", n === page ? "bg-brand text-white" : "border border-line bg-white text-slate-700")}>{n}</button></span>)}
+              <button type="button" aria-label="Next page" disabled={page >= pages} onClick={() => setPage(page + 1)} className="press flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-white disabled:opacity-40"><ChevronRight size={16} /></button>
             </nav>}
           </div>
         </Card>

@@ -32,7 +32,7 @@ export function PasswordField({ label, value, onChange, error, autoComplete = "n
     <label htmlFor={id} className="block text-sm font-medium text-ink"><span>{label}{required && <RequiredMark />}</span></label>
     <div className="relative">
       <input id={id} aria-required={required || undefined} type={visible ? "text" : "password"} value={value} onChange={(event) => onChange(event.target.value)} autoComplete={autoComplete} autoFocus={autoFocus} placeholder={placeholder} spellCheck={false} aria-invalid={error ? "true" : undefined} aria-describedby={error ? `${id}-error` : undefined}
-        className={cn("min-h-12 w-full rounded-xl border bg-white py-3 pl-4 pr-14 text-base text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-4 focus:ring-brand/15", visible && "font-mono tracking-wide", error ? "border-rose-400" : "border-line")} />
+        className={cn("min-h-10 w-full rounded-[9px] border bg-white py-2 pl-3 pr-12 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/25", visible && "font-mono tracking-wide", error ? "border-rose-400" : "border-line")} />
       <button type="button" onClick={() => setVisible((current) => !current)} aria-label={visible ? "Hide password" : "Show password"} aria-pressed={visible} className="press absolute right-1.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-black/5 hover:text-ink">{visible ? <EyeOff size={19} /> : <Eye size={19} />}</button>
     </div>
     {hint && !error && <p className="text-sm text-muted">{hint}</p>}
