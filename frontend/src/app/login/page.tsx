@@ -33,7 +33,7 @@ function LoginForm() {
       toast.success("Welcome back");
       const next = params.get("next");
       router.replace(next?.startsWith("/") ? next : "/home");
-    } catch (error) { toast.error(getApiErrorMessage(error)); }
+    } catch (error) { toast.error(typeof error === "string" ? error : getApiErrorMessage(error)); }
   };
 
   return <form noValidate onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5">

@@ -40,8 +40,9 @@ export function toAuthUser(user: AuthMeResponse) {
     mobileNumber: typeof user.mobile_number === "string" && user.mobile_number ? user.mobile_number : null,
     avatarUrl: typeof user.avatar_url === "string" && user.avatar_url ? user.avatar_url : null,
     platformRole: user.role === "KAM" ? "TOFAA_TEAM" as const : user.role,
-    tenant: user.tenant_id ? { id: user.tenant_id, name: "" } : undefined,
+    tenant: user.tenant_id ? { id: user.tenant_id, name: user.tenant_name ?? "" } : undefined,
     permissions: [],
-    mustResetPassword: user.must_reset_password === true
+    mustResetPassword: user.must_reset_password === true,
+    clientRole: typeof user.client_role === "string" && user.client_role ? user.client_role : null
   };
 }

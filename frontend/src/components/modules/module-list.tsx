@@ -20,6 +20,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
 import { RecipientMultiSelect } from "./recipient-multi-select";
+import { ClientCreateSheet } from "./client-create-sheet";
 import { PasswordField } from "@/components/ui/password-field";
 import { RequiredMark } from "@/components/ui/required-mark";
 import { Avatar } from "@/components/ui/avatar";
@@ -61,6 +62,8 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
   const [eventOptionsError, setEventOptionsError] = useState<string | null>(null);
   const [occasionOptionsError, setOccasionOptionsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [clientCreateOpen, setClientCreateOpen] = useState(false);
+  const [clientEditTarget, setClientEditTarget] = useState<Record<string, unknown> | undefined>(undefined);
   const [userPassword, setUserPassword] = useState("");
   // The calendar is a controlled field: it shows what is kept here, so a pick has to be stored.
   const [dateValues, setDateValues] = useState<Record<string, string>>({});
@@ -285,7 +288,8 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
     return String(value);
   };
   const rowButtons = (row: Record<string, unknown>) => <>
-    {canEdit && <Button size="sm" variant="secondary" onClick={() => { setFieldErrors({}); setSelectedRecipientIds(Array.isArray(row.recipientIds) ? row.recipientIds.map(String) : []); setEditor(row); }}>Edit</Button>}
+    {canEdit && moduleKey === "clients" && <Button size="sm" variant="secondary" onClick={() => setClientEditTarget(row)}>Edit</Button>}
+    {canEdit && moduleKey !== "clients" && <Button size="sm" variant="secondary" onClick={() => { setFieldErrors({}); setSelectedRecipientIds(Array.isArray(row.recipientIds) ? row.recipientIds.map(String) : []); setEditor(row); }}>Edit</Button>}
     {config.deletePath && <Button size="sm" variant="secondary" className="text-rose-700" onClick={() => void deleteRecord(row)}>Delete</Button>}
     {actionsFor(row).map((action) => <Button key={action.label} size="sm" variant="secondary" onClick={() => void runAction(action)}>{action.label}</Button>)}
   </>;
@@ -293,14 +297,16 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
   const emptyState = <EmptyState
     title={search ? "Nothing matches your search" : `No ${config.title.toLowerCase()} yet`}
     description={search ? "Try a different word or clear the search." : config.emptyHint ?? "Once something is added, it will show up here."}
-    action={search ? undefined : moduleKey === "recipients" ? <Link href="/recipients?new=1"><Button><Plus size={17} /> Add person</Button></Link> : canCreate ? <Button onClick={() => { setFieldErrors({}); setEditor(null); }}><Plus size={17} /> Add {noun}</Button> : undefined}
+    action={search ? undefined : moduleKey === "recipients" ? <Link href="/recipients?new=1"><Button><Plus size={17} /> Add person</Button></Link> : moduleKey === "clients" && canCreate ? <Button onClick={() => setClientCreateOpen(true)}><Plus size={17} /> Add client</Button> : canCreate ? <Button onClick={() => { setFieldErrors({}); setEditor(null); }}><Plus size={17} /> Add {noun}</Button> : undefined}
   />;
 
   return <>
+    <ClientCreateSheet open={clientCreateOpen} onClose={() => setClientCreateOpen(false)} onCreated={load} />
+    <ClientCreateSheet open={!!clientEditTarget} editClient={clientEditTarget} onClose={() => setClientEditTarget(undefined)} onCreated={load} />
     <Card className="overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-line/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-sm"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} aria-label={`Search ${config.title.toLowerCase()}`} placeholder={`Search ${config.title.toLowerCase()}`} className={cn(control, "w-full pl-9")} /></div>
-        {moduleKey === "recipients" ? <Link href="/recipients?new=1"><Button variant="primary" size="lg"><Plus size={16} /> Add person</Button></Link> : canCreate ? <Button variant="primary" size="lg" onClick={() => { setFieldErrors({}); setSelectedRecipientIds([]); setSelectedGiftRecipientId(""); setSelectedGiftEventId(""); setSelectedGiftOccasionId(""); setEditor(null); }}><Plus size={16} /> Add {noun}</Button> : null}
+        {moduleKey === "recipients" ? <Link href="/recipients?new=1"><Button variant="primary" size="lg"><Plus size={16} /> Add person</Button></Link> : moduleKey === "clients" && canCreate ? <Button variant="primary" size="lg" onClick={() => setClientCreateOpen(true)}><Plus size={16} /> Add client</Button> : canCreate ? <Button variant="primary" size="lg" onClick={() => { setFieldErrors({}); setSelectedRecipientIds([]); setSelectedGiftRecipientId(""); setSelectedGiftEventId(""); setSelectedGiftOccasionId(""); setEditor(null); }}><Plus size={16} /> Add {noun}</Button> : null}
       </div>
       {typeof endpoint === "string" && entry?.error && <div role="alert" className="m-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"><span>We couldn't load this just now. {entry.error}</span><Button size="sm" variant="secondary" onClick={load}>Try again</Button></div>}
       {typeof endpoint !== "string" && <div role="alert" className="m-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{endpoint}</div>}

@@ -24,6 +24,7 @@ class UserInviteCreate(BaseModel):
     email: str = Field(max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     full_name: str | None = Field(default=None, max_length=150)
     role: UserRole = UserRole.CLIENT
+    client_role: str | None = Field(default=None, description="Business role within the client org (OWNER, EA, HR). Stored in user metadata; not a platform permission.")
     password: str | None = Field(
         default=None,
         min_length=8,
@@ -48,6 +49,7 @@ class UserUpdate(BaseModel):
 
     full_name: str | None = Field(default=None, max_length=150)
     is_active: bool | None = Field(default=None)
+    client_role: str | None = Field(default=None, description="Business role within the client org (OWNER, EA, HR).")
     password: str | None = Field(
         default=None,
         min_length=8,
@@ -71,6 +73,7 @@ class UserRead(BaseModel):
     full_name: str | None = None
     avatar_url: str | None = None
     role: UserRole
+    client_role: str | None = None
     is_active: bool
     tenant_status: TenantStatus
     created_at: datetime | str

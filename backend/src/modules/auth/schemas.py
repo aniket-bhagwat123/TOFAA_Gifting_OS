@@ -78,6 +78,8 @@ class UserProfileResponse(BaseModel):
     tenant_id: str | None = Field(default=None, description="The user's tenant. Null when the account has no tenant, such as a platform super admin.")
     is_active: bool = Field(default=True, description="Account active status")
     must_reset_password: bool = Field(default=False, description="Whether the user must replace their temporary password")
+    client_role: str | None = Field(default=None, description="Business role within a client org (OWNER/EA/HR); null for platform staff")
+    tenant_name: str | None = Field(default=None, description="Display name of the user's tenant organisation")
     created_at: datetime | str | None = Field(default=None, description="Timestamp user was created")
     updated_at: datetime | str | None = Field(default=None, description="Timestamp profile was last updated")
 

@@ -54,8 +54,9 @@ class UserService:
         )
         rows = result.data or []
         total_records = result.count or 0
+        meta_map = self._fetch_user_metadata([row["profiles"]["id"] for row in rows])
         return UserList(
-            items=[self._to_user(row) for row in rows],
+            items=[self._to_user(row, meta_map.get(row["profiles"]["id"])) for row in rows],
             pagination=PaginationMeta(page=page, limit=limit, total_records=total_records),
             next_cursor=next_page_cursor(page, limit, total_records),
         )
@@ -165,12 +166,15 @@ class UserService:
 
         try:
             temporary_password = payload.password or self._generate_temporary_password()
+            meta: dict[str, Any] = {"full_name": payload.full_name or ""}
+            if payload.client_role:
+                meta["client_role"] = payload.client_role
             auth_result = self.database.auth.admin.create_user(
                 {
                     "email": email,
                     "password": temporary_password,
                     "email_confirm": True,
-                    "user_metadata": {"full_name": payload.full_name or ""},
+                    "user_metadata": meta,
                 }
             )
             invited_user = getattr(auth_result, "user", None)
@@ -253,7 +257,9 @@ class UserService:
         )
         if not result.data:
             raise HTTPException(status_code=404, detail="User not found.")
-        return self._to_user(result.data[0])
+        row = result.data[0]
+        meta_map = self._fetch_user_metadata([row["profiles"]["id"]])
+        return self._to_user(row, meta_map.get(row["profiles"]["id"]))
 
     def update_user(
         self,
@@ -265,13 +271,23 @@ class UserService:
         require_permission(actor, Permission.USER_UPDATE)
         tenant_service.require_access(tenant_id, actor)
         self.get_user(tenant_id, user_id, actor)
-        changes = payload.model_dump(mode="json", exclude_unset=True, exclude={"password"})
+        changes = payload.model_dump(mode="json", exclude_unset=True, exclude={"password", "client_role"})
         if payload.password:
             self._set_password(user_id, payload.password)
             changes["must_reset_password"] = False
-        result = self.database.table("profiles").update(changes).eq("id", user_id).execute()
-        if not result.data:
-            raise HTTPException(status_code=404, detail="User not found.")
+        if payload.client_role:
+            try:
+                auth_user = getattr(self.database.auth.admin.get_user_by_id(user_id), "user", None)
+                if auth_user:
+                    meta = dict(auth_user.user_metadata or {})
+                    meta["client_role"] = payload.client_role
+                    self.database.auth.admin.update_user_by_id(user_id, {"user_metadata": meta})
+            except Exception:
+                logger.warning("Could not update client_role in user metadata for %s", user_id)
+        if changes:
+            result = self.database.table("profiles").update(changes).eq("id", user_id).execute()
+            if not result.data:
+                raise HTTPException(status_code=404, detail="User not found.")
         return self.get_user(tenant_id, user_id, actor)
 
     def set_avatar(self, user_id: str, *, content: bytes | None, content_type: str = "") -> UserProfileResponse:
@@ -479,8 +495,21 @@ class UserService:
         )
         return query.eq("profiles.role", UserRole.CLIENT.value) if clients_only else query
 
+    def _fetch_user_metadata(self, user_ids: list[str]) -> dict[str, dict]:
+        """Fetch Supabase auth user_metadata for a list of user IDs. Returns {user_id: metadata}."""
+        result: dict[str, dict] = {}
+        for uid in user_ids:
+            try:
+                auth_resp = self.database.auth.admin.get_user_by_id(uid)
+                auth_user = getattr(auth_resp, "user", None)
+                if auth_user:
+                    result[uid] = dict(auth_user.user_metadata or {})
+            except Exception:
+                pass
+        return result
+
     @staticmethod
-    def _to_user(row: dict[str, Any]) -> UserRead:
+    def _to_user(row: dict[str, Any], meta: dict | None = None) -> UserRead:
         profile = row["profiles"]
         return UserRead(
             id=profile["id"],
@@ -489,6 +518,7 @@ class UserService:
             full_name=profile.get("full_name"),
             avatar_url=profile.get("avatar_url"),
             role=profile["role"],
+            client_role=(meta or {}).get("client_role"),
             is_active=profile["is_active"],
             tenant_status=row["tenants"]["status"],
             created_at=row["created_at"],

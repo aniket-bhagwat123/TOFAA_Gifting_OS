@@ -29,7 +29,7 @@ class TenantService:
     def create(self, payload: TenantCreate, actor: UserProfileResponse) -> TenantRead:
         require_permission(actor, Permission.TENANT_CREATE)
         values = payload.model_dump(
-            mode="json", exclude_unset=True, exclude={"first_user_email", "first_user_name"}
+            mode="json", exclude_unset=True, exclude={"first_user_email", "first_user_name", "users"}
         )
         if values.get("email_domain"):
             values["email_domain"] = self._normalize_domain(values["email_domain"])
@@ -101,7 +101,7 @@ class TenantService:
     ) -> TenantRead:
         require_permission(actor, Permission.TENANT_UPDATE)
         self.require_access(tenant_id, actor)
-        values = payload.model_dump(mode="json", exclude_unset=True)
+        values = payload.model_dump(mode="json", exclude_unset=True, exclude={"users", "deactivate_user_ids"})
         if "email_domain" in values and values["email_domain"]:
             values["email_domain"] = self._normalize_domain(values["email_domain"])
         audit.note(actor, tenant_id)

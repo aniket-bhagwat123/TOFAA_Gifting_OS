@@ -1,5 +1,6 @@
 """Tenant management routes."""
 
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -12,15 +13,53 @@ from src.modules.auth.authorization import SuperAdminDep
 from src.modules.auth.dependencies import CurrentUserDep
 from src.modules.auth.rbac import Role
 from src.modules.tenants.models import TenantStatus
-from src.modules.tenants.schemas import TenantCreate, TenantList, TenantRead, TenantUpdate
+from src.modules.tenants.schemas import TenantCreate, TenantList, TenantRead, TenantUpdate, TenantUserUpsert
 from src.modules.tenants.service import tenant_service
-from src.modules.users.schemas import UserInviteCreate
+from src.modules.users.schemas import UserInviteCreate, UserUpdate
 from src.modules.users.service import user_service
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
 # Mounted behind the tenant guard because its path names a tenant.
 activity_router = APIRouter(tags=["Activity"])
+
+
+def _apply_users(tenant_id: str, users: list[TenantUserUpsert], actor) -> list[str]:
+    """Create or update users listed in a tenant payload. Returns warning strings for failures."""
+    warnings: list[str] = []
+    for u in users:
+        try:
+            if u.id:
+                # Update existing user — only the fields that were supplied
+                update_fields: dict = {"client_role": str(u.role)}
+                if u.full_name is not None:
+                    update_fields["full_name"] = u.full_name
+                if u.password:
+                    update_fields["password"] = u.password
+                user_service.update_user(tenant_id, u.id, UserUpdate(**update_fields), actor)
+            else:
+                # Create new user under this tenant — always CLIENT platform role
+                user_service.create_invitation(
+                    tenant_id,
+                    UserInviteCreate(
+                        email=u.email,
+                        full_name=u.full_name,
+                        password=u.password,
+                        role=Role.CLIENT,
+                        client_role=str(u.role),
+                        send_invitation=False,
+                    ),
+                    actor,
+                )
+        except HTTPException as exc:
+            label = u.email or u.id or "unknown"
+            warnings.append(f"{label}: {exc.detail}")
+        except Exception:
+            label = u.email or u.id or "unknown"
+            logger.exception("Unexpected error processing user %s for tenant %s", label, tenant_id)
+            warnings.append(f"{label}: unexpected error.")
+    return warnings
 
 
 @router.post("", response_model=ApiResponse[TenantRead], status_code=status.HTTP_201_CREATED)
@@ -28,20 +67,23 @@ def create_tenant(
     payload: Annotated[TenantCreate, Body()],
     actor: SuperAdminDep,
 ) -> ApiResponse[TenantRead]:
-    """Create a tenant, and optionally invite its first user in the same step."""
+    """Create a tenant and all its initial users in one request."""
     tenant = tenant_service.create(payload, actor)
-    warning = None
-    if payload.first_user_email:
-        try:
-            user_service.create_invitation(
-                tenant.id,
-                UserInviteCreate(email=payload.first_user_email, full_name=payload.first_user_name),
-                actor,
-            )
-        except HTTPException as exc:
-            warning = f"The client was created, but the invitation wasn't sent: {exc.detail} Open Users to try again."
+
+    # Create every listed user under the new tenant — no separate API call needed.
+    from src.modules.tenants.schemas import TenantUserUpsert as _Upsert
+    upsert_users = [
+        _Upsert(email=u.email, full_name=u.full_name, password=u.password, role=u.role)
+        for u in payload.users
+    ]
+    warnings = _apply_users(tenant.id, upsert_users, actor)
+
+    warning_msg = (
+        f"Client created but {len(warnings)} user(s) could not be added: {'; '.join(warnings)}"
+        if warnings else None
+    )
     return ApiResponse(
-        data=tenant.model_copy(update={"invitation_warning": warning}),
+        data=tenant.model_copy(update={"invitation_warning": warning_msg}),
         message="Tenant created successfully.",
     )
 
@@ -68,10 +110,21 @@ def update_tenant(
     payload: Annotated[TenantUpdate, Body()],
     actor: CurrentUserDep,
 ) -> ApiResponse[TenantRead]:
-    return ApiResponse(
-        data=tenant_service.update(str(tenant_id), payload, actor),
-        message="Tenant updated successfully.",
-    )
+    """Update tenant details, deactivate users, and create/update users — all in one request."""
+    # 1. Update scalar tenant fields (excludes users/deactivate lists)
+    updated = tenant_service.update(str(tenant_id), payload, actor)
+
+    # 2. Deactivate removed users
+    for uid in payload.deactivate_user_ids:
+        try:
+            user_service.deactivate_user(str(tenant_id), uid, actor)
+        except HTTPException as exc:
+            logger.warning("Could not deactivate user %s for tenant %s: %s", uid, tenant_id, exc.detail)
+
+    # 3. Create / update users listed in this request
+    _apply_users(str(tenant_id), payload.users, actor)
+
+    return ApiResponse(data=updated, message="Tenant updated successfully.")
 
 
 @router.put("/{tenant_id}/logo", response_model=ApiResponse[TenantRead])
@@ -112,5 +165,5 @@ def tenant_activity(
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> audit.ActivityList:
-    """Everything changed in this tenant. TOFAA staff appear to clients only as "TOFAA", never by name."""
+    """Everything changed in this tenant. TOFAA staff appear to clients only as 'TOFAA', never by name."""
     return audit.list_activity(str(tenant_id), actor.role != Role.CLIENT, page=page, limit=limit)

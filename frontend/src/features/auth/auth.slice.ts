@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import type { AuthSession, AuthUser } from "@/types/api";
 import { authService, toAuthUser } from "./auth.service";
 import { clearModuleData } from "@/features/modules/modules.slice";
+import { getApiErrorMessage } from "@/services/api-client";
 
 interface AuthState {
   user: AuthUser | null;
@@ -11,11 +12,15 @@ interface AuthState {
 const initialState: AuthState = { user: null, session: null, status: "idle" };
 
 export const loadCurrentUser = createAsyncThunk("auth/me", async () => authService.me());
-export const loginUser = createAsyncThunk("auth/login", async (payload: { email: string; password: string }, { dispatch }) => {
-  const result = await authService.login(payload);
-  if (!result.session) throw new Error("The API did not return an authentication session.");
-  dispatch(clearModuleData());
-  return { user: toAuthUser(result.user), session: result.session };
+export const loginUser = createAsyncThunk("auth/login", async (payload: { email: string; password: string }, { dispatch, rejectWithValue }) => {
+  try {
+    const result = await authService.login(payload);
+    if (!result.session) throw new Error("The API did not return an authentication session.");
+    dispatch(clearModuleData());
+    return { user: toAuthUser(result.user), session: result.session };
+  } catch (error) {
+    return rejectWithValue(getApiErrorMessage(error));
+  }
 });
 export const logoutUser = createAsyncThunk("auth/logout", async (_, { dispatch }) => {
   try { await authService.logout(); } catch { /* local sign-out still completes when the API is unavailable */ }

@@ -59,6 +59,10 @@ class AuthService:
                 # activate the pending membership now; otherwise tenant_id stays null forever.
                 user_profile = self._accept_pending_invitation(user_id, user_profile)
 
+            client_role = (res.user.user_metadata or {}).get("client_role")
+            if client_role:
+                user_profile = user_profile.model_copy(update={"client_role": client_role})
+
             # The password was right, so say what is wrong rather than leaving the user guessing.
             if not user_profile.is_active:
                 raise HTTPException(
@@ -250,6 +254,11 @@ class AuthService:
             # Use admin client to ensure we can read the profile across schema boundaries
             record = self._profile_record(user_id)
             if record:
+                tenant_id, tenant_name = (
+                    self._active_tenant_info_from(record["tenant_memberships"])
+                    if "tenant_memberships" in record
+                    else (self._get_active_tenant_id(user_id), None)
+                )
                 return UserProfileResponse(
                     id=record["id"],
                     email=record.get("email") or default_email or "",
@@ -263,11 +272,8 @@ class AuthService:
                     ),
                     # Only a client's access depends on this. Staff get their home tenant for
                     # information; their access comes from their role and assignments.
-                    tenant_id=(
-                        self._active_tenant_from(record["tenant_memberships"])
-                        if "tenant_memberships" in record
-                        else self._get_active_tenant_id(user_id)
-                    ),
+                    tenant_id=tenant_id,
+                    tenant_name=tenant_name,
                     created_at=record.get("created_at"),
                     updated_at=record.get("updated_at"),
                 ), True
@@ -289,7 +295,7 @@ class AuthService:
         try:
             response = (
                 self.admin_client.table("profiles")
-                .select("*,tenant_memberships(tenant_id,status,tenants(status))")
+                .select("*,tenant_memberships(tenant_id,status,tenants(status,name))")
                 .eq("id", user_id)
                 .limit(1)
                 .execute()
@@ -302,22 +308,45 @@ class AuthService:
     @staticmethod
     def _active_tenant_from(memberships: object) -> str | None:
         """The tenant of an ACTIVE membership whose tenant is ACTIVE too."""
+        tenant_id, _ = AuthService._active_tenant_info_from(memberships)
+        return tenant_id
+
+    @staticmethod
+    def _active_tenant_info_from(memberships: object) -> tuple[str | None, str | None]:
+        """The (tenant_id, tenant_name) of an ACTIVE membership whose tenant is ACTIVE too."""
         if isinstance(memberships, dict):
             memberships = [memberships]
         for membership in memberships or []:
             tenant = membership.get("tenants")
             tenant_status = tenant.get("status") if isinstance(tenant, dict) else None
             if membership.get("status") == "ACTIVE" and tenant_status == "ACTIVE":
-                return str(membership["tenant_id"])
-        return None
+                name = tenant.get("name") if isinstance(tenant, dict) else None
+                return str(membership["tenant_id"]), (str(name) if name else None)
+        return None, None
 
     def _accept_pending_invitation(self, user_id: str, profile: UserProfileResponse) -> UserProfileResponse:
         """Activate an unaccepted invitation and reload the profile; unchanged if there is nothing to accept."""
         try:
             self.admin_client.rpc("accept_tenant_invitation", {"p_user_id": user_id}).execute()
         except Exception as exc:
-            logger.info("No pending invitation could be accepted for user %s: %s", user_id, exc)
-            return profile
+            logger.info("RPC accept_tenant_invitation failed for %s (%s) — trying direct membership promotion", user_id, exc)
+            # Fallback: the invitation may already be ACCEPTED (admin-created users) but the
+            # membership row was never promoted from INVITED to ACTIVE.  Promote it directly.
+            try:
+                result = (
+                    self.admin_client.table("tenant_memberships")
+                    .update({"status": "ACTIVE"})
+                    .eq("user_id", user_id)
+                    .eq("status", "INVITED")
+                    .execute()
+                )
+                if not result.data:
+                    logger.warning("No INVITED membership found to promote for user %s", user_id)
+                    return profile
+                self.admin_client.table("profiles").update({"is_active": True}).eq("id", user_id).execute()
+            except Exception as fallback_exc:
+                logger.warning("Direct membership promotion also failed for user %s: %s", user_id, fallback_exc)
+                return profile
         return self.get_profile_by_id(
             user_id,
             default_email=profile.email,

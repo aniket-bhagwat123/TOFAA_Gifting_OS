@@ -27,10 +27,12 @@ export interface AuthUser {
   permissions: string[];
   /** True while the user is still on a temporary password (e.g. just invited). */
   mustResetPassword: boolean;
+  /** Business role within the client org; null for platform staff. */
+  clientRole?: string | null;
 }
 
 export interface AuthSession { access_token: string; refresh_token: string; expires_at?: number | null; expires_in?: number | null; token_type?: string }
-export interface AuthMeResponse { id: string; email: string; full_name?: string | null; role: "CLIENT" | "KAM" | "SUPER_ADMIN"; tenant_id?: string | null; [key: string]: unknown }
+export interface AuthMeResponse { id: string; email: string; full_name?: string | null; role: "CLIENT" | "KAM" | "SUPER_ADMIN"; tenant_id?: string | null; tenant_name?: string | null; client_role?: string | null; [key: string]: unknown }
 export interface LoginResponse {
   user: AuthMeResponse;
   session: AuthSession;

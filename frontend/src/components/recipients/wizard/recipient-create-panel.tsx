@@ -145,7 +145,7 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
       }, undefined, SOURCE);
       if (photo) {
         const { sendImage } = await import("@/components/ui/image-upload");
-        await sendImage(`${endpoints.recipients}/${String(editTarget.id)}/photo`, photo).catch(() => undefined);
+        await sendImage("put", `${endpoints.recipients}/${String(editTarget.id)}/photo`, photo).catch(() => undefined);
       }
       toast.success(`${d.name.trim()} updated.`);
       onEdited?.();

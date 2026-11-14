@@ -39,6 +39,9 @@ def get_current_user(
         default_name=token_payload.user_metadata.get("full_name"),
         default_must_reset_password=bool(token_payload.app_metadata.get("must_reset_password")),
     )
+    client_role = token_payload.user_metadata.get("client_role")
+    if client_role:
+        user_profile = user_profile.model_copy(update={"client_role": client_role})
     return user_profile
 
 
