@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronsUpDown, ChevronUp, ChevronDown, Gift, MoreVertical, Pencil, Archive, ArchiveRestore, Trash2 } from "lucide-react";
+import { ChevronsUpDown, ChevronUp, ChevronDown, Gift, MoreVertical, Pencil, Archive, ArchiveRestore, Trash2, Upload } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { HoverScrollX } from "@/components/ui/hover-scroll-x";
@@ -15,7 +15,7 @@ export type SortState = { key: SortKey; descending: boolean };
 
 const COLUMNS: Array<{ label: string; sort?: SortKey }> = [
   { label: "Recipient", sort: "name" }, { label: "Relationship" }, { label: "Group" }, { label: "Mobile", sort: "mobile" }, { label: "City", sort: "city" },
-  { label: "Next occasion", sort: "nextOccasion" }, { label: "Status" },
+  { label: "Next occasion", sort: "nextOccasion" }, { label: "Profile" }, { label: "Status" },
 ];
 const COLUMN_COUNT = COLUMNS.length + 2;
 
@@ -46,10 +46,10 @@ function StatusCell({ status }: { status?: string }) {
   return <span className="inline-flex items-center gap-2 whitespace-nowrap text-sm font-medium text-ink"><span aria-hidden className={cn("h-2 w-2 rounded-full", archived ? "bg-slate-400" : "bg-emerald-500")} />{archived ? "Archived" : "Active"}</span>;
 }
 
-export function RecipientsTable({ rows, loading, selected, onToggle, onTogglePage, sort, onSort, archivedView, filtered, canAdd, onOpen, onGift, onArchive, onDelete, onAdd }: {
+export function RecipientsTable({ rows, loading, selected, onToggle, onTogglePage, sort, onSort, archivedView, filtered, canAdd, onOpen, onGift, onArchive, onDelete, onAdd, onImport }: {
   rows: DirectoryRow[]; loading: boolean; selected: Set<string>; onToggle: (id: string) => void; onTogglePage: () => void;
   sort: SortState; onSort: (key: SortKey) => void; archivedView: boolean; filtered: boolean; canAdd: boolean;
-  onOpen: (row: DirectoryRow) => void; onGift: (row: DirectoryRow) => void; onArchive: (row: DirectoryRow) => void; onDelete: (row: DirectoryRow) => void; onAdd: () => void;
+  onOpen: (row: DirectoryRow) => void; onGift: (row: DirectoryRow) => void; onArchive: (row: DirectoryRow) => void; onDelete: (row: DirectoryRow) => void; onAdd: () => void; onImport?: () => void;
 }) {
   const allOnPage = rows.length > 0 && rows.every((row) => selected.has(String(row.id)));
   return <HoverScrollX>
@@ -87,12 +87,24 @@ export function RecipientsTable({ rows, loading, selected, onToggle, onTogglePag
               <td className={td}>{next
                 ? <div className="flex items-center gap-3"><OccasionIcon kind={next.kind} /><div><p className="whitespace-nowrap text-sm font-semibold text-ink">{next.label}</p><p className="whitespace-nowrap text-xs tabular-nums text-muted">{longDate(next.date)}</p></div></div>
                 : <div className="flex items-center gap-3"><span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center text-slate-300">—</span><div><p className="text-sm text-muted">—</p><p className="text-xs text-muted">No upcoming</p></div></div>}</td>
+              <td className={td}>
+                {row.completeness != null
+                  ? <div className="flex min-w-[80px] flex-col gap-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={cn("text-xs font-semibold tabular-nums", row.completeness.needsAttention ? "text-amber-600" : "text-emerald-600")}>{row.completeness.percent}%</span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                        <div className={cn("h-full rounded-full transition-all", row.completeness.needsAttention ? "bg-amber-400" : "bg-emerald-500")} style={{ width: `${row.completeness.percent}%` }} />
+                      </div>
+                    </div>
+                  : <span className="text-muted">—</span>}
+              </td>
               <td className={td}><StatusCell status={row.status} /></td>
               <td className={table.td}><div className="flex justify-end"><RowMenu row={row} archived={archivedView} onEdit={() => onOpen(row)} onGift={() => onGift(row)} onArchive={() => onArchive(row)} onDelete={() => onDelete(row)} /></div></td>
             </tr>;
           })}
       </tbody>
     </table>
-    {!loading && !rows.length && <EmptyState title={filtered ? "No recipients match" : archivedView ? "No archived recipients" : "No recipients yet"} description={filtered ? "Try a different search or clear the filters." : archivedView ? "People you archive will be listed here." : "Add the people you gift and we'll remind you before every important date."} action={!filtered && !archivedView && canAdd ? <button type="button" onClick={onAdd} className="press inline-flex min-h-10 items-center rounded-[9px] bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark">Add recipient</button> : undefined} />}
+    {!loading && !rows.length && <EmptyState title={filtered ? "No recipients match" : archivedView ? "No archived recipients" : "No recipients yet"} description={filtered ? "Try a different search or clear the filters." : archivedView ? "People you archive will be listed here." : "Add the people you gift and we'll remind you before every important date."} action={!filtered && !archivedView && canAdd ? <div className="flex flex-wrap items-center justify-center gap-2"><button type="button" onClick={onAdd} className="press inline-flex min-h-10 items-center rounded-[9px] bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark">Add recipient</button>{onImport && <button type="button" onClick={onImport} className="press inline-flex min-h-10 items-center gap-1.5 rounded-[9px] border border-line bg-white px-4 text-sm font-semibold text-ink hover:bg-slate-50"><Upload size={15} />Import</button>}</div> : undefined} />}
   </HoverScrollX>;
 }

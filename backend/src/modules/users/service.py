@@ -208,7 +208,24 @@ class UserService:
             if not payload.send_invitation:
                 # Nobody is emailed and the administrator hands over the password, so the account works at
                 # once instead of waiting for a first sign-in that could come after the invitation expires.
-                self.database.rpc("accept_tenant_invitation", {"p_user_id": invited_user_id}).execute()
+                try:
+                    self.database.rpc("accept_tenant_invitation", {"p_user_id": invited_user_id}).execute()
+                except Exception:
+                    # RPC can fail if the membership trigger hasn't run yet or returns no rows.
+                    # Fall back to direct table updates so the user is immediately active.
+                    logger.warning(
+                        "accept_tenant_invitation RPC failed for user %s — falling back to direct table update",
+                        invited_user_id,
+                    )
+                    self.database.table("tenant_memberships").update({"status": "ACTIVE"}).eq(
+                        "user_id", invited_user_id
+                    ).eq("status", "INVITED").execute()
+                    self.database.table("profiles").update({"is_active": True}).eq(
+                        "id", invited_user_id
+                    ).execute()
+                    self.database.table("tenant_invitations").update({"status": "ACCEPTED"}).eq(
+                        "user_id", invited_user_id
+                    ).eq("status", "SENT").execute()
                 sent_record = {**sent_record, "status": "ACCEPTED"}
         except Exception as exc:
             logger.exception("Could not send tenant invitation")
@@ -218,11 +235,7 @@ class UserService:
             if "already been registered" in str(exc).lower():
                 raise HTTPException(
                     status_code=409,
-                    detail=(
-                        "This email already has a Supabase account, likely from an earlier invitation attempt. "
-                        f"List users for tenant {tenant_id}, then resend the existing invitation with "
-                        "POST /api/v1/tenants/{tenant_id}/users/{user_id}/resend-invite."
-                    ),
+                    detail="This email already exists.",
                 ) from exc
             if getattr(exc, "code", None) == "PGRST204":
                 raise HTTPException(

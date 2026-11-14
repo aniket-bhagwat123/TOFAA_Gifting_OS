@@ -122,9 +122,13 @@ def update_tenant(
             logger.warning("Could not deactivate user %s for tenant %s: %s", uid, tenant_id, exc.detail)
 
     # 3. Create / update users listed in this request
-    _apply_users(str(tenant_id), payload.users, actor)
-
-    return ApiResponse(data=updated, message="Tenant updated successfully.")
+    warnings = _apply_users(str(tenant_id), payload.users, actor)
+    warning_msg = (
+        f"Saved but {len(warnings)} user(s) could not be updated: {'; '.join(warnings)}"
+        if warnings else None
+    )
+    response_data = updated.model_copy(update={"invitation_warning": warning_msg}) if warning_msg else updated
+    return ApiResponse(data=response_data, message="Tenant updated successfully.")
 
 
 @router.put("/{tenant_id}/logo", response_model=ApiResponse[TenantRead])

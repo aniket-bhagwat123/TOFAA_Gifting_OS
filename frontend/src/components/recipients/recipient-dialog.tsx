@@ -3,15 +3,52 @@
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { UserPen } from "lucide-react";
+import { Activity, UserPen } from "lucide-react";
 import { toast } from "sonner";
 import { FormPanel, FormSection } from "@/components/ui/form-panel";
 import { Button } from "@/components/ui/button";
 import { ImageUpload, deleteImage, sendImage } from "@/components/ui/image-upload";
 import { recipientCreateSchema, recipientEditSchema } from "@/features/forms/schemas";
-import { mutateModule } from "@/features/modules/module.service";
+import { getModuleRecords, mutateModule } from "@/features/modules/module.service";
 import { getApiErrorMessage, getApiFieldErrors } from "@/services/api-client";
 import { RecipientFields, emptyRecipient, type RecipientFormInput } from "./recipient-fields";
+
+type TrailEntry = { id: string; createdAt: string; actorName: string; action: string; field?: string | null; oldValue?: unknown; newValue?: unknown };
+
+const FIELD_LABELS: Record<string, string> = {
+  name: "Name", mobile_number: "Mobile", email: "Email", company: "Company", city: "City",
+  designation: "Designation", recipient_type: "Type", relationship: "Relationship",
+  date_of_birth: "Birthday", anniversary_date: "Anniversary", address: "Address",
+  budget: "Budget", remark: "Remark", status: "Status", is_primary: "Primary",
+};
+
+function fieldLabel(key: string | null | undefined): string {
+  return key ? (FIELD_LABELS[key] ?? key.replace(/_/g, " ")) : "";
+}
+
+function trailSummary(entry: TrailEntry): string {
+  if (entry.action === "CREATE") return "Recipient created";
+  if (entry.action === "IMPORT") return "Imported";
+  if (entry.action === "DELETE") return "Recipient deleted";
+  if (entry.action === "ARCHIVE") return `Status → Archived`;
+  if (entry.action === "RESTORE") return `Status → Active`;
+  if (entry.action === "UPDATE" && entry.field?.startsWith("status:")) return `Info status updated`;
+  if (entry.field) {
+    const label = fieldLabel(entry.field);
+    const newVal = entry.newValue !== null && entry.newValue !== undefined ? String(entry.newValue) : "—";
+    return `${label} → ${newVal.length > 30 ? newVal.slice(0, 30) + "…" : newVal}`;
+  }
+  return entry.action;
+}
+
+function timeAgo(iso: string): string {
+  const diff = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 2592000) return `${Math.floor(diff / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
 
 export type RecipientRow = Record<string, unknown> & { id?: string; address?: { addressLine1?: string; city?: string; postalCode?: string } };
 /** A recipient to edit, or "new" to add one. */
@@ -33,7 +70,16 @@ export function RecipientDialog({ target, endpoint, onClose, onSaved, onDelete, 
   const row = target && target !== "new" ? target : null;
   const addAnother = useRef(false);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [trail, setTrail] = useState<TrailEntry[] | null>(null);
   useEffect(() => { setPhoto(row ? ((row.avatarUrl as string | null | undefined) ?? null) : null); }, [row]);
+  useEffect(() => {
+    if (!row?.id || !endpoint) { setTrail(null); return; }
+    let cancelled = false;
+    getModuleRecords(`${endpoint}/${row.id}/activity`, { page: 1, limit: 8 })
+      .then((res) => { if (!cancelled) setTrail(((res as Record<string, unknown>)?.items as TrailEntry[] | undefined) ?? (Array.isArray(res) ? res as TrailEntry[] : null)); })
+      .catch(() => { if (!cancelled) setTrail([]); });
+    return () => { cancelled = true; };
+  }, [row?.id, endpoint]);
   const { register, control, handleSubmit, setError, setValue, watch, reset, setFocus, formState: { errors, isSubmitting } } = useForm<RecipientFormInput>({ resolver: zodResolver((adding ? recipientCreateSchema : recipientEditSchema) as never) as never, defaultValues: emptyRecipient });
   useEffect(() => {
     if (adding) reset(emptyRecipient);
@@ -86,5 +132,20 @@ export function RecipientDialog({ target, endpoint, onClose, onSaved, onDelete, 
     <FormSection title="Details">
       <RecipientFields register={register} control={control} errors={errors} setValue={setValue} budget={budget} birthdayRequired={adding} showBudget={!adding} />
     </FormSection>
+    {!adding && trail !== null && trail.length > 0 && (
+      <FormSection title="Recent activity">
+        <ul className="space-y-0.5">
+          {trail.map((entry) => (
+            <li key={entry.id} className="flex items-start gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50">
+              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"><Activity size={13} /></span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-ink">{trailSummary(entry)}</p>
+                <p className="mt-0.5 text-xs text-muted">{entry.actorName} · {timeAgo(entry.createdAt)}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </FormSection>
+    )}
   </FormPanel>;
 }

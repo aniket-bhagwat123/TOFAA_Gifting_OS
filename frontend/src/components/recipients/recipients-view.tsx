@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Archive, ArchiveRestore, ArrowRight, Building2, Check, ChevronLeft, ChevronRight, Download, Filter, Gem, Gift, LogIn, Plus, Search, Trash2, Upload, UserPlus, Users, X, CalendarClock, MapPin, Heart } from "lucide-react";
+import { Archive, ArchiveRestore, Building2, Check, ChevronLeft, ChevronRight, Download, Filter, Gift, LogIn, Plus, Search, Trash2, Upload, UserPlus, Users, X, CalendarClock, MapPin, Heart } from "lucide-react";
 import { toast } from "sonner";
 import { useAppSelector } from "@/store/hooks";
 import { moduleConfig } from "@/features/modules/module-config";
@@ -219,7 +218,7 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
     {endpoints && "error" in endpoints && <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">{endpoints.error}</p>}
     {error && <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><span>We couldn&apos;t load your recipients. {error}</span><Button size="sm" variant="secondary" onClick={() => void loadPage()}>Try again</Button></div>}
 
-    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_260px]">
+    <div>
       <section aria-label="Recipients list" className="min-w-0 space-y-3">
         {/* More filters */}
         <div className={cn(card, "flex flex-wrap items-center gap-2.5 px-4 py-3")}>
@@ -249,7 +248,7 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
 
         <div className={cn(card, "overflow-hidden")}>
           <RecipientsTable rows={rows} loading={loading} selected={selected} onToggle={toggle} onTogglePage={togglePage} sort={sort} onSort={onSort} archivedView={archivedView} filtered={filtered} canAdd={!!ready}
-            onOpen={(row) => setEditTarget(row as DirectoryRow)} onGift={giftFor} onArchive={(row) => void setArchived([row], !archivedView)} onDelete={(row) => setConfirm([row])} onAdd={() => setCreateOpen(true)} />
+            onOpen={(row) => setEditTarget(row as DirectoryRow)} onGift={giftFor} onArchive={(row) => void setArchived([row], !archivedView)} onDelete={(row) => setConfirm([row])} onAdd={() => setCreateOpen(true)} onImport={() => setImportOpen(true)} />
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-1">
@@ -265,33 +264,6 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
         </div>
       </section>
 
-      <aside className="space-y-4">
-        <section className={cn(card, "p-4")} aria-labelledby="groups-title">
-          <div className="flex items-center justify-between gap-2">
-            <h3 id="groups-title" className="text-sm font-semibold text-ink">Recipient Groups</h3>
-            <Link href="/recipient-groups" className="press inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">View all <ArrowRight size={12} /></Link>
-          </div>
-          <ul className="mt-2 space-y-0.5">
-            {summary === null && !groups.length ? [0, 1, 2].map((i) => <li key={i} className="my-1 h-9 animate-pulse rounded-lg bg-slate-100" />)
-              : groups.length ? groups.slice(0, 5).map((group) => <li key={group.id}>
-                <button type="button" onClick={() => setGroupSheet(group)} className="press flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left hover:bg-slate-50">
-                  <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft/70 text-brand"><Users size={14} /></span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-ink">{group.name}</span>
-                  <span className="shrink-0 text-xs font-semibold tabular-nums text-slate-500">{group.recipientIds.length}</span>
-                </button>
-              </li>) : <li className="py-2 text-xs text-muted">No groups yet. Create one to gift many people at once.</li>}
-          </ul>
-          <button type="button" disabled={!ready} onClick={() => { setGroupPreset([]); setGroupSheet("new"); }} className="press mt-2 inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-brand hover:bg-brand-soft/60 disabled:opacity-50"><Plus size={13} /> New group</button>
-        </section>
-
-<section className={cn(card, "bg-brand-soft/40 p-5")} aria-labelledby="smart-title">
-          <div className="flex items-center gap-4">
-            <span aria-hidden className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white text-brand ring-1 ring-brand/15"><Gem size={28} /></span>
-            <h3 id="smart-title" className="text-base font-semibold leading-snug text-ink">Smart Gifting for Stronger Relationships</h3>
-          </div>
-          <Link href="/occasions" className="press mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-[9px] border border-brand/50 bg-white text-sm font-semibold text-brand hover:bg-brand-soft">Explore TOFAA OS <ArrowRight size={15} /></Link>
-        </section>
-      </aside>
     </div>
 
     <RecipientCreatePanel open={createOpen} endpoints={ready} userId={user?.id} onClose={() => { setCreateOpen(false); if (startNew) router.replace("/recipients"); }} onSaved={refresh}

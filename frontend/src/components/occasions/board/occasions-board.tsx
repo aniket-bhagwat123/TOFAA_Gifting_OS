@@ -48,7 +48,7 @@ export function OccasionsBoard() {
   const [sort, setSort] = useState<Sort>("soonest");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<OverviewItem | null>(null);
-  const [form, setForm] = useState<{ item: OverviewItem | null } | null>(null);
+  const [form, setForm] = useState<{ item: OverviewItem | null; date?: string } | null>(null);
   const [sending, setSending] = useState<UpcomingEvent | null>(null);
   const [warn, setWarn] = useState<{ item: OverviewItem; kind: ActionKind } | null>(null);
 
@@ -127,7 +127,7 @@ export function OccasionsBoard() {
     {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>}
 
     {view === "calendar"
-      ? <CalendarView month={month} items={data?.items ?? []} loading={loading && !data} onSelect={setSelected} />
+      ? <CalendarView month={month} items={data?.items ?? []} loading={loading && !data} onSelect={setSelected} onDateClick={canPlan ? (iso) => setForm({ item: null, date: iso }) : undefined} />
       : <>
         <div className="flex items-center gap-2 rounded-xl bg-white p-1.5 ring-1 ring-line/70">
         <TabBar bare label="Status" wrapperClassName="min-w-0 flex-1">
@@ -180,7 +180,7 @@ export function OccasionsBoard() {
       onAct={(item, kind) => { setSelected(null); act(item, kind); }}
       onEdit={(item) => { setSelected(null); setForm({ item }); }}
       onDeleted={() => { setSelected(null); reload(); }} />
-    <AddOccasionPanel open={!!form} editing={form?.item ?? null} tenantId={tenantId} onClose={() => setForm(null)} onSaved={() => { setForm(null); reload(); }} />
+    <AddOccasionPanel open={!!form} editing={form?.item ?? null} prefilledDate={form?.date} tenantId={tenantId} onClose={() => setForm(null)} onSaved={() => { setForm(null); reload(); }} />
     <EventSendSheet item={sending} onClose={() => setSending(null)} onSent={() => { setSending(null); reload(); }} />
 
     <Sheet open={!!warn} labelledBy="occ-dup-title" className="max-w-md" onClose={() => setWarn(null)}>

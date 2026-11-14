@@ -218,7 +218,7 @@ export function ClientCreateSheet({
     setClientErrors(cErrors);
 
     let userValid = true;
-    setUsers((prev) => prev.map((u) => {
+    const validatedUsers = users.map((u) => {
       const errors: Record<string, string> = {};
       if (!u.fullName.trim()) errors.fullName = "Full name is required.";
       if (!u.email.trim()) errors.email = "Email is required.";
@@ -228,7 +228,8 @@ export function ClientCreateSheet({
       if (u.serverId && u.password && u.password.length < PASSWORD_MIN) errors.password = `At least ${PASSWORD_MIN} characters.`;
       if (Object.keys(errors).length) userValid = false;
       return { ...u, errors };
-    }));
+    });
+    setUsers(validatedUsers);
 
     return !Object.keys(cErrors).length && userValid;
   };
@@ -260,7 +261,7 @@ export function ClientCreateSheet({
 
         patchBody.deactivateUserIds = removedServerIds;
 
-        await mutateModule("patch", `/tenants/${tenantId}`, patchBody);
+        const patched = await mutateModule("patch", `/tenants/${tenantId}`, patchBody) as Record<string, unknown>;
 
         // Upload pending user photos for newly-added users (match by email after save)
         const newUsersWithPhotos = users.filter((u) => !u.serverId && u.avatarFile);
@@ -275,6 +276,10 @@ export function ClientCreateSheet({
           } catch { /* non-critical */ }
         }
 
+        if (patched?.invitationWarning) {
+          toast.warning(String(patched.invitationWarning));
+          return;
+        }
         toast.success(`Client "${client.name}" updated.`);
       } else {
         // ── Create: single POST — tenant details + all users in one payload ──
@@ -311,6 +316,11 @@ export function ClientCreateSheet({
           } catch { /* non-critical */ }
         }
 
+        if (created?.invitationWarning) {
+          toast.warning(String(created.invitationWarning));
+          onCreated();
+          return;
+        }
         toast.success(`Client "${client.name}" created with ${users.length} team member${users.length !== 1 ? "s" : ""}.`);
       }
 

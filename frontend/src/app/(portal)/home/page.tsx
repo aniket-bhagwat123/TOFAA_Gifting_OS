@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Activity, ArrowRight, BarChart3, Building2, Cake, CalendarCheck, CalendarDays, CalendarRange, CheckCircle2, ChevronRight, ClipboardList, Gift, Info, Sparkles, Star, UserPlus, Wallet, type LucideIcon } from "lucide-react";
+import { Activity, ArrowRight, BarChart3, Building2, Cake, CalendarCheck, CalendarDays, CalendarRange, CheckCircle2, ChevronRight, ClipboardList, Gift, Info, Sparkles, Star, UserPlus, Users, Wallet, X, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { loadModule } from "@/features/modules/modules.slice";
@@ -72,6 +72,80 @@ function Skeleton({ rows = 3 }: { rows?: number }) {
   return <div className="space-y-3 p-5">{Array.from({ length: rows }, (_, i) => <div key={i} className="h-14 animate-pulse rounded-2xl bg-slate-100" />)}</div>;
 }
 
+const GUIDE_STEPS: Array<{ num: number; icon: LucideIcon; iconBg: string; accent: string; ring: string; gradient: string; title: string; description: string; cta: string; href: string }> = [
+  { num: 1, icon: Users, iconBg: "bg-brand", accent: "text-brand", ring: "ring-brand/20", gradient: "from-brand/[0.07]", title: "Create Your People", description: "Add the people you send gifts to — employees, clients, or loved ones — with their birthdays and key dates.", cta: "Add Recipient", href: "/recipients?new=1" },
+  { num: 2, icon: CalendarDays, iconBg: "bg-amber-500", accent: "text-amber-600", ring: "ring-amber-400/25", gradient: "from-amber-500/[0.07]", title: "Plan Occasions", description: "Add birthdays, anniversaries, and company milestones so you're always ahead of every important date.", cta: "Open Occasions", href: "/occasions" },
+  { num: 3, icon: Gift, iconBg: "bg-violet-500", accent: "text-violet-600", ring: "ring-violet-400/25", gradient: "from-violet-500/[0.07]", title: "Send Gift Requests", description: "Submit a request and our TOFAA team will curate the perfect, personalised gift for any occasion.", cta: "New Request", href: "/requests/new" },
+];
+
+function OnboardingGuide({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <section aria-label="Getting started guide" className="relative overflow-hidden rounded-3xl border border-brand/15 bg-gradient-to-br from-white via-white to-brand-soft/40 p-6 shadow-soft sm:p-8">
+      {/* Background decoration */}
+      <Sparkles aria-hidden size={80} strokeWidth={0.8} className="absolute -right-4 -top-4 text-brand/[0.07]" />
+      {/* Header */}
+      <div className="relative mb-6 flex items-start justify-between gap-4">
+        <div>
+          <span className="mb-2.5 inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
+            <Sparkles size={11} /> Getting Started
+          </span>
+          <h2 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">Your gifting journey starts here</h2>
+          <p className="mt-1 text-sm text-muted">Follow these 3 steps to set up your gifting workflow.</p>
+        </div>
+        <button type="button" onClick={onDismiss} aria-label="Dismiss guide" className="press shrink-0 rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600">
+          <X size={18} />
+        </button>
+      </div>
+
+      {/* Steps */}
+      <div className="relative grid gap-3 sm:grid-cols-3 sm:gap-4">
+        {/* Connecting line behind cards */}
+        <div aria-hidden className="absolute left-0 right-0 top-[2.75rem] hidden h-px bg-gradient-to-r from-brand/30 via-amber-400/40 to-violet-400/30 sm:block" />
+
+        {GUIDE_STEPS.map((step, i) => {
+          const Icon = step.icon;
+          return (
+            <Link key={step.num} href={step.href} onClick={onDismiss}
+              className={`press group relative flex flex-col rounded-2xl border border-line/60 bg-gradient-to-br ${step.gradient} to-white p-5 transition hover:border-line hover:shadow-md`}>
+              {/* Step badge + icon */}
+              <div className="mb-4 flex items-center gap-3">
+                <span className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${step.iconBg} ring-4 ${step.ring} text-white shadow-sm`}>
+                  <Icon size={21} />
+                  <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-slate-700 text-[0.6rem] font-bold text-white">{step.num}</span>
+                </span>
+                <span className={`text-[0.65rem] font-bold uppercase tracking-widest ${step.accent} opacity-70`}>Step {step.num}</span>
+              </div>
+              {/* Text */}
+              <h3 className="font-semibold leading-snug text-ink">{step.title}</h3>
+              <p className="mt-1.5 flex-1 text-sm leading-relaxed text-muted">{step.description}</p>
+              {/* CTA row */}
+              <div className={`mt-4 flex items-center gap-1.5 text-sm font-semibold ${step.accent} transition-all group-hover:gap-2.5`}>
+                {step.cta} <ArrowRight size={14} />
+              </div>
+              {/* Step connector arrow (small, only between cards) */}
+              {i < GUIDE_STEPS.length - 1 && (
+                <div className="absolute -right-2.5 top-1/2 z-10 hidden -translate-y-1/2 sm:flex">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-line/60">
+                    <ChevronRight size={11} className="text-slate-400" />
+                  </span>
+                </div>
+              )}
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* Footer dismiss */}
+      <div className="mt-5 flex items-center justify-between gap-4">
+        <p className="text-xs text-muted">Complete these steps at your own pace — you can always come back to this guide.</p>
+        <button type="button" onClick={onDismiss} className="press shrink-0 text-xs font-medium text-muted hover:text-ink hover:underline">
+          I&apos;ll explore on my own
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export default function DashboardPage() {
   const dispatch = useAppDispatch();
   const user = useAppSelector((state) => state.auth.user);
@@ -86,8 +160,10 @@ export default function DashboardPage() {
   const [occasions, setOccasions] = useState<UpcomingOccasion[] | null>(null);
   const [events, setEvents] = useState<UpcomingEvent[] | null>(null);
   const [activity, setActivity] = useState<{ id: string; summary: string; title?: string; description?: string; actorName?: string; changedAt: string }[]>([]);
+  const [recipientCount, setRecipientCount] = useState<number | null>(null);
   const [tab, setTab] = useState<Tab | null>(null);
   const [slide, setSlide] = useState(0);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -97,9 +173,19 @@ export default function DashboardPage() {
     }
   }, [dispatch, user, role, selectedTenantId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!tenantId || role !== "CLIENT") { setShowGuide(false); return; }
+    try { setShowGuide(!localStorage.getItem(`tofaa_guide_${tenantId}`)); } catch { setShowGuide(true); }
+  }, [tenantId, role]);
+
+  const dismissGuide = () => {
+    try { if (tenantId) localStorage.setItem(`tofaa_guide_${tenantId}`, "1"); } catch { /* storage blocked */ }
+    setShowGuide(false);
+  };
+
   // Everything below is for the client being viewed.
   useEffect(() => {
-    setRequests(null); setOccasions(null); setEvents(null); setActivity([]); setTab(null); setSlide(0);
+    setRequests(null); setOccasions(null); setEvents(null); setActivity([]); setRecipientCount(null); setTab(null); setSlide(0);
     if (!tenantId) return;
     let cancelled = false;
     const base = `/tenants/${tenantId}`;
@@ -109,9 +195,11 @@ export default function DashboardPage() {
       guard<UpcomingEvent[]>(`${base}/gift-requests/upcoming`, { days: 60 }, []),
       guard<{ items?: GiftRequest[] }>(`${base}/gift-requests`, { page: 1, limit: 100 }, { items: [] }),
       guard<{ items?: { id: string; summary: string; title?: string; description?: string; actorName?: string; changedAt: string }[] }>(`${base}/activity`, { page: 1, limit: 5 }, { items: [] }),
-    ]).then(([o, e, r, a]) => {
+      guard<{ items?: unknown[]; pagination?: { total?: number } }>(`${base}/recipients`, { page: 1, limit: 1 }, {}),
+    ]).then(([o, e, r, a, rec]) => {
       if (cancelled) return;
       setOccasions(Array.isArray(o) ? o : []); setEvents(Array.isArray(e) ? e : []); setRequests(r?.items ?? []); setActivity(a?.items ?? []);
+      setRecipientCount((rec as { pagination?: { total?: number } })?.pagination?.total ?? (Array.isArray((rec as { items?: unknown[] })?.items) ? ((rec as { items?: unknown[] }).items?.length ?? 0) : 0));
     });
     return () => { cancelled = true; };
   }, [tenantId]);
@@ -166,7 +254,12 @@ export default function DashboardPage() {
   return <div className="space-y-6">
     <h2 className="text-2xl font-medium text-ink sm:text-[1.75rem]">{greeting()}{firstName ? `, ${firstName}` : ""}! <span aria-hidden>👋</span></h2>
 
-    <section aria-label="Welcome" className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#FBEFDD] via-[#F4DDB8] to-[#E3B866] p-7 shadow-soft sm:p-10">
+    {!(isClient && (
+        !tenantId ||
+        showGuide ||
+        recipientCount === null ||
+        (recipientCount === 0 && requests !== null && !requests.length)
+      )) && <section aria-label="Welcome" className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#FBEFDD] via-[#F4DDB8] to-[#E3B866] p-7 shadow-soft sm:p-10">
       <Gift aria-hidden strokeWidth={1.1} className="absolute -bottom-6 right-6 hidden h-56 w-56 -rotate-6 text-amber-700/25 sm:block md:right-16 md:h-64 md:w-64" />
       <Sparkles aria-hidden className="absolute right-10 top-8 hidden text-amber-600/50 sm:block" size={28} />
       <div className="relative max-w-xl">
@@ -181,7 +274,9 @@ export default function DashboardPage() {
           })}
         </div>
       </div>
-    </section>
+    </section>}
+
+    {isClient && tenantId && (showGuide || (recipientCount !== null && requests !== null && recipientCount === 0 && !requests.length)) && <OnboardingGuide onDismiss={dismissGuide} />}
 
     {stats.some((item) => item.error) && <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900">Some numbers couldn&apos;t be loaded. Please check your connection and refresh the page.</div>}
     {stats.length > 0 && <section aria-label="At a glance" className={`grid grid-cols-2 gap-4 ${stats.length > 3 ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
@@ -258,7 +353,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="space-y-6">
-          <Card aria-label="Pending actions" className="overflow-hidden">
+          {(requests === null || pending.items.length > 0 || !isClient) && <Card aria-label="Pending actions" className="overflow-hidden">
             <div className="flex items-center justify-between px-5 pt-5 sm:px-6">
               <h2 className="flex items-center gap-2.5 text-lg font-semibold text-ink"><CheckCircle2 size={22} className="fill-brand text-white" />Pending Actions</h2>
               <span className="flex items-center gap-2"><Link href="/requests" className="text-sm font-semibold text-brand hover:underline">View all</Link>{pending.total > 0 && <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-rose-600 px-1.5 text-xs font-semibold text-white">{pending.total}</span>}</span>
@@ -271,9 +366,9 @@ export default function DashboardPage() {
                   {item.at && <span className="shrink-0 text-xs text-muted">{relativeTime(item.at)}</span>}<ChevronRight size={16} className="shrink-0 text-slate-400" />
                 </Link></li>; })}</ul>}
             </div>
-          </Card>
+          </Card>}
 
-          <Card aria-label="Recent activity" className="overflow-hidden">
+          {(requests === null || recent.length > 0 || !isClient) && <Card aria-label="Recent activity" className="overflow-hidden">
             <div className="flex items-center justify-between px-5 pt-5 sm:px-6">
               <h2 className="flex items-center gap-2.5 text-lg font-semibold text-ink"><Activity size={20} className="text-brand" />Recent Activity</h2>
               <Link href="/activity" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:underline">View all <ArrowRight size={15} /></Link>
@@ -286,7 +381,7 @@ export default function DashboardPage() {
                   <span className="shrink-0 text-xs text-muted">{relativeTime(item.at)}</span><ChevronRight size={16} className="shrink-0 text-slate-400" />
                 </Link></li>; })}</ul>}
             </div>
-          </Card>
+          </Card>}
         </div>
       </div>}
   </div>;

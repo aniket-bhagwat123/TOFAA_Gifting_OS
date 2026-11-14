@@ -49,7 +49,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
     : user?.platformRole === "CLIENT" ? "Client"
     : null;
   // Translucent chrome: content scrolls beneath it, separated by a hairline only.
-  return <header className="material material-edge relative sticky top-0 z-20 flex h-[68px] items-center justify-between px-4 sm:px-6 lg:px-8">
+  return <header className="material material-edge relative sticky top-0 z-20 flex h-[68px] items-center justify-between px-4 sm:px-6 lg:px-6">
     <div className="flex items-center gap-2">
       <button onClick={onMenu} className="press flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 hover:bg-black/5 lg:hidden" aria-label="Open menu"><Menu size={22} /></button>
       <h1 className="truncate text-lg font-semibold text-ink">{moduleTitle}</h1>

@@ -33,8 +33,8 @@ function Pills({ value, options, onChange, label }: { value: string; options: Ar
 }
 
 /** Add an occasion (a date for one person, or for the whole company), or edit one the client created. */
-export function AddOccasionPanel({ open, editing, tenantId, onClose, onSaved }: {
-  open: boolean; editing: OverviewItem | null; tenantId: string; onClose: () => void; onSaved: () => void;
+export function AddOccasionPanel({ open, editing, prefilledDate, tenantId, onClose, onSaved }: {
+  open: boolean; editing: OverviewItem | null; prefilledDate?: string; tenantId: string; onClose: () => void; onSaved: () => void;
 }) {
   const [form, setForm] = useState<Form>(blank);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -47,7 +47,7 @@ export function AddOccasionPanel({ open, editing, tenantId, onClose, onSaved }: 
   useEffect(() => {
     if (!open) return;
     setErrors({});
-    if (!editing) { setForm(blank); return; }
+    if (!editing) { setForm(prefilledDate ? { ...blank, date: prefilledDate } : blank); return; }
     const known = OCCASION_TYPES.includes(editing.label);
     setForm({
       ...blank, mode: editing.sourceType, recipientId: editing.recipientId ?? "", relationship: editing.relationship ?? "",
@@ -55,7 +55,7 @@ export function AddOccasionPanel({ open, editing, tenantId, onClose, onSaved }: 
       date: editing.sourceDate ?? editing.date, repeat: editing.repeatAnnually, priority: editing.priority, notes: editing.notes ?? "",
       eventName: editing.sourceType === "COMPANY" ? editing.name : "", category: editing.sourceType === "COMPANY" ? editing.label : "", description: editing.description ?? "",
     });
-  }, [open, editing]);
+  }, [open, editing, prefilledDate]);
 
   useEffect(() => {
     if (!open || recipients) return;
