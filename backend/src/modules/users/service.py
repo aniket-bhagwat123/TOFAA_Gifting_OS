@@ -175,12 +175,16 @@ class UserService:
                     "password": temporary_password,
                     "email_confirm": True,
                     "user_metadata": meta,
+                    # The password was chosen by someone else, so the user must replace it at first sign-in.
+                    "app_metadata": {"must_reset_password": True},
                 }
             )
             invited_user = getattr(auth_result, "user", None)
             invited_user_id = str(invited_user.id) if invited_user else None
             if not invited_user_id:
                 raise RuntimeError("Supabase did not return the created user.")
+            # The profile row the sign-in check reads is the source of truth, so set it explicitly too.
+            self.database.table("profiles").update({"must_reset_password": True}).eq("id", invited_user_id).execute()
             if payload.send_invitation:
                 link_result = self.database.auth.admin.generate_link(
                     {

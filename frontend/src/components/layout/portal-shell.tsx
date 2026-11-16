@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "./sidebar";
+import { FirstLoginPasswordDialog } from "./first-login-password-dialog";
 import { Topbar } from "./topbar";
 import { Spinner } from "@/components/ui/spinner";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -34,10 +35,14 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     if (status === "unauthenticated") router.replace(`/login?next=${encodeURIComponent(pathname)}`);
   }, [status, router, pathname]);
 
+  // First sign-in with a temporary password: land on the dashboard, where a dialog asks for a new password.
+  const mustReset = status === "authenticated" && !!user?.mustResetPassword;
+  useEffect(() => { if (mustReset && pathname !== "/home") router.replace("/home"); }, [mustReset, pathname, router]);
+
   if (status === "idle" || status === "loading" || (status === "authenticated" && !user)) {
     return <div className="flex min-h-screen items-center justify-center bg-canvas"><Spinner /></div>;
   }
   if (status !== "authenticated") return null;
 
-  return <div className="min-h-screen bg-canvas"><a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-xl focus:bg-white focus:px-4 focus:py-2">Skip to content</a><Sidebar mobileOpen={menuOpen} onClose={() => setMenuOpen(false)} /><div className="lg:pl-[216px]"><Topbar onMenu={() => setMenuOpen(true)} /><main id="main" className="animate-rise-in p-4 sm:p-5 lg:p-6">{children}</main></div></div>;
+  return <div className="min-h-screen bg-canvas"><a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-xl focus:bg-white focus:px-4 focus:py-2">Skip to content</a><Sidebar mobileOpen={menuOpen} onClose={() => setMenuOpen(false)} /><div className="lg:pl-[216px]"><Topbar onMenu={() => setMenuOpen(true)} /><main id="main" className="animate-rise-in p-4 sm:p-5 lg:p-6">{children}</main></div><FirstLoginPasswordDialog open={mustReset} /></div>;
 }

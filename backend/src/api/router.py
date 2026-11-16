@@ -4,7 +4,9 @@ from src.modules.auth.dependencies import CurrentUserDep
 from src.modules.auth.schemas import UserProfileResponse
 from src.modules.auth.rbac import Role
 from src.modules.auth.router import router as auth_router
+from src.modules.banners.router import router as banners_router
 from src.modules.credits.router import router as credits_router
+from src.modules.dashboard.router import router as dashboard_router
 from src.modules.contract_workspace.router import router as contract_workspace_router
 from src.modules.events.router import router as events_router
 from src.modules.gift_requests.router import router as gift_requests_router
@@ -23,10 +25,13 @@ api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(invitation_router)
 api_router.include_router(tenants_router)
+# Banners are platform-wide (not tied to a client), so they sit outside the tenant guard.
+api_router.include_router(banners_router)
 
 # Everything else validates the tenant ID on every request.
 tenant_scoped = [Depends(enforce_tenant_scope)]
 api_router.include_router(credits_router, dependencies=tenant_scoped)
+api_router.include_router(dashboard_router, dependencies=tenant_scoped)
 api_router.include_router(contract_workspace_router, dependencies=tenant_scoped)
 api_router.include_router(events_router, dependencies=tenant_scoped)
 api_router.include_router(gift_requests_router, dependencies=tenant_scoped)

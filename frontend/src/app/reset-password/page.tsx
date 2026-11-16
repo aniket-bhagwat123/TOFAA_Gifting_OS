@@ -63,8 +63,8 @@ function ResetPasswordForm() {
 
   if (!ready) return <div className="flex justify-center py-10"><Spinner /></div>;
   return <form noValidate onSubmit={submit} className="mt-8 space-y-6">
-    <PasswordField label="New password" required value={password} onChange={(value) => { setPassword(value); setErrors((current) => ({ ...current, password: undefined })); }} error={errors.password} showStrength allowGenerate autoFocus />
-    <PasswordField label="Confirm new password" required value={confirm} onChange={(value) => { setConfirm(value); setErrors((current) => ({ ...current, confirm: undefined })); }} error={errors.confirm} placeholder="Type it once more" />
+    <PasswordField label="New password" required value={password} onChange={(value) => { setPassword(value); setErrors((current) => ({ ...current, password: undefined })); }} error={errors.password} showStrength allowGenerate autoFocus placeholder="Enter new password" />
+    <PasswordField label="Confirm new password" required value={confirm} onChange={(value) => { setConfirm(value); setErrors((current) => ({ ...current, confirm: undefined })); }} error={errors.confirm} placeholder="Re-enter new password" />
     <Button type="submit" size="lg" className="w-full" disabled={saving}>{saving ? "Saving…" : firstTime ? "Set password and continue" : "Update password"}</Button>
     {!firstTime && <Link href="/home" className="flex min-h-11 items-center justify-center text-sm font-medium text-brand hover:underline">Cancel</Link>}
   </form>;

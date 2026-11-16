@@ -33,14 +33,14 @@ export function PasswordField({ label, value, onChange, error, autoComplete = "n
     <div className="relative">
       <input id={id} aria-required={required || undefined} type={visible ? "text" : "password"} value={value} onChange={(event) => onChange(event.target.value)} autoComplete={autoComplete} autoFocus={autoFocus} placeholder={placeholder} spellCheck={false} aria-invalid={error ? "true" : undefined} aria-describedby={error ? `${id}-error` : undefined}
         className={cn("min-h-[38px] w-full rounded-md border bg-white py-2 pl-3 pr-12 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/25", visible && "font-mono tracking-wide", error ? "border-rose-400" : "border-line")} />
-      <button type="button" onClick={() => setVisible((current) => !current)} aria-label={visible ? "Hide password" : "Show password"} aria-pressed={visible} className="press absolute right-1.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-black/5 hover:text-ink">{visible ? <EyeOff size={19} /> : <Eye size={19} />}</button>
+      <button type="button" onClick={() => setVisible((current) => !current)} aria-label={visible ? "Hide password" : "Show password"} aria-pressed={visible} className="absolute inset-y-0 right-1.5 my-auto flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-black/5 hover:text-ink">{visible ? <EyeOff size={19} /> : <Eye size={19} />}</button>
     </div>
     {hint && !error && <p className="text-sm text-muted">{hint}</p>}
     {error && <p id={`${id}-error`} role="alert" className="text-sm text-rose-600">{error}</p>}
 
     {allowGenerate && <div className="flex flex-wrap gap-2">
-      <button type="button" onClick={generate} className="press inline-flex min-h-10 items-center gap-2 rounded-xl border border-line bg-white px-3.5 text-sm font-medium text-ink hover:bg-slate-50"><RefreshCw size={15} /> Generate strong password</button>
-      {value && <button type="button" onClick={copy} className="press inline-flex min-h-10 items-center gap-2 rounded-xl border border-line bg-white px-3.5 text-sm font-medium text-ink hover:bg-slate-50">{copied ? <Check size={15} className="text-emerald-600" /> : <Copy size={15} />} {copied ? "Copied" : "Copy"}</button>}
+      <button type="button" onClick={generate} className="press inline-flex min-h-9 items-center gap-2 rounded-md border border-line bg-white px-3.5 text-sm font-medium text-ink hover:bg-slate-50"><RefreshCw size={15} /> Generate strong password</button>
+      {value && <button type="button" onClick={copy} className="press inline-flex min-h-9 items-center gap-2 rounded-md border border-line bg-white px-3.5 text-sm font-medium text-ink hover:bg-slate-50">{copied ? <Check size={15} className="text-emerald-600" /> : <Copy size={15} />} {copied ? "Copied" : "Copy"}</button>}
     </div>}
 
     {showStrength && value && <div aria-live="polite">

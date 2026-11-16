@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Info, List as ListIcon, MoreVertical, Plus, Search } from "lucide-react";
 import { control, iconButton, table } from "@/components/ui/table-styles";
 import { Tab as TabItem, TabBar } from "@/components/ui/tab-bar";
@@ -49,6 +49,9 @@ export function OccasionsBoard() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<OverviewItem | null>(null);
   const [form, setForm] = useState<{ item: OverviewItem | null; date?: string } | null>(null);
+  // "Add Occasion" on the dashboard links here with ?new=1 and opens the add panel straight away.
+  const openNew = useSearchParams().get("new") === "1";
+  useEffect(() => { if (openNew && canPlan) { setForm({ item: null }); router.replace("/occasions"); } }, [openNew, canPlan]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sending, setSending] = useState<UpcomingEvent | null>(null);
   const [warn, setWarn] = useState<{ item: OverviewItem; kind: ActionKind } | null>(null);
 

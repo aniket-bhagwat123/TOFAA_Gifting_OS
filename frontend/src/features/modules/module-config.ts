@@ -36,6 +36,21 @@ const occasionFields: ModuleField[] = [
   { name: "description", label: "Description", type: "textarea" }, { name: "isActive", label: "Active", type: "select", options: ["true", "false"] }
 ];
 
+const bannerFields: ModuleField[] = [
+  { name: "placement", label: "Where it shows", type: "select", options: ["INSIGHT", "NOTE"], optionLabels: { INSIGHT: "Insight strip (top of dashboard)", NOTE: "Quick note card (bottom of dashboard)" }, required: true },
+  { name: "title", label: "Title", required: true },
+  { name: "body", label: "Text", type: "textarea" },
+  { name: "eyebrow", label: "Small label", hint: "Shown beside the title, e.g. TOFAA INSIGHT.", clearable: true },
+  { name: "ctaLabel", label: "Button text", clearable: true },
+  { name: "ctaUrl", label: "Button link", hint: "A page such as /occasions, or an https:// address.", clearable: true },
+  { name: "imageUrl", label: "Picture link (https)", clearable: true },
+  { name: "audience", label: "Who sees it", type: "select", options: ["ALL", "CLIENT", "STAFF"], optionLabels: { ALL: "Everyone", CLIENT: "Clients only", STAFF: "TOFAA team only" } },
+  { name: "sortOrder", label: "Order (1 shows first)", type: "number" },
+  { name: "isActive", label: "Active", type: "select", options: ["true", "false"] },
+  { name: "startsOn", label: "Show from", type: "date", clearable: true },
+  { name: "endsOn", label: "Show until", type: "date", clearable: true }
+];
+
 const ALL_ROLES: PlatformRole[] = ["CLIENT", "TOFAA_TEAM", "SUPER_ADMIN"];
 const STAFF_ROLES: PlatformRole[] = ["TOFAA_TEAM", "SUPER_ADMIN"];
 
@@ -57,6 +72,7 @@ export const moduleConfig: Record<string, ModuleConfig> = {
   "recipient-groups": { roles: ALL_ROLES, title: "Groups", singular: "group", emptyHint: "Groups let you gift many people at once.", modalWidth: "sm", description: "Put people into groups so you can plan and gift together.", endpoint: (u, tenant) => `/tenants/${requireTenant(u, tenant)}/gift-spend/groups`, columns: ["name", "recipientIds"], createFields: [{ name: "name", label: "Group name", required: true }, { name: "recipientIds", label: "Recipient", type: "recipient-multi-select", required: true }], updateFields: [{ name: "name", label: "Group name", required: true }, { name: "recipientIds", label: "Recipient", type: "recipient-multi-select", required: true }], updateMethod: "put", deletePath: (endpoint, id) => `${endpoint}/${id}`, actions: (row, user, tenant) => [{ label: "Import to occasion", method: "post", path: `/tenants/${requireTenant(user, tenant)}/gift-spend/occasions/{occasionId}/groups/import`, payload: { recipientGroupId: row.id }, prompts: [{ key: "occasionId", label: "Occasion ID", pathOnly: true, required: true }, { key: "budgetMode", label: "PER_RECIPIENT or SHARED_POOL", required: true }, { key: "budgetCredits", label: "Budget credits", type: "number", required: true }] }] },
   "team-users": { roles: STAFF_ROLES, title: "Users", singular: "user", modalWidth: "lg", description: "People who can sign in and manage your account.", endpoint: (u, tenant) => `/tenants/${requireTenant(u, tenant)}/users`, columns: ["fullName", "email", "role", "isActive"], createFields: [{ name: "email", label: "Email", type: "email", required: true }, { name: "fullName", label: "Full name" }, { name: "password", label: "Temporary password", type: "password" }, { name: "sendInvitation", label: "Send email invitation", type: "checkbox", hint: "Leave unticked to create the user without emailing anyone. You share the password yourself." }], updateFields: [{ name: "fullName", label: "Full name" }, { name: "isActive", label: "Active", type: "select", options: ["true", "false"] }, { name: "password", label: "New password", type: "password" }], actions: (row, user, tenant) => { const base = `/tenants/${requireTenant(user, tenant)}/users/${row.id}`; return [{ label: row.isActive ? "Deactivate" : "Activate", method: "post", path: `${base}/${row.isActive ? "deactivate" : "activate"}` }, { label: "Resend invite", method: "post", path: `${base}/resend-invite` }]; } },
   activity: { roles: ALL_ROLES, title: "Activity", singular: "change", emptyHint: "When something changes in your account, it shows up here.", modalWidth: "sm", description: "What changed in your account, and who did it.", endpoint: (u, tenant) => `/tenants/${requireTenant(u, tenant)}/activity`, columns: ["summary", "changedAt"] },
+  banners: { roles: ["SUPER_ADMIN"], title: "Banners", singular: "banner", emptyHint: "Add a banner to show a tip or note on every dashboard.", modalWidth: "lg", description: "Tips and notes shown on the dashboard. Add, reorder, schedule or switch them off.", endpoint: () => "/admin/banners", columns: ["title", "placement", "sortOrder", "isActive"], createFields: bannerFields, updateFields: bannerFields, updateEndpoint: (endpoint, record) => `${endpoint.split("?")[0]}/${record.id}`, deletePath: (endpoint, id) => `${endpoint.split("?")[0]}/${id}` },
   tenants: { roles: STAFF_ROLES, title: "Clients", singular: "client", modalWidth: "lg", description: "Your client organisations and their status.", endpoint: () => "/tenants", columns: ["name", "tenantType", "status", "createdAt"], updateFields: [{ name: "name", label: "Name", required: true }, { name: "legalName", label: "Legal name" }, { name: "gstin", label: "GSTIN" }, { name: "emailDomain", label: "Email domain" }] }
 };
 
