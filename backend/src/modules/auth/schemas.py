@@ -30,6 +30,15 @@ class PasswordUpdateRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=128, description="New password (min 8 characters)")
 
 
+class PasswordChangeRequest(BaseModel):
+    """A signed-in user choosing a new password: they must prove they know the current one."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    current_password: str = Field(min_length=1, max_length=128, description="The password used to sign in today")
+    new_password: str = Field(min_length=8, max_length=128, description="New password (min 8 characters)")
+
+
 class ProfileUpdateRequest(BaseModel):
     """What a signed-in user may change on their own profile. Role, tenant and status are never editable here."""
 

@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 from fastapi import HTTPException, status
-from supabase import Client
+from supabase import Client, create_client
 
 from src.core.config import settings
 from src.core.supabase import get_supabase_admin_client, get_supabase_client, get_user_supabase_client
@@ -11,6 +11,7 @@ from src.modules.auth.rbac import Role
 from src.modules.users.email import user_email_service
 from src.modules.auth.schemas import (
     AuthResponse,
+    PasswordChangeRequest,
     PasswordResetRequest,
     PasswordUpdateRequest,
     ProfileUpdateRequest,
@@ -185,6 +186,18 @@ class AuthService:
             if not result.data:
                 raise HTTPException(status_code=404, detail="User not found.")
         return self.get_profile_by_id(user.id, user.email, use_cache=False)
+
+    def change_password(self, user: UserProfileResponse, access_token: str, payload: PasswordChangeRequest) -> None:
+        """Changes the signed-in user's password, but only if they can prove they know the current one."""
+        if payload.current_password == payload.new_password:
+            raise HTTPException(status_code=400, detail="Choose a password different from your current one.")
+        try:
+            # A throw-away client, so checking the password never touches anyone's session.
+            create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY).auth.sign_in_with_password({"email": user.email, "password": payload.current_password})
+        except Exception:
+            # 400, not 401: a 401 would make the app think the session expired and sign the user out.
+            raise HTTPException(status_code=400, detail="Your current password is incorrect.")
+        self.update_password(access_token, PasswordUpdateRequest(new_password=payload.new_password))
 
     def update_password(self, access_token: str, payload: PasswordUpdateRequest) -> None:
         """

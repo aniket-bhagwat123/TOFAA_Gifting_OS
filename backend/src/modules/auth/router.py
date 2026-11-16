@@ -6,6 +6,7 @@ from src.modules.auth.dependencies import CurrentUserDep, TokenDep
 from src.modules.auth.schemas import (
     AuthResponse,
     MessageResponse,
+    PasswordChangeRequest,
     PasswordResetRequest,
     PasswordUpdateRequest,
     ProfileUpdateRequest,
@@ -105,3 +106,19 @@ def get_me(current_user: CurrentUserDep) -> UserProfileResponse:
 )
 def update_me(payload: Annotated[ProfileUpdateRequest, Body()], current_user: CurrentUserDep) -> UserProfileResponse:
     return auth_service.update_profile(current_user, payload)
+
+
+@router.post(
+    "/change-password",
+    response_model=ApiResponse[dict],
+    status_code=status.HTTP_200_OK,
+    summary="Change own password",
+    description="Changes the signed-in user's password after checking the current one.",
+)
+def change_password(
+    user: CurrentUserDep,
+    token: TokenDep,
+    payload: Annotated[PasswordChangeRequest, Body()],
+) -> ApiResponse[dict]:
+    auth_service.change_password(user, token, payload)
+    return ApiResponse(data={}, message="Password successfully changed.")

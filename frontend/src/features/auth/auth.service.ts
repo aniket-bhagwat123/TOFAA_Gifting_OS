@@ -25,6 +25,9 @@ export const authService = {
   async resetPassword(newPassword: string) {
     await api.post(endpoints.auth.resetPassword, { newPassword });
   },
+  async changePassword(currentPassword: string, newPassword: string) {
+    await api.post(endpoints.auth.changePassword, { currentPassword, newPassword });
+  },
   async refresh(refresh_token: string) {
     const { data } = await api.post<AuthSession>(endpoints.auth.refresh, { refresh_token });
     return data;

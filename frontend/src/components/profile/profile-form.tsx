@@ -88,31 +88,40 @@ function CardTitle({ icon, title, subtitle }: { icon: React.ReactNode; title: st
 function ChangePasswordCard() {
   const [show, setShow] = useState(false);
   const toggle = <button type="button" onClick={() => setShow((value) => !value)} aria-label={show ? "Hide passwords" : "Show passwords"} aria-pressed={show} className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-ink">{show ? <EyeOff size={16} /> : <Eye size={16} />}</button>;
-  const [form, setForm] = useState({ password: "", confirm: "" });
-  const [error, setError] = useState("");
+  const [form, setForm] = useState({ current: "", password: "", confirm: "" });
+  const [errors, setErrors] = useState<{ current?: string; password?: string; confirm?: string }>({});
   const [saving, setSaving] = useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (form.password.length < 8) return setError("Use at least 8 characters.");
-    if (form.password !== form.confirm) return setError("The two passwords don't match.");
-    setError("");
+    const next: typeof errors = {};
+    if (!form.current) next.current = "Enter your current password.";
+    if (form.password.length < 8) next.password = "Use at least 8 characters.";
+    else if (form.password === form.current) next.password = "Choose a password different from your current one.";
+    if (form.confirm !== form.password) next.confirm = "The two passwords don't match.";
+    setErrors(next);
+    if (Object.keys(next).length) return;
     setSaving(true);
     try {
-      await authService.resetPassword(form.password);
-      setForm({ password: "", confirm: "" });
+      await authService.changePassword(form.current, form.password);
+      setForm({ current: "", password: "", confirm: "" });
       toast.success("Password changed.");
-    } catch (err) { toast.error(getApiErrorMessage(err)); }
+    } catch (err) {
+      const message = getApiErrorMessage(err);
+      if (/current password/i.test(message)) setErrors({ current: message }); else toast.error(message);
+    }
     finally { setSaving(false); }
   }
+  const change = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) => { setForm((c) => ({ ...c, [key]: event.target.value })); setErrors((c) => ({ ...c, [key]: undefined })); };
 
   return <Card className="relative flex h-full flex-col overflow-hidden p-6">
     <CardTitle icon={<Lock size={20} />} title="Change Password" subtitle="Keep your account secure" />
     <form onSubmit={submit} noValidate className="space-y-4">
-      <InputField label="New password" name="newPassword" type={show ? "text" : "password"} trailing={toggle} icon={<Lock size={16} />} placeholder="Enter new password" value={form.password} onChange={(e) => setForm((c) => ({ ...c, password: e.target.value }))} autoComplete="new-password" maxLength={128} hint="Must be at least 8 characters." required />
-      <InputField label="Confirm new password" name="confirmPassword" type={show ? "text" : "password"} trailing={toggle} icon={<Lock size={16} />} placeholder="Confirm new password" value={form.confirm} onChange={(e) => setForm((c) => ({ ...c, confirm: e.target.value }))} error={error} autoComplete="new-password" maxLength={128} required />
+      <InputField label="Current password" name="currentPassword" type={show ? "text" : "password"} trailing={toggle} icon={<Lock size={16} />} placeholder="Enter current password" value={form.current} onChange={change("current")} error={errors.current} autoComplete="current-password" maxLength={128} required />
+      <InputField label="New password" name="newPassword" type={show ? "text" : "password"} icon={<Lock size={16} />} placeholder="Enter new password" value={form.password} onChange={change("password")} error={errors.password} autoComplete="new-password" maxLength={128} hint="Must be at least 8 characters." required />
+      <InputField label="Confirm new password" name="confirmPassword" type={show ? "text" : "password"} icon={<Lock size={16} />} placeholder="Confirm new password" value={form.confirm} onChange={change("confirm")} error={errors.confirm} autoComplete="new-password" maxLength={128} required />
       <div className="flex justify-end">
-        <Button type="submit" disabled={!form.password || !form.confirm || saving}><Lock size={15} /> {saving ? "Saving…" : "Change password"}</Button>
+        <Button type="submit" disabled={!form.current || !form.password || !form.confirm || saving}><Lock size={15} /> {saving ? "Saving…" : "Change password"}</Button>
       </div>
     </form>
     {/* eslint-disable-next-line @next/next/no-img-element */}
