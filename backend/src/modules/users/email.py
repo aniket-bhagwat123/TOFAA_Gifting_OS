@@ -102,5 +102,49 @@ class UserEmailService:
             logger.exception("Invalid Resend invitation email payload")
             raise HTTPException(status_code=503, detail="Invitation email payload is invalid.") from exc
 
+    @staticmethod
+    def is_configured() -> bool:
+        return bool(settings.RESEND_API_KEY and settings.RESEND_FROM_EMAIL)
+
+    def send_password_reset(self, *, email: str, reset_url: str) -> None:
+        """The branded "Reset your password" email, sent by us so it looks the same everywhere."""
+        self.ensure_configured()
+        import resend
+
+        site = settings.FRONTEND_URL.rstrip("/")
+        safe_email = html.escape(email, quote=True)
+        safe_url = html.escape(reset_url, quote=True)
+        body = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Reset your TOFAA password</title></head>
+<body style="margin:0;background:#F5F7F9;font-family:Inter,'Segoe UI',Arial,Helvetica,sans-serif;color:#161B26">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">Use the link inside to choose a new TOFAA password. It expires in one hour.</div>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F5F7F9;padding:32px 12px"><tr><td align="center">
+<table role="presentation" width="560" cellspacing="0" cellpadding="0" style="width:100%;max-width:560px;background:#fff;border:1px solid #E3E5EB;border-radius:16px;overflow:hidden">
+<tr><td bgcolor="#0B2B24" style="background:#0B2B24;padding:24px 36px"><table role="presentation" cellspacing="0" cellpadding="0"><tr>
+<td style="padding-right:12px"><img src="{site}/icons/icon-192.png" width="40" height="40" alt="TOFAA" style="display:block;border:0;border-radius:10px"></td>
+<td style="color:#fff;font-size:20px;font-weight:700;letter-spacing:1px">TOFAA</td></tr></table></td></tr>
+<tr><td bgcolor="#0B6B57" style="background:#0B6B57;height:4px;font-size:0;line-height:0">&nbsp;</td></tr>
+<tr><td style="padding:36px">
+<p style="margin:0 0 12px;color:#0B6B57;font-size:12px;font-weight:700;letter-spacing:1.5px">ACCOUNT SECURITY</p>
+<h1 style="margin:0 0 16px;font-size:26px;line-height:1.25;color:#161B26">Reset your password</h1>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#5E6678">We received a request to reset the password for:</p>
+<p style="margin:0 0 24px;padding:14px 16px;background:#E6F2EF;border-radius:10px;font-size:15px;font-weight:600;color:#085746;word-break:break-word">{safe_email}</p>
+<p style="margin:0 0 26px;font-size:15px;line-height:1.7;color:#5E6678">Select the button below to choose a new password. If you didn’t request this change, you can safely ignore this email.</p>
+<table role="presentation" cellspacing="0" cellpadding="0"><tr><td bgcolor="#0B6B57" style="border-radius:8px">
+<a href="{safe_url}" style="display:inline-block;padding:14px 28px;color:#fff;text-decoration:none;font-size:14px;font-weight:600;border-radius:8px">Reset password</a></td></tr></table>
+<p style="margin:26px 0 0;color:#5E6678;font-size:13px;line-height:1.6">This link expires in one hour and can be used once.</p>
+<hr style="margin:26px 0 18px;border:0;border-top:1px solid #E3E5EB">
+<p style="margin:0;color:#5E6678;font-size:12px;line-height:1.6">If the button doesn’t work, copy and paste this link into your browser:<br><a href="{safe_url}" style="color:#0B6B57;word-break:break-all">{safe_url}</a></p>
+</td></tr>
+<tr><td bgcolor="#F5F7F9" style="padding:18px 36px;background:#F5F7F9;color:#5E6678;font-size:11px;line-height:1.5;border-top:1px solid #E3E5EB">TOFAA Gifting OS · This is an account security email. Please do not share this link.</td></tr>
+</table></td></tr></table></body></html>"""
+        resend.api_key = settings.RESEND_API_KEY
+        resend.Emails.send({
+            "from": settings.RESEND_FROM_EMAIL,
+            "to": [email],
+            "subject": "Reset your TOFAA Gifting OS password",
+            "html": body,
+        })
+
 
 user_email_service = UserEmailService()

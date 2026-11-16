@@ -10,7 +10,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { ModuleList } from "./module-list";
 import { PeopleTabs } from "./people-tabs";
 import { OccasionsBoard } from "@/components/occasions/board/occasions-board";
-import { GroupsPanel } from "@/components/recipients/groups-panel";
 import { ActivityView } from "./activity-view";
 import { CreditsView } from "./credits-view";
 
@@ -24,6 +23,6 @@ export function ModuleGate({ moduleKey }: { moduleKey: string }) {
   }
   return <>
     {(moduleKey === "recipients" || moduleKey === "recipient-groups") && <PeopleTabs active={moduleKey} />}
-    {moduleKey === "occasions" && user.platformRole === "CLIENT" ? <OccasionsBoard /> : moduleKey === "occasions" && user.platformRole === "SUPER_ADMIN" ? <GroupsPanel embedded /> : moduleKey === "activity" ? <ActivityView /> : moduleKey === "credits" ? <CreditsView /> : <ModuleList moduleKey={moduleKey} />}
+    {moduleKey === "occasions" && (user.platformRole === "CLIENT" || user.platformRole === "SUPER_ADMIN") ? <OccasionsBoard /> :moduleKey === "activity" ? <ActivityView /> : moduleKey === "credits" ? <CreditsView /> : <ModuleList moduleKey={moduleKey} />}
   </>;
 }

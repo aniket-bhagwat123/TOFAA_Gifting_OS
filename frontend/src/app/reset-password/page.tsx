@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PasswordField } from "@/components/ui/password-field";
 import { Spinner } from "@/components/ui/spinner";
@@ -71,19 +71,27 @@ function ResetPasswordForm() {
 }
 
 export default function ResetPasswordPage() {
-  return <main className="flex min-h-screen items-center justify-center bg-canvas p-5">
-    <div className="w-full max-w-lg animate-rise-in rounded-3xl border border-line/70 bg-white p-8 shadow-soft sm:p-10">
-      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10 text-brand"><ShieldCheck size={24} /></span>
-      <Suspense fallback={null}><Heading /></Suspense>
-      <Suspense fallback={<div className="flex justify-center py-10"><Spinner /></div>}><ResetPasswordForm /></Suspense>
-    </div>
+  return <main className="grid min-h-screen bg-white lg:grid-cols-2">
+    <section className="relative hidden overflow-hidden bg-[#0B2B24] p-12 text-white lg:flex lg:flex-col lg:justify-between">
+      <div className="absolute -right-28 -top-24 h-96 w-96 rounded-full bg-brand/40 blur-3xl" /><div className="absolute -bottom-40 -left-20 h-96 w-96 rounded-full bg-emerald-300/20 blur-3xl" />
+      <div className="relative flex items-center gap-3"><div className="rounded-xl bg-white/15 p-3"><Sparkles size={22} /></div><p className="font-semibold">TOFAA</p></div>
+      <div className="relative max-w-lg"><div className="mb-6 inline-flex rounded-2xl bg-white/15 p-4"><ShieldCheck size={30} /></div><h1 className="text-5xl font-semibold">Keep your account secure.</h1><p className="mt-6 max-w-md text-lg leading-8 text-white/75">Choose a strong password that only you know. It takes less than a minute.</p></div>
+      <p className="relative text-sm text-white/60">Your details are private and secure.</p>
+    </section>
+    <section className="flex items-center justify-center px-6 py-12">
+      <div className="w-full max-w-md animate-rise-in">
+        <div className="mb-10 flex items-center gap-3 lg:hidden"><div className="inline-flex rounded-xl bg-brand p-3 text-white"><Sparkles size={20} /></div><p className="font-semibold">TOFAA</p></div>
+        <Suspense fallback={null}><Heading /></Suspense>
+        <Suspense fallback={<div className="flex justify-center py-10"><Spinner /></div>}><ResetPasswordForm /></Suspense>
+      </div>
+    </section>
   </main>;
 }
 
 function Heading() {
   const firstTime = useSearchParams().get("flow") === "invite";
   return <>
-    <h1 className="mt-5 text-[1.75rem] font-semibold text-ink">{firstTime ? "Choose your own password" : "Change your password"}</h1>
+    <h2 className="text-[2rem] font-semibold text-ink">{firstTime ? "Choose your own password" : "Change your password"}</h2>
     <p className="mt-2 text-base text-muted">{firstTime ? "You signed in with a temporary password. Pick one only you know to continue." : "Choose a new password for your account."}</p>
   </>;
 }

@@ -201,18 +201,16 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
   };
 
   return <>
-    {/* Tabs row */}
-    <div className="mb-3">
-      <PeopleTabs active="recipients" counts={{ recipients: summary?.active, groups: groups.length }} />
-    </div>
-    {/* Search, quick filters and actions row */}
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      <SearchInput value={search} onChange={setSearch} placeholder="Search by name, mobile or city…" label="Search recipients" className="min-w-[10rem] flex-1" />
+    {/* Tabs and quick filters row */}
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <PeopleTabs active="recipients" counts={{ recipients: summary?.active, groups: groups.length }} className="w-fit shrink-0" />
+      <div className="flex flex-wrap items-center justify-end gap-2">
       <FilterMenu triggerClassName="sm:min-w-0 sm:shrink-0" icon={<Heart size={16} />} label="Relationship" value={filters.relationship} options={[{ value: "", label: "Relationship" }, ...RELATIONSHIPS.filter((r) => !summary || summary.relationships.includes(r.value) || r.value === filters.relationship).map((r) => ({ value: r.value, label: r.label }))]} onChange={(value) => setFilter({ relationship: value })} />
       <FilterMenu triggerClassName="sm:min-w-0 sm:shrink-0" icon={<MapPin size={16} />} label="City" searchable value={filters.city} options={[{ value: "", label: "City" }, ...(summary?.cities ?? []).map((c) => ({ value: c, label: c }))]} onChange={(value) => setFilter({ city: value })} />
       <FilterMenu triggerClassName="sm:min-w-0 sm:shrink-0" icon={<Users size={16} />} label="Group" searchable width="w-64" value={filters.groupId} options={[{ value: "", label: "Group" }, ...groups.map((g) => ({ value: g.id, label: g.name, hint: `${g.recipientIds.length} people` }))]} onChange={(value) => setFilter({ groupId: value })} />
       <Button variant="secondary" className="shrink-0" onClick={() => setImportOpen(true)} disabled={!ready}><Upload size={16} /> Import</Button>
       <Button className="shrink-0 whitespace-nowrap" disabled={!ready} onClick={() => setCreateOpen(true)}><Plus size={16} /> Add Recipient</Button>
+      </div>
     </div>
 
     {endpoints && "error" in endpoints && <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">{endpoints.error}</p>}
@@ -225,7 +223,8 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
           <span className="inline-flex h-[38px] items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink"><Filter size={16} className="text-brand" /> Filters{activeCount > 0 && <span className="rounded-full bg-brand px-1.5 text-xs text-white">{activeCount}</span>}</span>
           <FilterMenu icon={<CalendarClock size={16} />} label="Upcoming occasion" value={filters.upcoming} options={[{ value: "", label: "Upcoming occasion" }, ...UPCOMING_OPTIONS.slice(1)]} onChange={(value) => setFilter({ upcoming: value })} />
           <FilterMenu icon={<Archive size={16} />} label="Status" value={filters.status} options={[{ value: "", label: "All" }, { value: "ACTIVE", label: "Status: Active" }, { value: "ARCHIVED", label: `Status: Archived${summary?.archived ? ` (${summary.archived})` : ""}` }]} onChange={(value) => { setFilter({ status: value as Filters["status"] }); setSelected(new Set()); }} />
-          <button type="button" onClick={clearAll} disabled={!filtered} className="press ml-auto inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold text-brand hover:bg-brand-soft/60 disabled:cursor-not-allowed disabled:opacity-40">Clear all</button>
+      <SearchInput value={search} onChange={setSearch} placeholder="Search by name, mobile or city…" label="Search recipients" className="ml-auto w-full sm:w-72" />
+          <button type="button" onClick={clearAll} disabled={!filtered} className="press inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold text-brand hover:bg-brand-soft/60 disabled:cursor-not-allowed disabled:opacity-40">Clear all</button>
         </div>
 
         {/* Selection bar */}

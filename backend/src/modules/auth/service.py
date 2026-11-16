@@ -8,6 +8,7 @@ from src.core.supabase import get_supabase_admin_client, get_supabase_client, ge
 from src.core.security import decode_access_token
 from src.core.ttl_cache import MISSING, lookups
 from src.modules.auth.rbac import Role
+from src.modules.users.email import user_email_service
 from src.modules.auth.schemas import (
     AuthResponse,
     PasswordResetRequest,
@@ -142,11 +143,19 @@ class AuthService:
         """
         Sends a password recovery email to the registered address.
         """
+        redirect_to = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?flow=recovery"
+        if user_email_service.is_configured():
+            try:
+                # Send our own branded email (Supabase's default template is plain and set in its dashboard).
+                link = self.admin_client.auth.admin.generate_link(
+                    {"type": "recovery", "email": payload.email, "options": {"redirect_to": redirect_to}}
+                )
+                user_email_service.send_password_reset(email=payload.email, reset_url=link.properties.action_link)
+                return
+            except Exception:
+                logger.error("Branded reset email failed; falling back to Supabase's email", exc_info=True)
         try:
-            self.anon_client.auth.reset_password_for_email(
-                payload.email,
-                options={"redirect_to": f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?flow=recovery"},
-            )
+            self.anon_client.auth.reset_password_for_email(payload.email, options={"redirect_to": redirect_to})
         except Exception as e:
             logger.error(f"Password reset request error: {str(e)}", exc_info=True)
             # Do not leak whether the email exists for security

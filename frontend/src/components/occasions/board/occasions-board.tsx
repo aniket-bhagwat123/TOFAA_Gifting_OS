@@ -35,9 +35,9 @@ const toSendItem = (item: OverviewItem): UpcomingEvent => ({
 export function OccasionsBoard() {
   const router = useRouter();
   const { user, tenantId, isClient } = useTenantId();
-  const canPlan = user?.platformRole !== "SUPER_ADMIN";
+  const canPlan = !!user; // super admin gets the same access as the client being viewed
 
-  const [view, setView] = useState<"list" | "calendar">("list");
+  const [view, setView] = useState<"list" | "calendar">("calendar");
   const [range, setRange] = useState("90");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
