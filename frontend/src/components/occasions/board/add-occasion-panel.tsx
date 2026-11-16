@@ -128,7 +128,7 @@ export function AddOccasionPanel({ open, editing, prefilledDate, tenantId, onClo
       </> : <>
         <section className="space-y-4"><h3 className={sectionTitle}>1. Recipient Details</h3>
           <div><span id="occ-recipient-label" className={fieldLabel}>Recipient<RequiredMark /></span>
-            {editing ? <p className="min-h-10 rounded-[9px] border border-line bg-slate-50 px-3 py-2 text-sm capitalize text-ink">{editing.name}</p>
+            {editing ? <p className="min-h-10 rounded-md border border-line bg-slate-50 px-3 py-2 text-sm capitalize text-ink">{editing.name}</p>
               : <SearchableSelect name="recipientId" labelId="occ-recipient-label" options={(recipients ?? []).map((row) => ({ id: String(row.id), label: String(row.name ?? "Unnamed"), searchText: String(row.mobileNumber ?? "") }))} value={form.recipientId} loading={!recipients && !loadError} loadError={loadError} placeholder="Search and select recipient…" error={errors.recipientId} required onChange={(value) => set({ recipientId: value })} />}
             {error("recipientId")}</div>
           <div><label htmlFor="occ-relationship" className={fieldLabel}>Relationship</label>

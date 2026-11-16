@@ -49,14 +49,14 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
     : user?.platformRole === "CLIENT" ? "Client"
     : null;
   // Translucent chrome: content scrolls beneath it, separated by a hairline only.
-  return <header className="material material-edge relative sticky top-0 z-20 flex h-[68px] items-center justify-between px-4 sm:px-6 lg:px-6">
+  return <header className="material material-edge relative sticky top-0 z-20 flex h-[58px] items-center justify-between px-4 sm:px-5 lg:px-6">
     <div className="flex items-center gap-2">
-      <button onClick={onMenu} className="press flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 hover:bg-black/5 lg:hidden" aria-label="Open menu"><Menu size={22} /></button>
-      <h1 className="truncate text-lg font-semibold text-ink">{moduleTitle}</h1>
+      <button onClick={onMenu} className="press flex h-9 w-9 items-center justify-center rounded-lg text-slate-700 hover:bg-black/5 lg:hidden" aria-label="Open menu"><Menu size={22} /></button>
+      <h1 className="truncate text-xl font-semibold text-ink">{moduleTitle}</h1>
     </div>
     {user?.platformRole === "CLIENT" && user.tenant?.name && (
       <div className="pointer-events-none absolute inset-x-0 top-0 hidden h-full items-center justify-center sm:flex">
-        <div className="flex items-center gap-2 rounded-2xl border border-brand/20 bg-gradient-to-r from-brand/5 to-emerald-50/60 px-4 py-1.5 shadow-sm">
+        <div className="flex items-center gap-2 rounded-lg border border-brand/20 bg-gradient-to-r from-brand/5 to-emerald-50/60 px-4 py-1.5 shadow-sm">
           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-brand text-white shadow-sm">
             <Building2 size={13} />
           </div>
@@ -69,7 +69,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
         const activeTenant = tenants.find((t: { id: string; name: string }) => t.id === selectedTenantId);
         return (
           <div className="relative">
-            <div className="flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 shadow-[0_1px_3px_rgba(0,0,0,0.07)] transition-shadow hover:shadow-[0_2px_6px_rgba(0,0,0,0.11)]">
+            <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-[0_1px_3px_rgba(0,0,0,0.07)] transition-shadow hover:shadow-[0_2px_6px_rgba(0,0,0,0.11)]">
               <Eye size={14} className="shrink-0 text-brand opacity-70" />
               <div className="flex flex-col leading-none">
                 <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-400">Viewing Client</span>
@@ -98,11 +98,11 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
         <Link href="/profile" aria-label="Open your profile" className="press flex items-center gap-2.5 rounded-full outline-none focus-visible:ring-4 focus-visible:ring-brand/20">
           <Avatar name={shownName} src={user?.avatarUrl} />
           <div className="hidden flex-col leading-none md:flex">
-            <span className="text-sm font-medium text-ink capitalize">{shownName}</span>
+            <span className="text-[13px] font-medium text-ink capitalize">{shownName}</span>
             {roleLabel && <span className="mt-0.5 text-[11px] text-slate-400">{roleLabel}</span>}
           </div>
         </Link>
-        <button onClick={handleLogout} title="Sign out" className="press flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-medium text-slate-700 hover:bg-black/5"><LogOut size={18} /><span className="hidden md:inline">Sign out</span></button>
+        <button onClick={handleLogout} title="Sign out" className="press flex min-h-9 items-center gap-2 rounded-[7px] px-3 text-[13px] font-medium text-slate-700 hover:bg-black/5"><LogOut size={18} /><span className="hidden md:inline">Sign out</span></button>
       </div>
     </div>
   </header>;

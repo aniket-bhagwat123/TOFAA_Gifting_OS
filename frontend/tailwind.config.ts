@@ -4,8 +4,15 @@ const config: Config = {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
+      // DESIGN.md §3: 11 badge/th, 12 label, 13 body, 14 card heading, 16 section, 20 page title.
+      fontSize: {
+        xs: ["12px", { lineHeight: "16px" }], sm: ["13px", { lineHeight: "18px" }], base: ["14px", { lineHeight: "20px" }],
+        lg: ["16px", { lineHeight: "22px" }], xl: ["20px", { lineHeight: "28px" }], "2xl": ["24px", { lineHeight: "30px" }], "3xl": ["28px", { lineHeight: "34px" }]
+      },
+      // DESIGN.md §6/§10/§13: controls 6-7px, cards 8px, modals/drawers 10px.
+      borderRadius: { sm: "4px", md: "6px", lg: "8px", xl: "10px", "2xl": "10px", "3xl": "10px" },
       fontFamily: {
-        sans: ["-apple-system", "BlinkMacSystemFont", "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "system-ui", "Roboto", "sans-serif"]
+        sans: ["var(--font-inter)", "Inter", "Segoe UI", "Arial", "sans-serif"]
       },
       colors: {
         ink: "#161B26",

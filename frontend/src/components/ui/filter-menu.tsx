@@ -17,7 +17,7 @@ export function FilterMenu({ icon, label, value, options, onChange, searchable, 
   const shown = options.filter((option) => `${option.label} ${option.hint ?? ""}`.toLowerCase().includes(term.trim().toLowerCase()));
   return <Popover open={open} onOpenChange={(next) => { setOpen(next); if (!next) setTerm(""); }}>
     <PopoverTrigger asChild>
-      <button type="button" aria-label={label} aria-haspopup="listbox" className={cn("flex h-10 w-full items-center gap-2 rounded-[9px] border border-line bg-white px-3 text-sm text-ink outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-brand/25 data-[state=open]:border-brand sm:w-auto sm:min-w-[9.5rem]", triggerClassName)}>
+      <button type="button" aria-label={label} aria-haspopup="listbox" className={cn("flex h-[38px] w-full items-center gap-2 rounded-md border border-line bg-white px-3 text-sm text-ink outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-brand/25 data-[state=open]:border-brand sm:w-auto sm:min-w-[9.5rem]", triggerClassName)}>
         <span className="text-muted">{icon}</span><span className="max-w-[9rem] flex-1 truncate text-left font-medium">{selected?.label ?? label}</span><ChevronDown size={14} className="shrink-0 text-muted" />
       </button>
     </PopoverTrigger>

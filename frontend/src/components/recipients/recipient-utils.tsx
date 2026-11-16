@@ -43,7 +43,7 @@ export const UPCOMING_OPTIONS = [
 
 export function OccasionIcon({ kind }: { kind: NextOccasion["kind"] }) {
   const Icon = kind === "BIRTHDAY" ? Cake : Gem;
-  return <span aria-hidden className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${kind === "BIRTHDAY" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}><Icon size={20} /></span>;
+  return <span aria-hidden className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${kind === "BIRTHDAY" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}><Icon size={16} /></span>;
 }
 
 /** Quotes a value for CSV, and defuses spreadsheet formulas (=, +, -, @). */

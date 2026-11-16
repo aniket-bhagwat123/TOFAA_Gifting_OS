@@ -14,7 +14,7 @@ export type BudgetTarget = {
   /** Group: the least a shared pool can be, so everyone already budgeted still fits. */ min?: number;
 };
 
-const field = "min-h-10 w-full rounded-[9px] border border-line bg-white px-3 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
+const field = "min-h-[38px] w-full rounded-md border border-line bg-white px-3 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
 
 /** Save a budget on a group or a person. It is the default used when gifts are sent to them. */
 export function BudgetSheet({ target, current, spendBase, onClose, onSaved }: {

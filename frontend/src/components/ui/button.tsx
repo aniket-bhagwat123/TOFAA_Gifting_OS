@@ -12,7 +12,7 @@ export function Button({ className, variant = "primary", size = "md", type = "bu
     ghost: "text-muted hover:bg-black/5 hover:text-ink",
     danger: "bg-rose-600 text-white hover:bg-rose-700"
   };
-  // Compact but comfortable: sm 36px (row actions), md and lg 40px (every page-level button and toolbar control).
-  const sizes = { sm: "min-h-9 px-3 text-sm", md: "min-h-10 px-4 text-sm", lg: "min-h-10 px-5 text-sm" };
-  return <button type={type} className={cn("press inline-flex items-center justify-center gap-2 rounded-[9px] font-semibold disabled:cursor-not-allowed disabled:opacity-50", sizes[size], variants[variant], className)} {...props} />;
+  // DESIGN.md §5: sm 32px, standard 36px, large 40px.
+  const sizes = { sm: "min-h-8 px-3 text-xs", md: "min-h-9 px-3.5 text-sm", lg: "min-h-10 px-4 text-sm" };
+  return <button type={type} className={cn("press inline-flex items-center justify-center gap-2 rounded-[7px] font-medium disabled:cursor-not-allowed disabled:opacity-50", sizes[size], variants[variant], className)} {...props} />;
 }

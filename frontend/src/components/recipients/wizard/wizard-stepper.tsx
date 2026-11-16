@@ -17,7 +17,7 @@ export function WizardStepper({ steps, current, reached, onGo }: {
         return <li key={step.key} className="relative flex min-w-0 flex-col items-center">
           {index > 0 && <span aria-hidden className={cn("absolute right-1/2 top-5 h-px w-full -translate-y-1/2", index <= reached ? "bg-brand/50" : "bg-line")} />}
           <button type="button" disabled={!open} onClick={() => onGo(index)} aria-current={active ? "step" : undefined} className="group relative z-10 flex min-w-0 flex-col items-center gap-2 disabled:cursor-default">
-            <span className={cn("flex h-10 w-10 items-center justify-center rounded-full border-2 text-base font-semibold transition",
+            <span className={cn("flex h-8 w-8 items-center justify-center rounded-full border-2 text-sm font-semibold transition",
               active ? "border-brand bg-brand text-white shadow-sm" : done ? "border-brand bg-brand text-white" : open ? "border-brand/50 bg-white text-brand" : "border-slate-300 bg-white text-slate-500")}>
               {done ? <Check size={18} strokeWidth={2.5} /> : index + 1}
             </span>

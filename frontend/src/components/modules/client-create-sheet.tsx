@@ -121,8 +121,8 @@ interface ClientFields {
   emailDomain: string;
 }
 
-const f = "w-full rounded-[9px] border min-h-9 px-2.5 py-1.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25 border-line";
-const fErr = "w-full rounded-[9px] border min-h-9 px-2.5 py-1.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25 border-rose-400";
+const f = "w-full rounded-md border min-h-9 px-2.5 py-1.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25 border-line";
+const fErr = "w-full rounded-md border min-h-9 px-2.5 py-1.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25 border-rose-400";
 
 export function ClientCreateSheet({
   open,

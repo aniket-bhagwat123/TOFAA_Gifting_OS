@@ -9,7 +9,7 @@ html { -webkit-text-size-adjust: 100%; font-size: 100%; }
 html, body { min-height: 100%; }
 body {
   margin: 0; background: #F5F5F7; color: #1B1F2A;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, Roboto, sans-serif;
+  font-family: var(--font-inter), Inter, "Segoe UI", Arial, sans-serif; font-size: 13px;
   line-height: 1.5; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
 }
 /* Optical tracking: large text tightens, small text stays near 0 */
@@ -17,8 +17,9 @@ h1, h2 { font-optical-sizing: auto; }
 h1 { letter-spacing: -0.022em; line-height: 1.1; }
 h2 { letter-spacing: -0.015em; line-height: 1.2; }
 button, input, textarea, select { font: inherit; }
-/* 16px minimum on inputs: no mobile zoom-on-focus, easier to read */
-input, textarea, select { font-size: 1rem; }
+/* 13px inputs (DESIGN.md §6); 16px on phones only so iOS does not zoom on focus */
+input, textarea, select { font-size: 13px; }
+@media (max-width: 639px) { input, textarea, select { font-size: 16px; } }
 button, [role="button"], a { -webkit-tap-highlight-color: transparent; }
 ::selection { background: #CFE6E0; color: #08362C; }
 

@@ -68,7 +68,7 @@ export function DatePickerField({
           aria-invalid={error ? "true" : undefined}
           aria-describedby={error ? `${id}-error` : undefined}
           className={cn(
-            compact ? "flex min-h-10 w-44 items-center gap-2 rounded-[9px] border bg-white px-3 py-2 text-left text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/25 data-[state=open]:border-brand" : "flex min-h-10 w-full items-center gap-3 rounded-[9px] border bg-white px-3 py-2 text-left text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/25 data-[state=open]:border-brand",
+            compact ? "flex min-h-10 w-44 items-center gap-2 rounded-md border bg-white px-3 py-2 text-left text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/25 data-[state=open]:border-brand" : "flex min-h-10 w-full items-center gap-3 rounded-md border bg-white px-3 py-2 text-left text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/25 data-[state=open]:border-brand",
             selected ? "text-ink" : "text-slate-400",
             error ? "border-rose-400" : "border-line"
           )}

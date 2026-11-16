@@ -2,7 +2,7 @@ import { Search } from "lucide-react";
 import { control } from "@/components/ui/table-styles";
 import { cn } from "@/lib/utils";
 
-/** The one search box used above every list: 40px tall, magnifier on the left. */
+/** The one search box used above every list: 38px tall, magnifier on the left. */
 export function SearchInput({ value, onChange, placeholder, label, className }: {
   value: string; onChange: (value: string) => void; placeholder: string; label?: string; className?: string;
 }) {

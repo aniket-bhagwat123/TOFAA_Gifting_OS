@@ -25,7 +25,7 @@ import { RecipientsTable, type SortKey, type SortState } from "./recipients-tabl
 import { type DirectoryRow, RELATIONSHIPS, type Summary, UPCOMING_OPTIONS, recipientsToCsv, updatedLabel } from "./recipient-utils";
 
 const PAGE_SIZE = 7;
-const card = "rounded-2xl border border-line/70 bg-white shadow-soft";
+const card = "rounded-lg border border-line/70 bg-white shadow-soft";
 type Filters = { relationship: string; city: string; groupId: string; upcoming: string; status: "ACTIVE" | "ARCHIVED" | "" };
 const NO_FILTERS: Filters = { relationship: "", city: "", groupId: "", upcoming: "", status: "" };
 
@@ -192,7 +192,7 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
   const pageNumbers = Array.from({ length: pages }, (_, i) => i + 1).filter((n) => n === 1 || n === pages || Math.abs(n - page) <= 1);
   const archivedView = filters.status === "ARCHIVED";
   const selectedCount = selected.size;
-  const pill = "press inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] border border-line bg-white px-2.5 text-xs font-medium text-ink hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+  const pill = "press inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-white px-2.5 text-xs font-medium text-ink hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
   const downloadTemplate = () => {
     const url = URL.createObjectURL(new Blob([RECIPIENT_TEMPLATE], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
@@ -221,11 +221,11 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
     <div>
       <section aria-label="Recipients list" className="min-w-0 space-y-3">
         {/* More filters */}
-        <div className={cn(card, "flex flex-wrap items-center gap-2.5 px-4 py-3")}>
-          <span className="inline-flex h-10 items-center gap-2 rounded-[9px] border border-line bg-white px-3 text-sm font-medium text-ink"><Filter size={16} className="text-brand" /> Filters{activeCount > 0 && <span className="rounded-full bg-brand px-1.5 text-xs text-white">{activeCount}</span>}</span>
+        <div className={cn(card, "flex flex-wrap items-center gap-2 px-3 py-2")}>
+          <span className="inline-flex h-[38px] items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink"><Filter size={16} className="text-brand" /> Filters{activeCount > 0 && <span className="rounded-full bg-brand px-1.5 text-xs text-white">{activeCount}</span>}</span>
           <FilterMenu icon={<CalendarClock size={16} />} label="Upcoming occasion" value={filters.upcoming} options={[{ value: "", label: "Upcoming occasion" }, ...UPCOMING_OPTIONS.slice(1)]} onChange={(value) => setFilter({ upcoming: value })} />
           <FilterMenu icon={<Archive size={16} />} label="Status" value={filters.status} options={[{ value: "", label: "All" }, { value: "ACTIVE", label: "Status: Active" }, { value: "ARCHIVED", label: `Status: Archived${summary?.archived ? ` (${summary.archived})` : ""}` }]} onChange={(value) => { setFilter({ status: value as Filters["status"] }); setSelected(new Set()); }} />
-          <button type="button" onClick={clearAll} disabled={!filtered} className="press ml-auto inline-flex h-9 items-center rounded-lg px-3 text-sm font-semibold text-brand hover:bg-brand-soft/60 disabled:cursor-not-allowed disabled:opacity-40">Clear all</button>
+          <button type="button" onClick={clearAll} disabled={!filtered} className="press ml-auto inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold text-brand hover:bg-brand-soft/60 disabled:cursor-not-allowed disabled:opacity-40">Clear all</button>
         </div>
 
         {/* Selection bar */}
@@ -252,7 +252,7 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-1">
-          <p className="text-sm tabular-nums text-muted" aria-live="polite">{loading ? "Loading…" : rows.length ? `Showing ${from} – ${from + rows.length - 1} of ${total} recipient${total === 1 ? "" : "s"}` : "Showing 0 recipients"}</p>
+          <p className="text-xs tabular-nums text-muted" aria-live="polite">{loading ? "Loading…" : rows.length ? `Showing ${from} – ${from + rows.length - 1} of ${total} recipient${total === 1 ? "" : "s"}` : "Showing 0 recipients"}</p>
           {pages > 1 && <nav aria-label="Pagination" className="flex items-center gap-1.5">
             <button type="button" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage(page - 1)} className={cn(pageButton, "border border-line bg-white disabled:opacity-40")}><ChevronLeft size={16} /></button>
             {pageNumbers.map((n, i) => <span key={n} className="flex items-center gap-1.5">
@@ -273,10 +273,10 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
     <RecipientDialog target={target} endpoint={ready?.recipients ?? ""} onClose={() => setTarget(null)} onPhotoChanged={refresh} onSaved={(addAnother) => { if (!addAnother) setTarget(null); refresh(); }} onDelete={(row) => setConfirm([row as DirectoryRow])} />
     <GroupSheet group={groupSheet} endpoint={ready?.groups ?? ""} recipients={everyone} loadingRecipients={!everyone.length} presetIds={groupPreset} onClose={() => setGroupSheet(null)} onSaved={() => { if (groupSheet === "new" && groupPreset.length) setSelected(new Set()); setGroupSheet(null); refresh(); }} />
     <ImportCsvSheet open={importOpen} endpoint={ready?.recipients ?? ""} onClose={() => setImportOpen(false)} onDone={refresh} />
-    <Sheet open={!!confirm} locked={deleting} zIndex="z-[90]" labelledBy="confirm-delete-title" className="max-w-md" onClose={() => setConfirm(null)}>
-      <h2 id="confirm-delete-title" className="text-xl font-semibold text-ink">Delete {confirm && confirm.length > 1 ? `${confirm.length} recipients` : "this recipient"}?</h2>
-      <p className="mt-2 text-base text-muted">{confirm && confirm.length === 1 ? `${confirm[0].name} will be removed. ` : ""}This can&apos;t be undone.</p>
-      <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><Button variant="secondary" disabled={deleting} onClick={() => setConfirm(null)}>Cancel</Button><Button variant="danger" disabled={deleting} onClick={() => void remove()}>{deleting ? "Deleting…" : "Yes, delete"}</Button></div>
+    <Sheet open={!!confirm} locked={deleting} zIndex="z-[90]" labelledBy="confirm-delete-title" className="max-w-[26rem]" onClose={() => setConfirm(null)}>
+      <h2 id="confirm-delete-title" className="text-[17px] font-semibold text-ink">Delete {confirm && confirm.length > 1 ? `${confirm.length} recipients` : "this recipient"}?</h2>
+      <p className="mt-2 text-sm text-muted">{confirm && confirm.length === 1 ? `${confirm[0].name} will be removed. ` : ""}This can&apos;t be undone.</p>
+      <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="secondary" disabled={deleting} onClick={() => setConfirm(null)}>Cancel</Button><Button variant="danger" disabled={deleting} onClick={() => void remove()}>{deleting ? "Deleting…" : "Yes, delete"}</Button></div>
     </Sheet>
   </>;
 }

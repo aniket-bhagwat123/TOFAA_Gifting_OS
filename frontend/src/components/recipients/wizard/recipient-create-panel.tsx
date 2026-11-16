@@ -176,7 +176,7 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
         <Button variant="secondary" className="flex-1" onClick={reset}><UserPlus size={16} /> Add another</Button>
         <Button variant="secondary" className="flex-1" onClick={onClose}>Close</Button>
       </div>}>
-      <p className="text-base font-semibold capitalize text-ink">{result.name}</p>
+      <p className="text-sm font-semibold capitalize text-ink">{result.name}</p>
       {percent !== undefined && <div>
         <div className="flex justify-between text-sm"><span className="font-medium text-ink">Profile completeness</span><span className="tabular-nums font-semibold text-ink">{percent}%</span></div>
         <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand" style={{ width: `${percent}%` }} /></div>
@@ -245,7 +245,7 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
     </FormPanel>
 
     <Sheet open={confirmCancel} zIndex="z-[90]" labelledBy="discard-title" className="max-w-md" onClose={() => setConfirmCancel(false)}>
-      <h2 id="discard-title" className="text-xl font-semibold text-ink">Close without saving?</h2>
+      <h2 id="discard-title" className="text-[17px] font-semibold text-ink">Close without saving?</h2>
       <p className="mt-2 text-sm text-muted">Your entries are kept as a draft on this device, so you can continue later from Add Recipient.</p>
       <div className="mt-6 flex items-center justify-between gap-3">
         <Button variant="secondary" className="shrink-0" onClick={() => setConfirmCancel(false)}>Keep editing</Button>

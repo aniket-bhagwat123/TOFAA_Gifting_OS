@@ -31,7 +31,7 @@ const HEADINGS = [
   "Optional. Add gifting preferences and delivery addresses. Fill in the rest later.",
   "Check everything, then save the recipient. You can edit any section first.",
 ];
-const pillButton = "press inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-full px-5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50";
+const pillButton = "press inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50";
 const secondary = `${pillButton} border border-line bg-white text-ink shadow-sm hover:bg-slate-50`;
 const primary = `${pillButton} bg-brand text-white shadow-sm hover:bg-brand-dark`;
 
@@ -144,9 +144,9 @@ export function RecipientWizardPage() {
 
   if (result) {
     const percent = (result.profile?.completeness as { percent?: number } | null | undefined)?.percent;
-    return <div ref={top} className="wizard-surface mx-auto max-w-2xl rounded-2xl border border-line/70 bg-white p-8 text-center shadow-soft">
-      <span aria-hidden className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-soft text-brand"><CheckCircle2 size={34} /></span>
-      <h2 className="mt-4 text-2xl font-semibold text-ink">Recipient added</h2>
+    return <div ref={top} className="wizard-surface mx-auto max-w-2xl rounded-lg border border-line/70 bg-white p-6 text-center shadow-soft">
+      <span aria-hidden className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand"><CheckCircle2 size={26} /></span>
+      <h2 className="mt-4 text-xl font-semibold text-ink">Recipient added</h2>
       <p className="mt-1 text-sm text-muted"><span className="font-semibold capitalize text-ink">{result.name}</span> is saved and shared with your TOFAA team.</p>
       {percent !== undefined && <div className="mx-auto mt-6 max-w-sm text-left">
         <div className="flex justify-between text-sm"><span className="font-medium text-ink">Profile completeness</span><span className="font-semibold tabular-nums text-ink">{percent}%</span></div>
@@ -172,7 +172,7 @@ export function RecipientWizardPage() {
     <WizardStepper steps={STEPS} current={step} reached={reached} onGo={go} />
 
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_21rem]">
-      <form noValidate onSubmit={(event) => void submit(event)} className="min-w-0 rounded-2xl border border-line/70 bg-white shadow-soft">
+      <form noValidate onSubmit={(event) => void submit(event)} className="min-w-0 rounded-lg border border-line/70 bg-white shadow-soft">
         <div className="p-6 sm:p-8">
           {resume && step === 0 && <div role="region" aria-label="Saved draft" className="mb-6 rounded-xl border border-brand/25 bg-brand-soft/50 px-4 py-3">
             <p className="text-sm text-ink"><span className="font-semibold">You have a saved draft</span> for {resume.data.details.name.trim() || "a new recipient"} from {new Date(resume.savedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}.</p>
@@ -182,8 +182,8 @@ export function RecipientWizardPage() {
             </div>
           </div>}
 
-          <h2 className="text-[1.75rem] font-semibold leading-tight text-ink">{step + 1}. {STEPS[step].label}</h2>
-          <p className="mb-7 mt-1.5 text-[0.9375rem] text-muted">{HEADINGS[step]}</p>
+          <h2 className="text-xl font-semibold leading-tight text-ink">{step + 1}. {STEPS[step].label}</h2>
+          <p className="mb-5 mt-1 text-sm text-muted">{HEADINGS[step]}</p>
 
           {step === 0 && <DetailsStepPage data={data.details} errors={errors} photoUrl={photoUrl} cities={cities} onChange={changeDetails} onPhoto={setPhoto} duplicates={duplicates} confirmedDifferent={data.allowDuplicate}
             onConfirmDifferent={() => { setData((current) => ({ ...current, allowDuplicate: true })); setDuplicates([]); go(1); }} />}
@@ -216,7 +216,7 @@ export function RecipientWizardPage() {
     </div>
 
     <Sheet open={confirmCancel} zIndex="z-[90]" labelledBy="discard-title" className="max-w-md" onClose={() => setConfirmCancel(false)}>
-      <h2 id="discard-title" className="text-xl font-semibold text-ink">Leave without saving?</h2>
+      <h2 id="discard-title" className="text-[17px] font-semibold text-ink">Leave without saving?</h2>
       <p className="mt-2 text-sm text-muted">Your entries can be kept as a draft on this device, so you can continue later from Add Recipient.</p>
       <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <Button variant="secondary" onClick={() => setConfirmCancel(false)}>Keep editing</Button>

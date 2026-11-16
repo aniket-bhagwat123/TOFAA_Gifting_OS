@@ -212,7 +212,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
     {urls && "error" in urls && <p role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">{urls.error}</p>}
     {error && <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><span>We couldn&apos;t load your groups. {error}</span><Button size="sm" variant="secondary" onClick={() => void load()}>Try again</Button></div>}
 
-    <section className="overflow-hidden rounded-2xl border border-line bg-white" aria-label="Recipient groups">
+    <section className="overflow-hidden rounded-lg border border-line bg-white" aria-label="Recipient groups">
       <div className="flex flex-col gap-3 border-b border-line px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div className="relative w-full sm:max-w-sm">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />

@@ -23,7 +23,7 @@ export const initialsOf = (name?: string | null) =>
 export function Avatar({ name, src, shape = "circle", className }: { name?: string | null; src?: string | null; shape?: "circle" | "square"; className?: string }) {
   const [failed, setFailed] = useState<string | null>(null);
   const showImage = !!src && failed !== src;
-  return <span aria-hidden className={cn("flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden text-sm font-semibold", shape === "circle" ? "rounded-full" : "rounded-xl", !showImage && avatarColor(name), className)}>
+  return <span aria-hidden className={cn("flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden text-xs font-semibold", shape === "circle" ? "rounded-full" : "rounded-lg", !showImage && avatarColor(name), className)}>
     {showImage ? <img src={src} alt="" loading="lazy" onError={() => setFailed(src)} className="h-full w-full object-cover" /> : initialsOf(name)}
   </span>;
 }

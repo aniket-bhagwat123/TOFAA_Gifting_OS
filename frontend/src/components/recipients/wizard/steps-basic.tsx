@@ -14,7 +14,7 @@ import { type DetailsData, type Errors, LINK_TYPES, type LinkType, type Recipien
 import { RELATIONSHIPS } from "../recipient-utils";
 import type { RecipientGroup } from "../group-sheet";
 
-const select = "min-h-10 w-full rounded-[9px] border border-line bg-white px-3 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
+const select = "min-h-[38px] w-full rounded-md border border-line bg-white px-3 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
 
 /** The photo is kept in the browser until the recipient is saved, then uploaded. Horizontal layout: avatar on left, controls on right. */
 function PhotoPicker({ name, src, onPick }: { name: string; src: string | null; onPick: (file: File | null) => void }) {
@@ -26,7 +26,7 @@ function PhotoPicker({ name, src, onPick }: { name: string; src: string | null; 
     onPick(file);
   };
   return <div className="flex items-center gap-4">
-    <Avatar name={name} src={src} className="h-16 w-16 shrink-0 text-lg" />
+    <Avatar name={name} src={src} className="h-12 w-12 shrink-0 text-base" />
     <div>
       <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" tabIndex={-1} aria-label="Upload a profile photo" onChange={(event) => { choose(event.target.files?.[0]); event.target.value = ""; }} />
       <div className="flex flex-wrap gap-2">
@@ -59,7 +59,7 @@ export function DetailsStep({ data, errors, photoUrl, onChange, onPhoto, duplica
     <fieldset className="mt-5">
       <legend className="text-sm font-medium text-ink">Recipient type<RequiredMark /></legend>
       <div className="mt-2 flex flex-wrap gap-2.5">
-        {types.map((type) => <label key={type.value} className={cn("flex min-h-10 cursor-pointer items-center gap-2.5 rounded-full border px-4 text-sm font-medium", data.recipientType === type.value ? "border-brand/50 bg-brand-soft text-brand" : "border-line bg-white text-ink hover:bg-slate-50")}>
+        {types.map((type) => <label key={type.value} className={cn("flex min-h-9 cursor-pointer items-center gap-2.5 rounded-full border px-4 text-sm font-medium", data.recipientType === type.value ? "border-brand/50 bg-brand-soft text-brand" : "border-line bg-white text-ink hover:bg-slate-50")}>
           <input type="radio" name="recipient-type" checked={data.recipientType === type.value} onChange={() => onChange({ recipientType: type.value })} className="h-4 w-4 accent-brand" />{type.label}
         </label>)}
       </div>
@@ -112,7 +112,7 @@ export function RelationshipStep({ data, groups, recipientsEndpoint, onChange }:
         <p className="text-xs text-muted">Connect this person to someone already in your recipients, such as a spouse or colleague.</p>
         <div className="mt-2 space-y-2.5">
           {data.links.map((link) => <div key={link.key} className="grid items-start gap-2 rounded-xl border border-line/70 p-3 sm:grid-cols-[minmax(0,1fr)_11rem_auto]">
-            {link.person ? <div className="flex min-h-10 items-center"><PersonChip person={link.person} onRemove={() => setLink(link.key, { person: null })} /></div>
+            {link.person ? <div className="flex min-h-9 items-center"><PersonChip person={link.person} onRemove={() => setLink(link.key, { person: null })} /></div>
               : <PersonPicker endpoint={recipientsEndpoint} label="Find a recipient to link" exclude={data.links.flatMap((l) => (l.person ? [l.person.id] : []))} onPick={(person) => setLink(link.key, { person })} />}
             <select aria-label="Relationship type" value={link.type} onChange={(event) => setLink(link.key, { type: event.target.value as LinkType })} className={select}>
               {LINK_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}

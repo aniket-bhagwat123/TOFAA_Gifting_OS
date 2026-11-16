@@ -9,7 +9,7 @@ import { type DetailsData, type Errors, type RecipientType } from "./wizard-type
 
 const COUNTRY_CODES = ["+91", "+1", "+44", "+971", "+65", "+61"];
 const BASE_CITIES = ["Mumbai", "Delhi", "Bengaluru", "Hyderabad", "Chennai", "Kolkata", "Pune", "Ahmedabad", "Jaipur", "Gurugram"];
-const field = "h-12 w-full rounded-xl border border-line bg-white px-4 text-[0.9375rem] text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/25";
+const field = "h-[38px] w-full rounded-md border border-line bg-white px-3 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/25";
 
 /** Splits "+919876543210" into its country code and the rest, so each can sit in its own control. */
 function splitMobile(value: string): { code: string; number: string } {
@@ -20,7 +20,7 @@ function splitMobile(value: string): { code: string; number: string } {
 
 function Field({ label, htmlFor, required, error, children }: { label: string; htmlFor?: string; required?: boolean; error?: string; children: ReactNode }) {
   return <div className="min-w-0">
-    <label htmlFor={htmlFor} className="mb-2 block text-[0.9375rem] font-semibold text-ink">{label}{required && <span className="ml-0.5 text-rose-500" aria-hidden>*</span>}</label>
+    <label htmlFor={htmlFor} className="mb-1.5 block text-xs font-medium text-ink">{label}{required && <span className="ml-0.5 text-rose-500" aria-hidden>*</span>}</label>
     {children}
     {error && <p role="alert" className="mt-1.5 text-sm text-rose-600">{error}</p>}
   </div>;
@@ -50,9 +50,9 @@ function PhotoPicker({ photoUrl, onPick }: { photoUrl: string | null; onPick: (f
       <span aria-hidden className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-full bg-brand-soft/70 text-brand ring-1 ring-line/70">
         {photoUrl ? <img src={photoUrl} alt="" className="h-full w-full object-cover" /> : <UserCircle size={64} strokeWidth={1.3} />}
       </span>
-      <button type="button" onClick={() => input.current?.click()} aria-label={photoUrl ? "Change photo" : "Upload photo"} className="press absolute bottom-1 right-1 flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-brand text-white shadow-sm hover:bg-brand-dark"><Camera size={18} /></button>
+      <button type="button" onClick={() => input.current?.click()} aria-label={photoUrl ? "Change photo" : "Upload photo"} className="press absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-brand text-white shadow-sm hover:bg-brand-dark"><Camera size={18} /></button>
     </div>
-    <button type="button" onClick={() => input.current?.click()} className="mt-3 text-base font-medium text-ink hover:text-brand">{photoUrl ? "Change Photo" : "Upload Photo"}</button>
+    <button type="button" onClick={() => input.current?.click()} className="mt-3 text-sm font-medium text-ink hover:text-brand">{photoUrl ? "Change Photo" : "Upload Photo"}</button>
     <p className="mt-0.5 text-xs text-muted">JPG, PNG (max 2MB)</p>
     {photoUrl && <button type="button" onClick={() => onPick(null)} className="mt-1 text-xs font-medium text-rose-700 hover:underline">Remove</button>}
   </div>;
@@ -78,9 +78,9 @@ export function DetailsStepPage({ data, errors, photoUrl, cities, onChange, onPh
             trailing={data.name.trim().length >= 2 && !errors.name ? <CheckCircle2 size={20} className="text-emerald-500" aria-label="Looks good" /> : undefined} />
         </Field>
         <Field label="Mobile Number" htmlFor="wz-mobile" error={errors.mobile}>
-          <div className={cn("flex h-12 overflow-hidden rounded-xl border bg-white transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/25", errors.mobile ? "border-rose-400" : "border-line")}>
+          <div className={cn("flex h-[38px] overflow-hidden rounded-md border bg-white transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/25", errors.mobile ? "border-rose-400" : "border-line")}>
             <div className="relative flex shrink-0 items-center border-r border-line/80">
-              <select aria-label="Country code" value={code} onChange={(event) => setMobile(event.target.value, number)} className="h-full appearance-none bg-transparent pl-4 pr-8 text-[0.9375rem] text-ink outline-none" style={{ border: 0, boxShadow: "none", borderRadius: 0 }}>
+              <select aria-label="Country code" value={code} onChange={(event) => setMobile(event.target.value, number)} className="h-full appearance-none bg-transparent pl-3 pr-8 text-[0.9375rem] text-ink outline-none" style={{ border: 0, boxShadow: "none", borderRadius: 0 }}>
                 {COUNTRY_CODES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
               <ChevronDown size={15} aria-hidden className="pointer-events-none absolute right-3 text-slate-500" />
@@ -104,11 +104,11 @@ export function DetailsStepPage({ data, errors, photoUrl, cities, onChange, onPh
       </div>
 
       <fieldset>
-        <legend className="mb-2 text-[0.9375rem] font-semibold text-ink">Recipient Type<span className="ml-0.5 text-rose-500" aria-hidden>*</span></legend>
+        <legend className="mb-1.5 text-xs font-medium text-ink">Recipient Type<span className="ml-0.5 text-rose-500" aria-hidden>*</span></legend>
         <div className="flex flex-wrap gap-3">
           {types.map(({ value, label, Icon }) => {
             const on = data.recipientType === value;
-            return <label key={value} className={cn("flex h-12 cursor-pointer items-center gap-3 rounded-full border px-5 text-sm font-semibold transition", on ? "border-brand/40 bg-brand-soft text-ink" : "border-line bg-white text-ink hover:bg-slate-50")}>
+            return <label key={value} className={cn("flex h-9 cursor-pointer items-center gap-2.5 rounded-full border px-4 text-sm font-semibold transition", on ? "border-brand/40 bg-brand-soft text-ink" : "border-line bg-white text-ink hover:bg-slate-50")}>
               <input type="radio" name="wz-recipient-type" checked={on} onChange={() => onChange({ recipientType: value })} className="sr-only" />
               <span aria-hidden className={cn("flex h-5 w-5 items-center justify-center rounded-full border-2", on ? "border-brand bg-brand" : "border-slate-300 bg-white")}>{on && <span className="h-1.5 w-1.5 rounded-full bg-white" />}</span>
               <Icon size={18} className={on ? "text-brand" : "text-slate-500"} />{label}
@@ -125,7 +125,7 @@ export function DetailsStepPage({ data, errors, photoUrl, cities, onChange, onPh
             <span className="flex flex-wrap gap-1">{match.reasons.map((c) => <span key={c} className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">{reason(c)}</span>)}</span>
           </li>)}
         </ul>
-        <button type="button" onClick={onConfirmDifferent} className="press mt-3 inline-flex h-10 items-center rounded-full border border-line bg-white px-4 text-sm font-semibold text-ink hover:bg-slate-50">This is a different person — continue</button>
+        <button type="button" onClick={onConfirmDifferent} className="press mt-3 inline-flex h-8 items-center rounded-full border border-line bg-white px-4 text-sm font-semibold text-ink hover:bg-slate-50">This is a different person — continue</button>
         <p className="mt-2 text-xs text-amber-900">To avoid duplicates, save and exit, then open the existing recipient instead.</p>
       </div>}
 

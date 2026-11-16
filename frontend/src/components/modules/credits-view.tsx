@@ -32,7 +32,7 @@ const num = (value: number) => value.toLocaleString("en-IN");
 const rupees = (minor: number, decimals = 0) => `₹${(minor / 100).toLocaleString("en-IN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 const day = (value: string) => new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
-const inputClass = "min-h-10 w-full rounded-[9px] border border-line bg-white px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
+const inputClass = "min-h-[38px] w-full rounded-md border border-line bg-white px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
 
 const sourceLabel: Record<string, string> = { gift_request: "Gift request", contract_gift: "Contract gift", credit_request: "Credit request", adjustment: "Adjustment", gift: "Gift" };
 const usageLabel: Record<string, string> = { gift_request: "Gift requests", contract_gift: "Contract gifts", adjustment: "Adjustments", gift: "Gifts" };

@@ -20,7 +20,7 @@ export function SidePanel({ open, onClose, labelledBy, children, className, lock
   useEffect(() => setMounted(true), []);
   if (!open || !mounted) return null;
   return createPortal(<div className="fixed inset-0 z-[70] flex justify-end bg-slate-950/30 animate-fade-in" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !locked) onClose(); }}>
-    <aside role="dialog" aria-modal="true" aria-labelledby={labelledBy} className={cn("scroll-clean h-full w-full max-w-md overflow-y-auto overscroll-contain bg-white p-6 shadow-float sm:rounded-l-3xl sm:p-7", className)}>
+    <aside role="dialog" aria-modal="true" aria-labelledby={labelledBy} className={cn("scroll-clean h-full w-full max-w-md overflow-y-auto overscroll-contain bg-white p-6 shadow-float sm:rounded-l-[10px] sm:p-6", className)}>
       {children}
     </aside>
   </div>, document.body);

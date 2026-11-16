@@ -13,8 +13,8 @@ import {
 } from "./wizard-types";
 import { longDate } from "../recipient-utils";
 
-const select = "min-h-10 w-full rounded-[9px] border border-line bg-white px-3 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
-const area = "min-h-20 w-full rounded-[9px] border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
+const select = "min-h-[38px] w-full rounded-md border border-line bg-white px-3 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
+const area = "min-h-20 w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
 
 // ------------------------------------------------------------------------------------------ step 3
 const blankOccasion = (): OccasionItem => ({ key: newKey(), type: "Birthday", name: "", date: "", repeatAnnually: true, notes: "", participants: [] });
@@ -73,7 +73,7 @@ function OccasionsStep({ items, recipientsEndpoint, onChange }, ref) {
       </div>
       {draft.type === "Custom" && <InputField label="Occasion name" required placeholder="e.g. Promotion" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} error={errors.name} />}
       <DatePickerField id="occ-date" label="Date" required value={draft.date} onChange={(value) => setDraft({ ...draft, date: value })} error={errors.date} />
-      <label className="flex min-h-10 cursor-pointer items-center gap-2.5 self-end text-sm text-ink"><input type="checkbox" checked={draft.repeatAnnually} onChange={(event) => setDraft({ ...draft, repeatAnnually: event.target.checked })} className="h-4 w-4 accent-brand" /> Repeat every year</label>
+      <label className="flex min-h-9 cursor-pointer items-center gap-2.5 self-end text-sm text-ink"><input type="checkbox" checked={draft.repeatAnnually} onChange={(event) => setDraft({ ...draft, repeatAnnually: event.target.checked })} className="h-4 w-4 accent-brand" /> Repeat every year</label>
       {draft.type !== "Birthday" && <div className="sm:col-span-2">
         <p className="text-sm font-medium text-ink">Shared with <span className="font-normal text-muted">(optional)</span></p>
         <p className="mb-2 text-xs text-muted">For an occasion that involves other people, such as a wedding anniversary. It is stored once.</p>
@@ -98,7 +98,7 @@ function TagInput({ label, values, placeholder, onChange }: { label: string; val
     <label className="block text-sm font-medium text-ink">{label}</label>
     <div className="flex gap-2">
       <input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === ",") { event.preventDefault(); add(); } }} onBlur={add} placeholder={placeholder} aria-label={label}
-        className="min-h-10 w-full rounded-[9px] border border-line bg-white px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25" />
+        className="min-h-[38px] w-full rounded-md border border-line bg-white px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25" />
     </div>
     {values.length > 0 && <div className="flex flex-wrap gap-1.5 pt-1">{values.map((value) => <span key={value} className="inline-flex items-center gap-1 rounded-full bg-slate-100 py-0.5 pl-3 pr-1 text-sm text-ink">{value}<button type="button" aria-label={`Remove ${value}`} onClick={() => onChange(values.filter((v) => v !== value))} className="flex h-5 w-5 items-center justify-center rounded-full text-muted hover:bg-black/5">×</button></span>)}</div>}
   </div>;
@@ -153,7 +153,7 @@ export function PreferencesStep({ prefs, addresses, onPrefs, onAddresses }: {
     {draft ? <div className="mt-3 grid gap-4 rounded-xl border border-brand/30 bg-brand-soft/20 p-4 sm:grid-cols-2">
       <div className="space-y-1.5"><label htmlFor="al" className="block text-sm font-medium text-ink">Address type</label>
         <select id="al" value={draft.label} onChange={(event) => setDraft({ ...draft, label: event.target.value as AddressLabel })} className={select}>{ADDRESS_LABELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}</select></div>
-      <label className="flex min-h-10 cursor-pointer items-center gap-2.5 self-end text-sm text-ink"><input type="checkbox" checked={draft.isDefault} onChange={(event) => setDraft({ ...draft, isDefault: event.target.checked })} className="h-4 w-4 accent-brand" /> Default delivery address</label>
+      <label className="flex min-h-9 cursor-pointer items-center gap-2.5 self-end text-sm text-ink"><input type="checkbox" checked={draft.isDefault} onChange={(event) => setDraft({ ...draft, isDefault: event.target.checked })} className="h-4 w-4 accent-brand" /> Default delivery address</label>
       <div className="sm:col-span-2"><InputField label="Address" required placeholder="House no., street, area" value={draft.line1} onChange={(event) => setDraft({ ...draft, line1: event.target.value })} error={errors.line1} /></div>
       <div className="sm:col-span-2"><InputField label="Address line 2" placeholder="Landmark (optional)" value={draft.line2} onChange={(event) => setDraft({ ...draft, line2: event.target.value })} /></div>
       <InputField label="City" required value={draft.city} onChange={(event) => setDraft({ ...draft, city: event.target.value })} error={errors.city} />

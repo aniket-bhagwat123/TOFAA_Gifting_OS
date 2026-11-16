@@ -9,9 +9,9 @@ import { ADDRESS_LABELS, LINK_TYPES, type WizardData, occasionLabel } from "./wi
 const none = <span className="text-muted">Not added</span>;
 
 function Section({ title, step, onEdit, children }: { title: string; step: number; onEdit: (step: number) => void; children: ReactNode }) {
-  return <section className="rounded-2xl border border-line/70 bg-white p-5">
+  return <section className="rounded-lg border border-line/70 bg-white p-5">
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h3 className="text-base font-semibold text-ink">{title}</h3>
+      <h3 className="text-sm font-semibold text-ink">{title}</h3>
       <button type="button" onClick={() => onEdit(step)} className="press inline-flex h-9 items-center gap-1.5 rounded-full border border-line bg-white px-3.5 text-sm font-semibold text-brand hover:bg-brand-soft/60"><Pencil size={14} /> Edit</button>
     </div>
     {children}
@@ -31,7 +31,7 @@ export function ReviewStep({ data, groups, photoUrl, onEdit }: { data: WizardDat
   return <div className="space-y-4">
     <Section title="Recipient details" step={0} onEdit={onEdit}>
       <div className="flex items-start gap-4">
-        <span aria-hidden className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-lg font-semibold text-brand">{photoUrl ? <img src={photoUrl} alt="" className="h-full w-full object-cover" /> : (d.name.trim()[0] ?? "?").toUpperCase()}</span>
+        <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-sm font-semibold text-brand">{photoUrl ? <img src={photoUrl} alt="" className="h-full w-full object-cover" /> : (d.name.trim()[0] ?? "?").toUpperCase()}</span>
         <div className="min-w-0 flex-1"><Rows items={[
           ["Full name", <span key="n" className="font-semibold capitalize">{d.name.trim()}</span>], ["Recipient type", d.recipientType === "BUSINESS" ? "Business contact" : "Individual"],
           ["Mobile", d.mobile.trim() || none], ["Email", d.email.trim() || none], ["City", d.city.trim() || none], ["Company", d.company.trim() || none], ["Designation", d.designation.trim() || none],

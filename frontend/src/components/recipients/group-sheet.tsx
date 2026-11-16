@@ -60,7 +60,7 @@ export function GroupSheet({ group, endpoint, recipients, presetIds, loadingReci
     <Sheet open={!!group} onClose={onClose} labelledBy={titleId} locked={busy} className="max-w-lg">
       {confirmDelete ? (
         <>
-          <h2 id={titleId} className="text-xl font-semibold text-ink">Delete this group?</h2>
+          <h2 id={titleId} className="text-[17px] font-semibold text-ink">Delete this group?</h2>
           <p className="mt-2 text-sm text-muted">Delete &ldquo;{editing?.name}&rdquo;? The recipients stay; only the group is removed.</p>
           <div className="mt-6 flex justify-end gap-3">
             <Button variant="secondary" disabled={busy} onClick={() => setConfirmDelete(false)}>Keep group</Button>
@@ -71,9 +71,9 @@ export function GroupSheet({ group, endpoint, recipients, presetIds, loadingReci
         <form noValidate onSubmit={(e) => void save(e)}>
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand"><Users size={22} /></span>
+              <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand"><Users size={22} /></span>
               <div>
-                <h2 id={titleId} className="text-xl font-semibold text-ink">{editing ? "Edit Group" : "New Group"}</h2>
+                <h2 id={titleId} className="text-[17px] font-semibold text-ink">{editing ? "Edit Group" : "New Group"}</h2>
                 <p className="text-sm text-muted">{editing ? "Change the name or recipients." : "Put people together to plan gifts as a group."}</p>
               </div>
             </div>
@@ -87,7 +87,7 @@ export function GroupSheet({ group, endpoint, recipients, presetIds, loadingReci
                 id="group-name" value={name} autoFocus
                 onChange={(e) => { setName(e.target.value); setErrors((c) => ({ ...c, name: undefined })); }}
                 placeholder="e.g. Key clients"
-                className={`min-h-11 w-full rounded-xl border bg-white px-4 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25 ${errors.name ? "border-rose-400" : "border-line"}`}
+                className={`min-h-[38px] w-full rounded-md border bg-white px-4 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25 ${errors.name ? "border-rose-400" : "border-line"}`}
               />
               {errors.name && <p role="alert" className="text-sm text-rose-600">{errors.name}</p>}
             </div>

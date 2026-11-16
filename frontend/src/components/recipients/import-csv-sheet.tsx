@@ -82,11 +82,11 @@ export function ImportCsvSheet({ open, endpoint, onClose, onDone }: { open: bool
   };
 
   return <Sheet open={open} locked={busy} onClose={close} labelledBy="import-title" className="max-w-xl">
-    <h2 id="import-title" className="text-xl font-semibold text-ink">Import recipients from CSV</h2>
+    <h2 id="import-title" className="text-[17px] font-semibold text-ink">Import recipients from CSV</h2>
     <p className="mt-1 text-base text-muted">Add many recipients at once. Dates can be 2025-11-09 or 09/11/2025.</p>
-    <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(RECIPIENT_TEMPLATE)}`} download="recipients-template.csv" className="press mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl border border-line px-3.5 text-sm font-medium text-ink hover:bg-slate-50"><Download size={16} /> Download template</a>
+    <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(RECIPIENT_TEMPLATE)}`} download="recipients-template.csv" className="press mt-4 inline-flex min-h-9 items-center gap-2 rounded-xl border border-line px-3.5 text-sm font-medium text-ink hover:bg-slate-50"><Download size={16} /> Download template</a>
 
-    <label className="mt-5 flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-line px-6 py-8 text-center transition hover:border-brand/50 hover:bg-brand/5">
+    <label className="mt-5 flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-line px-6 py-8 text-center transition hover:border-brand/50 hover:bg-brand/5">
       <FileUp size={26} className="text-brand" />
       <span className="text-base font-medium text-ink">{fileName || "Choose a CSV file"}</span>
       <span className="text-sm text-muted">{fileName ? "Choose a different file" : "Name, mobile, address, city and PIN code are required"}</span>
