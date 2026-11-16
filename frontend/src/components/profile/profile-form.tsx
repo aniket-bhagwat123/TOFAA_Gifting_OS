@@ -53,7 +53,6 @@ export function ProfileForm() {
 
   
   return <div className="mx-auto max-w-2xl">
-    <PageHeader description="Your photo and contact details. You sign in with the email below." />
     <Card className="mb-6 p-6">
       <p className="mb-4 text-sm font-semibold text-ink">Photo</p>
       <ImageUpload name={displayName(user)} src={user.avatarUrl} label="Choose your photo" size="h-20 w-20 text-xl"
