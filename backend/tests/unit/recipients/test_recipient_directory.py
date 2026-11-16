@@ -23,25 +23,30 @@ def row(id, name, dob, anniversary=None, city="Mumbai", **extra):
     }
 
 
+class _Query:
+    """One query chain. Each table() call gets its own, so queries run in parallel threads don't mix."""
+
+    def __init__(self, db, table):
+        self.db, self.table_name = db, table
+
+    def __getattr__(self, name):
+        def call(*args, **kwargs):
+            self.db.calls.append((name, args))
+            if name == "execute":
+                data = self.db.members if self.table_name == "spend_recipient_group_members" else (self.db.rows if self.table_name == "recipients" else [])
+                return SimpleNamespace(data=data, count=len(data))
+            return self
+        return call
+
+
 class FakeDatabase:
     """Returns the rows given and records the filters asked for."""
 
     def __init__(self, rows=None, members=None):
         self.rows, self.members, self.calls = rows or [], members or [], []
-        self._table = ""
 
     def table(self, name):
-        self._table = name
-        return self
-
-    def __getattr__(self, name):
-        def call(*args, **kwargs):
-            self.calls.append((name, args))
-            if name == "execute":
-                data = self.members if self._table == "spend_recipient_group_members" else self.rows
-                return SimpleNamespace(data=data, count=len(data))
-            return self
-        return call
+        return _Query(self, name)
 
 
 def test_next_occasion_picks_the_soonest_date_and_rolls_into_next_year():
@@ -96,7 +101,9 @@ def test_group_filter_keeps_only_members_and_an_empty_group_returns_nothing():
     rows = [row(1, "In", "1990-11-20"), row(2, "Out", "1990-11-21")]
     rows[0]["id"], rows[1]["id"] = "r1", "r2"
     with_member = RecipientService(database=FakeDatabase(rows, members=[{"recipient_id": "r1"}]))
-    assert [i.name for i in with_member.list_recipients(TENANT, admin(), page=1, limit=10, group_id="g1").items] == ["In"]
+    with_member.list_recipients(TENANT, admin(), page=1, limit=10, group_id="g1")
+    # The group's members are filtered by the database (so paging stays real), not in memory.
+    assert ("in_", ("id", ["r1"])) in with_member.database.calls
     empty = RecipientService(database=FakeDatabase(rows, members=[]))
     assert empty.list_recipients(TENANT, admin(), page=1, limit=10, group_id="g1").items == []
 

@@ -36,6 +36,12 @@ let refreshInFlight: Promise<string | null> | null = null;
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<ApiErrorBody>) => {
+    // A read that timed out or dropped is safe to repeat once: a stalled connection often succeeds on the second try.
+    const original = error.config as (InternalAxiosRequestConfig & { _timeoutRetried?: boolean }) | undefined;
+    if (original && !error.response && (error.code === "ECONNABORTED" || error.code === "ERR_NETWORK") && original.method?.toLowerCase() === "get" && !original._timeoutRetried) {
+      original._timeoutRetried = true;
+      return api(original);
+    }
     if (error.response?.status === 401 && typeof window !== "undefined") {
       const isAuthPage = window.location.pathname.startsWith("/login");
       const request = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;

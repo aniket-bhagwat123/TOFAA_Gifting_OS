@@ -12,7 +12,8 @@ ASYMMETRIC_JWT_ALGORITHMS = {"ES256", "RS256"}
 
 @lru_cache(maxsize=1)
 def _jwks_client(url: str) -> jwt.PyJWKClient:
-    return jwt.PyJWKClient(url)
+    # Keys rarely change: keep them an hour and give up on a slow fetch after 5s (default is 30s, blocking the request).
+    return jwt.PyJWKClient(url, cache_keys=True, lifespan=3600, timeout=5)
 
 
 def _verification_key(token: str) -> tuple[Any, str]:

@@ -9,7 +9,10 @@ from fastapi import HTTPException
 from supabase import Client
 
 from src.core import images
+from src.core.config import settings
+from src.core.concurrency import run_parallel
 from src.core.errors import ApiError
+from src.core.ttl_cache import MISSING, lookups
 from src.core.pagination import PaginationMeta, next_page_cursor
 from src.core.supabase import get_supabase_admin_client
 from src.modules.auth.rbac import Permission, Role, require_permission
@@ -35,6 +38,9 @@ RECIPIENT_RESPONSE_COLUMNS = (
 )
 # Large tenants stay small enough to sort and filter in memory when a rule needs computed dates.
 MAX_DIRECTORY_ROWS = 5000
+# A group up to this size is filtered by the database (real paging); bigger ones would overflow the URL.
+MAX_PUSHED_MEMBER_IDS = 150
+# The summary changes only when people change, so it is remembered briefly (any write clears it).
 # Sort keys the list accepts -> the database column (None = worked out in Python).
 SORT_COLUMNS = {"name": "name", "city": "city", "mobile": "mobile_number", "created": "created_at", "nextOccasion": None}
 _UNSAFE_SEARCH = re.compile(r"[,()%*\\:]")
@@ -115,7 +121,8 @@ class RecipientService:
             )
         offset = (page - 1) * limit
         # Rules that need the computed next date, or a group's member list, are applied in memory.
-        in_memory = upcoming_days is not None or sort == "nextOccasion" or member_ids is not None
+        push_members = member_ids is not None and len(member_ids) <= MAX_PUSHED_MEMBER_IDS
+        in_memory = upcoming_days is not None or sort == "nextOccasion" or (member_ids is not None and not push_members)
         query = (
             self.database.table("recipients")
             .select(f"{RECIPIENT_RESPONSE_COLUMNS},created_at", count="exact")
@@ -125,6 +132,8 @@ class RecipientService:
         if recipient_ids is not None:
             # Still inside the tenant filter above, so another tenant's IDs simply match nothing.
             query = query.in_("id", recipient_ids)
+        if push_members:
+            query = query.in_("id", sorted(member_ids))  # type: ignore[arg-type]
         if status:
             query = query.eq("status", status)
         if relationship:
@@ -147,7 +156,7 @@ class RecipientService:
             records = result.data or []
             total_records = result.count or 0
             return RecipientList(
-                items=self._with_completeness(tenant_id, self._with_groups(tenant_id, [_read(item, today) for item in records])),
+                items=self._enrich(tenant_id, [_read(item, today) for item in records]),
                 pagination=PaginationMeta(page=page, limit=limit, total_records=total_records),
                 next_cursor=next_page_cursor(page, limit, total_records),
             )
@@ -171,25 +180,35 @@ class RecipientService:
             items.sort(key=lambda item: item.mobile_number, reverse=descending)
         total_records = len(items)
         return RecipientList(
-            items=self._with_completeness(tenant_id, self._with_groups(tenant_id, items[offset : offset + limit])),
+            items=self._enrich(tenant_id, items[offset : offset + limit]),
             pagination=PaginationMeta(page=page, limit=limit, total_records=total_records),
             next_cursor=next_page_cursor(page, limit, total_records),
         )
 
-    def _with_groups(self, tenant_id: str, items: list[RecipientRead]) -> list[RecipientRead]:
-        """The groups each person on this page belongs to. A failed look-up leaves the list without them."""
+    def _enrich(self, tenant_id: str, items: list[RecipientRead]) -> list[RecipientRead]:
+        """Adds each person's groups and completeness score for one page of people.
+
+        Everything is looked up for the whole page at once (never one query per person), and the
+        independent look-ups run side by side, so the page costs about two database round trips
+        however many people it holds. A failed look-up leaves that decoration off; the list still loads.
+        """
         if not items:
             return items
-        try:
-            ids = [item.id for item in items]
+        ids = [item.id for item in items]
+
+        def guarded(fn):
+            def run():
+                try:
+                    return fn()
+                except Exception:  # noqa: BLE001 - decoration only; the list must still load
+                    logger.exception("recipient_enrich_failed")
+                    return None
+            return run
+
+        def group_lookup() -> dict[str, list[GroupRef]]:
             links = (
-                self.database.table("spend_recipient_group_members")
-                .select("recipient_id,group_id")
-                .eq("tenant_id", tenant_id)
-                .in_("recipient_id", ids)
-                .execute()
-                .data
-                or []
+                self.database.table("spend_recipient_group_members").select("recipient_id,group_id")
+                .eq("tenant_id", tenant_id).in_("recipient_id", ids).execute().data or []
             )
             group_ids = sorted({str(link["group_id"]) for link in links if link.get("group_id")})
             names: dict[str, str] = {}
@@ -201,16 +220,52 @@ class RecipientService:
                 group_id = str(link.get("group_id") or "")
                 if group_id in names:
                     by_person.setdefault(str(link["recipient_id"]), []).append(GroupRef(id=group_id, name=names[group_id]))
+            return by_person
+
+        def counts(table: str, extra=None) -> dict[str, int]:
+            query = self.database.table(table).select("recipient_id").eq("tenant_id", tenant_id).in_("recipient_id", ids)
+            found: dict[str, int] = {}
+            for row in (extra(query) if extra else query).execute().data or []:
+                found[str(row["recipient_id"])] = found.get(str(row["recipient_id"]), 0) + 1
+            return found
+
+        def skipped_fields() -> dict[str, set[str]]:
+            skipped: dict[str, set[str]] = {}
+            rows = (self.database.table("recipient_info_status").select("recipient_id,field_key")
+                    .eq("tenant_id", tenant_id).eq("status", "NOT_APPLICABLE").in_("recipient_id", ids).execute().data or [])
+            for row in rows:
+                skipped.setdefault(str(row["recipient_id"]), set()).add(str(row["field_key"]))
+            return skipped
+
+        by_person, related, occasions, addresses, preferences, skipped = run_parallel(
+            guarded(group_lookup),
+            guarded(lambda: counts("recipient_relationships")),
+            guarded(lambda: counts("events", extra=lambda q: q.eq("is_active", True))),
+            guarded(lambda: counts("recipient_addresses")),
+            guarded(lambda: counts("recipient_preferences")),
+            guarded(skipped_fields),
+        )
+        if by_person is not None:
             for item in items:
                 item.groups = sorted(by_person.get(item.id, []), key=lambda group: group.name.lower())
-        except Exception:  # noqa: BLE001 - groups are decoration; the list must still load
-            logger.exception("recipient_group_lookup_failed")
+        if None in (related, occasions, addresses, preferences, skipped):
+            return items  # the score needs every part; without one it is left off
+        for item in items:
+            extras = completeness.Extras(
+                related_people=related.get(item.id, 0), group_count=len(item.groups), occasion_count=occasions.get(item.id, 0),
+                has_preferences=item.id in preferences, address_count=addresses.get(item.id, 0),
+            )
+            item.completeness = completeness.compute(item.model_dump(), extras, frozenset(skipped.get(item.id, set())))
         return items
 
     def summary(self, tenant_id: str, actor: UserProfileResponse) -> RecipientSummary:
         """Counts for the page header and the choices shown in its filter drop-downs."""
         require_permission(actor, Permission.RECIPIENT_READ)
         self._require_tenant_access(tenant_id, actor)
+        cache_key = ("recipient-summary", tenant_id)
+        cached = lookups.get(cache_key, settings.AUTH_CACHE_SECONDS)
+        if cached is not MISSING:
+            return cached
         rows = (
             self.database.table("recipients")
             .select("city,address,relationship,status")
@@ -222,46 +277,15 @@ class RecipientService:
             or []
         )
         archived = sum(1 for row in rows if row.get("status") == "ARCHIVED")
-        return RecipientSummary(
+        result = RecipientSummary(
             total=len(rows),
             active=len(rows) - archived,
             archived=archived,
             cities=sorted({_city(row) for row in rows if _city(row)}, key=str.lower),
             relationships=sorted({row["relationship"] for row in rows if row.get("relationship")}),
         )
-
-    def _with_completeness(self, tenant_id: str, items: list[RecipientRead]) -> list[RecipientRead]:
-        """Completeness for each person: their own fields plus what they have in the related tables."""
-        if not items:
-            return items
-        try:
-            ids = [item.id for item in items]
-
-            def counts(table: str, column: str = "recipient_id", extra=None) -> dict[str, int]:
-                query = self.database.table(table).select(column).eq("tenant_id", tenant_id).in_(column, ids)
-                rows = (extra(query) if extra else query).execute().data or []
-                found: dict[str, int] = {}
-                for row in rows:
-                    found[str(row[column])] = found.get(str(row[column]), 0) + 1
-                return found
-
-            related = counts("recipient_relationships")
-            occasions = counts("events", extra=lambda q: q.eq("is_active", True))
-            addresses = counts("recipient_addresses")
-            preferences = set(counts("recipient_preferences"))
-            skipped: dict[str, set[str]] = {}
-            for row in (self.database.table("recipient_info_status").select("recipient_id,field_key")
-                        .eq("tenant_id", tenant_id).eq("status", "NOT_APPLICABLE").in_("recipient_id", ids).execute().data or []):
-                skipped.setdefault(str(row["recipient_id"]), set()).add(str(row["field_key"]))
-            for item in items:
-                extras = completeness.Extras(
-                    related_people=related.get(item.id, 0), group_count=len(item.groups), occasion_count=occasions.get(item.id, 0),
-                    has_preferences=item.id in preferences, address_count=addresses.get(item.id, 0),
-                )
-                item.completeness = completeness.compute(item.model_dump(), extras, frozenset(skipped.get(item.id, set())))
-        except Exception:  # noqa: BLE001 - the score is extra; the list must still load
-            logger.exception("recipient_completeness_failed")
-        return items
+        lookups.set(cache_key, result)
+        return result
 
     def _group_member_ids(self, tenant_id: str, group_id: str) -> set[str]:
         result = (
@@ -360,7 +384,7 @@ class RecipientService:
         actor: UserProfileResponse,
     ) -> RecipientRead:
         record = self._get_scoped_recipient(tenant_id, recipient_id, actor)
-        return self._with_completeness(tenant_id, self._with_groups(tenant_id, [_read(record)]))[0]
+        return self._enrich(tenant_id, [_read(record)])[0]
 
     def update_recipient(
         self,
