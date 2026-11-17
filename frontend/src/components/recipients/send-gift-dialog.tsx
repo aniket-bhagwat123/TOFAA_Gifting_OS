@@ -15,7 +15,15 @@ import { creditsFor, inputClass, inr, num, useTenantId } from "@/components/gift
 import { useBudgetInfo } from "@/components/occasions/shared";
 
 /** `pickRecipients` lets the user choose the groups and people inside the dialog (used for a gift idea); `budget` and `note` pre-fill the form. */
-export type SendGiftTarget = { title: string; people: Array<{ id: string; name: string }>; wholeGroup: boolean; pickRecipients?: boolean; budget?: number | null; note?: string };
+export type SendGiftTarget = {
+  title: string; people: Array<{ id: string; name: string }>; wholeGroup: boolean; pickRecipients?: boolean; budget?: number | null; note?: string;
+  /** Send for an occasion that already exists (a festival or company occasion), instead of making a new one from the title. */
+  occasionId?: string | null;
+  /** Send for one person's birthday, anniversary or event. If it has no event record yet, one is made first. */
+  event?: { eventId?: string | null; recipientId: string; name: string };
+  /** The occasion's date. It is the starting delivery date when it is today or later. */
+  date?: string;
+};
 type PickGroup = { id: string; name: string; recipientIds: string[] };
 type Occasion = { id: string; occasionName: string; occasionDate?: string };
 type Result = { createdCount: number; skippedCount: number };
@@ -54,8 +62,8 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
 
   useEffect(() => {
     if (!target) return;
-    setTitle(target.pickRecipients ? target.title : ""); setBudget(target.budget ? String(target.budget) : ""); setOwn({}); setSearch(""); setNote(target.note ?? ""); setError(null);
-    setPoc(null); setDate(today()); setTime(""); setOther({ line1: "", line2: "", city: "", postalCode: "" });
+    setTitle(target.pickRecipients || target.occasionId || target.event ? target.title : ""); setBudget(target.budget ? String(target.budget) : ""); setOwn({}); setSearch(""); setNote(target.note ?? ""); setError(null);
+    setPoc(null); setDate(target.date && target.date >= today() ? target.date : today()); setTime(""); setOther({ line1: "", line2: "", city: "", postalCode: "" });
     setPickedGroups([]); setPickedPeople([]);
     if (!target.pickRecipients) return;
     // Choosing who gets it: load the client's groups and people.
@@ -116,7 +124,8 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
 
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!title.trim()) { setError("Enter a title."); return; }
+    const fixedSource = !!(target?.occasionId || target?.event);
+    if (!fixedSource && !title.trim()) { setError("Enter a title."); return; }
     if (!people.length) { setError("Choose at least one group or person."); return; }
     if (!date || date < today()) { setError("Pick a delivery date that is today or later."); return; }
     let deliveryAddress: string | undefined;
@@ -135,17 +144,29 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
     if (missing) { setError(people.length > 1 ? "Enter a budget for everyone, or a budget for each person." : "Enter a budget greater than 0."); return; }
     setSending(true); setError(null);
     try {
-      // The title becomes the name of a one-off occasion, so the requests and the calendar show what the gift is for.
-      const existing = (await getModuleRecords(`/tenants/${tenantId}/occasions`, { limit: 100 }).catch(() => null) as { items?: Occasion[] } | null)?.items ?? [];
-      const found = existing.find((o) => o.occasionName.trim().toLowerCase() === title.trim().toLowerCase() && o.occasionDate === date);
-      const id = found?.id ?? (await mutateModule("post", `/tenants/${tenantId}/occasions`, { occasionName: title.trim(), occasionDate: date }) as { id: string }).id;
       // One request per distinct amount, since each send uses a single budget.
       const byAmount = new Map<number, string[]>();
       for (const p of amounts) byAmount.set(p.amount!, [...(byAmount.get(p.amount!) ?? []), p.id]);
+      const details = { note: note.trim() || undefined, deliveryDate: date, deliveryTime: time || undefined, deliveryAddress, pocName: poc?.name.trim() || undefined, pocMobile };
       let created = 0, skipped = 0;
-      for (const [amount, ids] of byAmount) {
-        const result = await mutateModule("post", `/tenants/${tenantId}/occasions/${id}/send`, { recipientIds: ids, groupIds: [], budgetPerRecipient: amount, note: note.trim() || undefined, deliveryDate: date, deliveryTime: time || undefined, deliveryAddress, pocName: poc?.name.trim() || undefined, pocMobile }) as Result;
+      if (target?.event) {
+        // A person's birthday, anniversary or event. A birthday has no event record until the first time you send for it.
+        let eventId = target.event.eventId;
+        if (!eventId) eventId = (await mutateModule("post", `/tenants/${tenantId}/recipients/${target.event.recipientId}/events`, { eventName: target.event.name, eventDate: target.date ?? date }) as { id: string }).id;
+        const result = await mutateModule("post", `/tenants/${tenantId}/events/${eventId}/send`, { budgetPerRecipient: amounts[0].amount, ...details }) as Result;
         created += result.createdCount; skipped += result.skippedCount;
+      } else {
+        // An existing occasion, or a one-off one named by the title.
+        let id = target?.occasionId ?? null;
+        if (!id) {
+          const existing = (await getModuleRecords(`/tenants/${tenantId}/occasions`, { limit: 100 }).catch(() => null) as { items?: Occasion[] } | null)?.items ?? [];
+          const found = existing.find((o) => o.occasionName.trim().toLowerCase() === title.trim().toLowerCase() && o.occasionDate === date);
+          id = found?.id ?? (await mutateModule("post", `/tenants/${tenantId}/occasions`, { occasionName: title.trim(), occasionDate: date }) as { id: string }).id;
+        }
+        for (const [amount, ids] of byAmount) {
+          const result = await mutateModule("post", `/tenants/${tenantId}/occasions/${id}/send`, { recipientIds: ids, groupIds: [], budgetPerRecipient: amount, ...details }) as Result;
+          created += result.createdCount; skipped += result.skippedCount;
+        }
       }
       toast.success(created ? `Sent ${created} gift request${created === 1 ? "" : "s"} to TOFAA.${skipped ? ` ${skipped} skipped: already requested.` : ""}` : "Nothing new to send. They already have a request for this occasion.");
       onSent();
@@ -161,12 +182,12 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
     {target && <form noValidate onSubmit={send} className="space-y-5">
       <div>
         <h2 id="send-gift-title" className="text-2xl font-semibold text-ink">Send gift</h2>
-        <p className="mt-1 text-sm text-muted">{target.pickRecipients ? "Gift idea" : target.title}{target.pickRecipients ? ` · ${target.title}` : ""}{many && !target.pickRecipients ? ` · ${people.length} people` : ""}</p>
+        <p className="mt-1 text-sm text-muted">{target.pickRecipients && !target.occasionId ? "Gift idea" : target.event ? `${people[0]?.name ?? ""} · ${target.title}` : target.title}{target.pickRecipients && !target.occasionId ? ` · ${target.title}` : ""}{many && !target.pickRecipients ? ` · ${people.length} people` : ""}</p>
       </div>
 
-      <label className="block space-y-1.5 text-sm font-medium text-ink">Title
+      {!target.occasionId && !target.event && <label className="block space-y-1.5 text-sm font-medium text-ink">Title
         <input value={title} onChange={(event) => { setTitle(event.target.value); setError(null); }} placeholder="Enter title" maxLength={150} autoFocus className={inputClass} />
-      </label>
+      </label>}
 
       {target.pickRecipients && <div className="space-y-3">
         <p className="text-sm font-medium text-ink">Send to</p>

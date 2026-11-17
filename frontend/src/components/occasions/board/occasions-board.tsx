@@ -16,6 +16,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { STATUS_META as REQUEST_STATUS, day, inr, useTenantId } from "@/components/gift-requests/shared";
 import { EventSendSheet } from "../event-send-sheet";
+import { SendGiftDialog, type SendGiftTarget } from "@/components/recipients/send-gift-dialog";
 import type { UpcomingEvent } from "../shared";
 import { AddOccasionPanel } from "./add-occasion-panel";
 import { CalendarView } from "./calendar-view";
@@ -58,6 +59,7 @@ export function OccasionsBoard() {
   const openNew = useSearchParams().get("new") === "1";
   useEffect(() => { if (openNew && canPlan) { setForm({ item: null }); router.replace("/occasions"); } }, [openNew, canPlan]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sending, setSending] = useState<UpcomingEvent | null>(null);
+  const [companySend, setCompanySend] = useState<SendGiftTarget | null>(null);
   const [warn, setWarn] = useState<{ item: OverviewItem; kind: ActionKind } | null>(null);
 
   useEffect(() => { try { const saved = window.localStorage.getItem(VIEW_KEY); if (saved === "calendar" || saved === "list") setView(saved); } catch { /* the page works without it */ } }, []);
@@ -80,8 +82,8 @@ export function OccasionsBoard() {
 
   const proceed = (item: OverviewItem, kind: ActionKind) => {
     if (kind === "plan" || kind === "create") {
-      if (item.sourceType === "COMPANY") router.push(`/occasions/${item.occasionId}`);
-      else if (kind === "create" && item.eventId) router.push(`/requests/new?recipientId=${item.recipientId}&eventId=${item.eventId}`);
+      // The same Send gift dialog as People and Groups. A company occasion asks who gets it; a person's date is for that person.
+      if (item.sourceType === "COMPANY") setCompanySend({ title: item.name, people: [], wholeGroup: false, pickRecipients: true, occasionId: item.occasionId ?? null, date: item.date });
       else setSending(toSendItem(item));
     } else if (item.requestId && (kind === "request" || kind === "track")) router.push(`/requests/${item.requestId}`);
     else setSelected(item);
@@ -220,6 +222,7 @@ export function OccasionsBoard() {
       onDeleted={() => { setSelected(null); reload(); }} />
     <AddOccasionPanel open={!!form} editing={form?.item ?? null} prefilledDate={form?.date} tenantId={tenantId} onClose={() => setForm(null)} onSaved={() => { setForm(null); reload(); }} />
     <EventSendSheet item={sending} onClose={() => setSending(null)} onSent={() => { setSending(null); reload(); }} />
+    <SendGiftDialog target={companySend} tenantId={tenantId} onClose={() => setCompanySend(null)} onSent={() => { setCompanySend(null); reload(); }} />
 
     <Sheet open={!!warn} labelledBy="occ-dup-title" className="max-w-md" onClose={() => setWarn(null)}>
       {warn && <div className="space-y-4">
