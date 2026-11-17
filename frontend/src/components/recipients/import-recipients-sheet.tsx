@@ -17,7 +17,20 @@ export const downloadRecipientTemplate = (format: FileFormat) => writeTable(FIEL
 
 interface Prepared extends BuiltRow { line: number; duplicate?: boolean }
 const select = "min-h-9 w-full rounded-md border border-line bg-white px-2.5 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
-const POOL = 4;
+const POOL = 3;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const isNetworkFailure = (error: unknown) => !(error as { response?: unknown })?.response;
+
+/** Creates one recipient. If the connection drops (no reply at all), try again a couple of times: the server may be busy or just woke up. */
+async function createWithRetry(payload: Record<string, unknown>, headers: Record<string, string>, endpoint = ""): Promise<{ id?: string }> {
+  for (let attempt = 0; ; attempt++) {
+    try { return await mutateModule("post", endpoint, payload, undefined, headers) as { id?: string }; }
+    catch (error) {
+      if (attempt >= 2 || !isNetworkFailure(error)) throw error;
+      await sleep(800 * (attempt + 1));
+    }
+  }
+}
 
 /** Import recipients from any common file (Excel, CSV, TSV, JSON, ODS ...). Columns are matched by their names and can be changed before importing. */
 export function ImportRecipientsSheet({ open, endpoint, groupsEndpoint, onClose, onDone }: { open: boolean; endpoint: string; groupsEndpoint: string; onClose: () => void; onDone: () => void }) {
@@ -86,7 +99,7 @@ export function ImportRecipientsSheet({ open, endpoint, groupsEndpoint, onClose,
       while (next < valid.length) {
         const row = valid[next++];
         try {
-          const created = await mutateModule("post", endpoint, row.payload, undefined, headers) as { id?: string };
+          const created = await createWithRetry(row.payload!, headers, endpoint);
           done++;
           if (created?.id) for (const g of row.groups) { const key = g.toLowerCase(); const entry = members.get(key) ?? { name: g, ids: [] }; entry.ids.push(created.id); members.set(key, entry); }
         } catch (error) { failed.push({ line: row.line, name: row.name, reason: getApiErrorMessage(error) }); }

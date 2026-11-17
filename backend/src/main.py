@@ -126,10 +126,16 @@ async def log_unhandled_exception(request: Request, exc: Exception) -> JSONRespo
         request.url.path,
         exc_info=(type(exc), exc, exc.__traceback__),
     )
+    headers = {"X-Request-Id": request_id}
+    # An error that escapes every handler is answered outside the CORS middleware, so without these headers the browser hides the
+    # reply and the app only sees "Network Error". Allowed origins get the headers so the real status (500) and the request id show.
+    origin = request.headers.get("origin")
+    if origin and origin in settings.BACKEND_CORS_ORIGINS:
+        headers.update({"Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true", "Vary": "Origin", "Access-Control-Expose-Headers": "X-Request-Id"})
     return JSONResponse(
         status_code=500,
         content={"data": {}, "message": "Internal Server Error"},
-        headers={"X-Request-Id": request_id},
+        headers=headers,
     )
 
 
