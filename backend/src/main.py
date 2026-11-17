@@ -7,6 +7,7 @@ from typing import AsyncGenerator
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
+from postgrest.exceptions import APIError as PostgrestAPIError
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -112,6 +113,22 @@ async def api_validation_error(request: Request, exc: RequestValidationError) ->
         content=jsonable_encoder(
             {"data": {"errors": exc.errors()}, "message": "Request validation failed."}
         ),
+    )
+
+
+# A database that has not had the latest migrations rejects new values or columns. Say so plainly (as a normal, readable error)
+# instead of a generic 500, so a deployment with an older database is easy to spot.
+_SCHEMA_ERRORS = {"42703", "42P01", "PGRST204", "PGRST205", "23514"}
+
+
+@app.exception_handler(PostgrestAPIError)
+async def database_schema_error(request: Request, exc: PostgrestAPIError) -> JSONResponse:
+    if (exc.code or "") not in _SCHEMA_ERRORS:
+        return await log_unhandled_exception(request, exc)
+    logger.error("Database schema mismatch code=%s message=%s path=%s", exc.code, exc.message, request.url.path)
+    return JSONResponse(
+        status_code=503,
+        content={"data": {}, "message": f"The database is missing a recent update ({exc.code}). Apply the latest migrations to this database, then retry."},
     )
 
 
