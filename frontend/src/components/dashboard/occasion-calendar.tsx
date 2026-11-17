@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Gem, Gift, Star } from "lucide-react";
-import { type CalendarFilter, type CalendarItem, dashboardService } from "@/features/dashboard/dashboard.service";
+import { type CalendarData, type CalendarFilter, type CalendarItem, dashboardService } from "@/features/dashboard/dashboard.service";
 import { cn } from "@/lib/utils";
 import { useAsync } from "./use-async";
 
@@ -31,13 +31,18 @@ function Chip({ item }: { item: CalendarItem }) {
   </Link>;
 }
 
-export function OccasionCalendar({ tenantId }: { tenantId: string }) {
+export function OccasionCalendar({ tenantId, initial, initialLoading = false }: { tenantId: string; /** This month with no filter, already loaded with the rest of the dashboard. */ initial?: CalendarData | null; initialLoading?: boolean }) {
   const now = new Date();
   const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const thisMonth = monthKey(now.getFullYear(), now.getMonth());
   const [month, setMonth] = useState(thisMonth);
   const [filter, setFilter] = useState<CalendarFilter>("ALL");
-  const { data, loading, failed } = useAsync(() => dashboardService.calendar(tenantId, month, filter), `${tenantId}|${month}|${filter}`);
+  // This month, unfiltered, comes with the dashboard's own request; anything else is fetched here.
+  const fromDashboard = month === thisMonth && filter === "ALL" && (!!initial || initialLoading);
+  const own = useAsync(fromDashboard ? null : () => dashboardService.calendar(tenantId, month, filter), `${tenantId}|${month}|${filter}`);
+  const data = fromDashboard ? initial ?? null : own.data;
+  const loading = fromDashboard ? initialLoading : own.loading;
+  const failed = fromDashboard ? false : own.failed;
 
   const [year, monthIndex] = [Number(month.slice(0, 4)), Number(month.slice(5)) - 1];
   const cells = useMemo(() => {

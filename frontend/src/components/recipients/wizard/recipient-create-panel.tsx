@@ -10,9 +10,11 @@ import { Button } from "@/components/ui/button";
 import { FormPanel, FormSection } from "@/components/ui/form-panel";
 import { Sheet } from "@/components/ui/sheet";
 import { WizardStepper } from "./wizard-stepper";
-import { DetailsStep, RelationshipStep } from "./steps-basic";
-import { OccasionsStep, PreferencesStep, type OccasionsStepHandle } from "./steps-more";
+import { DetailsStep } from "./steps-basic";
+import { OccasionsStep, PreferencesFields, type OccasionsStepHandle } from "./steps-more";
+import { AddressesSection, validateAddresses } from "./address-step";
 import { ReviewStep } from "./step-review";
+import { loadEditData, personFields, saveEditParts } from "./edit-profile";
 import { DuplicateFound, findDuplicates, saveWizard, type SaveEndpoints, type SaveResult } from "./wizard-save";
 import { EMPTY, type Errors, type RecipientType, type WizardData, clearDraft, draftKey, hasContent, loadDraft, normaliseMobile, storeDraft, validateDetails } from "./wizard-types";
 import type { RecipientGroup } from "../group-sheet";
@@ -20,9 +22,8 @@ import type { DirectoryRow } from "../recipient-utils";
 
 const STEPS = [
   { key: "details", label: "Recipient Details" },
-  { key: "relationship", label: "Relationship & Group" },
   { key: "occasions", label: "Occasions" },
-  { key: "preferences", label: "Preferences & Delivery" },
+  { key: "preferences", label: "Preferences & Delivery" }, // adding a recipient asks for the address only; preferences appear when editing
   { key: "review", label: "Review & Save" },
 ] as const;
 const LAST = STEPS.length - 1;
@@ -39,7 +40,8 @@ function rowToInitial(row: DirectoryRow): WizardData {
       city: String(row.city ?? (row.address as { city?: string } | undefined)?.city ?? ""),
       company: String((row as Record<string, unknown>).company ?? ""),
       designation: String(row.designation ?? ""),
-      recipientType: ((row as Record<string, unknown>).recipientType as RecipientType) ?? "INDIVIDUAL",
+      // Recipients saved before the rename still carry the old names.
+      recipientType: ["EXTERNAL", "BUSINESS"].includes(String((row as Record<string, unknown>).recipientType)) ? "EXTERNAL" : "INTERNAL",
     },
     relationship: { ...EMPTY.relationship, relationship: String(row.relationship ?? ""), isPrimary: row.isPrimary === true },
   };
@@ -61,6 +63,7 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
   const [photo, setPhoto] = useState<File | null>(null);
   const [groups, setGroups] = useState<RecipientGroup[]>([]);
   const [duplicates, setDuplicates] = useState<DuplicateFound["matches"]>([]);
+  const [addressErrors, setAddressErrors] = useState<Errors>({});
   const [busy, setBusy] = useState<"" | "checking" | "saving">("");
   const [result, setResult] = useState<SaveResult | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -68,6 +71,8 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
   const [confirmCancel, setConfirmCancel] = useState(false);
   const bodyTop = useRef<HTMLDivElement>(null);
   const occasionsRef = useRef<OccasionsStepHandle>(null);
+  const original = useRef<WizardData>(EMPTY); // what the recipient looked like when editing started
+  const [loadingProfile, setLoadingProfile] = useState(false);
 
   const photoUrl = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
   useEffect(() => () => { if (photoUrl) URL.revokeObjectURL(photoUrl); }, [photoUrl]);
@@ -86,8 +91,19 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
       const draft = loadDraft(key);
       setResume(draft && hasContent(draft.data) ? draft : null);
     }
-    loadAllModuleRecords(endpoints.groups).then((rows) => setGroups(rows as unknown as RecipientGroup[])).catch(() => undefined);
-  }, [open, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
+    const groupsLoaded = loadAllModuleRecords(endpoints.groups).then((rows) => rows as unknown as RecipientGroup[]).catch(() => [] as RecipientGroup[]);
+    groupsLoaded.then(setGroups);
+    if (isEdit && editTarget) {
+      // Fill every step with what the recipient already has; the quick details show straight away.
+      let cancelled = false;
+      setLoadingProfile(true);
+      groupsLoaded.then((all) => loadEditData(endpoints, editTarget, all, rowToInitial(editTarget))).then((loaded) => {
+        if (cancelled) return;
+        original.current = loaded; setData(loaded);
+      }).catch(() => { original.current = rowToInitial(editTarget); }).finally(() => { if (!cancelled) setLoadingProfile(false); });
+      return () => { cancelled = true; };
+    }
+  }, [open, isEdit, editTarget?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open || isEdit || result || resume || !tenantKey || !hasContent(data)) return;
@@ -142,7 +158,10 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
         mobileNumber: d.mobile.trim() ? normaliseMobile(d.mobile) : null,
         email: clean(d.email), company: clean(d.company), designation: clean(d.designation), city: clean(d.city),
         recipientType: d.recipientType, relationship: data.relationship.relationship || null, isPrimary: data.relationship.isPrimary,
+        ...personFields(data, original.current),
       }, undefined, SOURCE);
+      const failed = await saveEditParts(data, original.current, endpoints, String(editTarget.id), groups);
+      if (failed.length) toast.error(`Saved, but these could not be updated: ${[...new Set(failed)].join(", ")}.`);
       if (photo) {
         const { sendImage } = await import("@/components/ui/image-upload");
         await sendImage("put", `${endpoints.recipients}/${String(editTarget.id)}/photo`, photo).catch(() => undefined);
@@ -158,8 +177,11 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
     event?.preventDefault();
     if (!endpoints || busy) return;
     if (step === 0) { if (await checkDetails()) go(1); return; }
-    if (step === 2) { if (occasionsRef.current && !occasionsRef.current.trySave()) return; go(3); return; }
+    if (step === 1) { if (occasionsRef.current && !occasionsRef.current.trySave()) return; go(2); return; }
+    if (step === 2) { const found = validateAddresses(data); setAddressErrors(found); if (Object.keys(found).length) return; go(3); return; }
     if (step < LAST) { go(step + 1); return; }
+    const addressProblems = validateAddresses(data);
+    if (Object.keys(addressProblems).length) { setAddressErrors(addressProblems); go(2); return; }
     if (await checkDetails()) { isEdit ? await saveEdit() : await saveNew(); }
   };
 
@@ -168,7 +190,6 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
 
   // ── success state (add mode only) ─────────────────────────────────────────
   if (result) {
-    const percent = (result.profile?.completeness as { percent?: number } | null | undefined)?.percent;
     return <FormPanel open={open} onClose={onClose} width="2xl" icon={<CheckCircle2 size={26} />} title="Recipient added"
       description="The recipient is saved and shared with your TOFAA team."
       footer={<div className="flex flex-wrap gap-3">
@@ -177,11 +198,6 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
         <Button variant="secondary" className="flex-1" onClick={onClose}>Close</Button>
       </div>}>
       <p className="text-sm font-semibold capitalize text-ink">{result.name}</p>
-      {percent !== undefined && <div>
-        <div className="flex justify-between text-sm"><span className="font-medium text-ink">Profile completeness</span><span className="tabular-nums font-semibold text-ink">{percent}%</span></div>
-        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand" style={{ width: `${percent}%` }} /></div>
-        <p className="mt-2 text-xs text-muted">Add the missing details from the recipient&apos;s profile to raise it.</p>
-      </div>}
       {result.warnings.length > 0 && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
         <p className="font-semibold">Some details could not be saved</p>
         <ul className="mt-1 list-disc pl-5">{result.warnings.map((w) => <li key={w.section}>{w.section}: {w.message}</li>)}</ul>
@@ -189,8 +205,8 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
     </FormPanel>;
   }
 
-  const locked = busy !== "";
-  const stepper = <WizardStepper steps={STEPS} current={step} reached={reached} onGo={go} />;
+  const locked = busy !== "" || (isEdit && loadingProfile);
+  const stepper = <WizardStepper steps={isEdit ? STEPS : STEPS.map((s) => (s.key === "preferences" ? { ...s, label: "Delivery Address" } : s))} current={step} reached={reached} onGo={go} />;
 
   return <>
     <FormPanel open={open} onClose={close} width="2xl" locked={locked} onSubmit={(e) => void submit(e)}
@@ -226,22 +242,20 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
       {step === 0 && <FormSection title="Recipient Details" hint="The basics. Only the full name is required.">
         <DetailsStep data={data.details} errors={errors} photoUrl={displayPhotoUrl} onChange={changeDetails} onPhoto={setPhoto}
           duplicates={duplicates} confirmedDifferent={data.allowDuplicate}
-          onConfirmDifferent={() => { setData((c) => ({ ...c, allowDuplicate: true })); setDuplicates([]); go(1); }} />
+          onConfirmDifferent={() => { setData((c) => ({ ...c, allowDuplicate: true })); setDuplicates([]); go(1); }}
+          groups={groups} groupData={data.relationship} onGroups={(v) => patch("relationship", v)} />
       </FormSection>}
 
-      {step === 1 && <FormSection title="Relationship & Group" hint="Optional. Not every recipient needs a group.">
-        <RelationshipStep data={data.relationship} groups={groups} recipientsEndpoint={endpoints?.recipients ?? ""} onChange={(v) => patch("relationship", v)} />
-      </FormSection>}
-
-      {step === 2 && <FormSection title="Occasions" hint="Optional. Birthdays, anniversaries or any date worth gifting for.">
+      {step === 1 && <FormSection title="Occasions" hint="Optional. Birthdays, anniversaries or any date worth gifting for.">
         <OccasionsStep ref={occasionsRef} items={data.occasions} recipientsEndpoint={endpoints?.recipients ?? ""} onChange={(occasions) => setData((c) => ({ ...c, occasions }))} />
       </FormSection>}
 
-      {step === 3 && <FormSection title="Preferences & Delivery" hint="Optional. Add what you know now; fill in the rest later.">
-        <PreferencesStep prefs={data.preferences} addresses={data.addresses} onPrefs={(v) => patch("preferences", v)} onAddresses={(addresses) => setData((c) => ({ ...c, addresses }))} />
+      {step === 2 && <FormSection title={isEdit ? "Preferences & Delivery" : "Delivery address"} hint={isEdit ? "Optional. Gifting preferences and where gifts are delivered." : "Optional. Where gifts are delivered. Preferences can be added later by editing the recipient."}>
+        {isEdit && <div className="mb-7"><PreferencesFields prefs={data.preferences} onPrefs={(v) => patch("preferences", v)} /></div>}
+        <AddressesSection addresses={data.addresses} same={data.sameAddress} errors={addressErrors} onChange={(addresses, sameAddress) => { setAddressErrors({}); setData((c) => ({ ...c, addresses, sameAddress })); }} />
       </FormSection>}
 
-      {step === 4 && <ReviewStep data={data} groups={groups} photoUrl={displayPhotoUrl} onEdit={go} />}
+      {step === 3 && <ReviewStep data={data} groups={groups} photoUrl={displayPhotoUrl} onEdit={go} panel showPreferences={isEdit} />}
     </FormPanel>
 
     <Sheet open={confirmCancel} zIndex="z-[90]" labelledBy="discard-title" className="max-w-md" onClose={() => setConfirmCancel(false)}>

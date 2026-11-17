@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useAppSelector } from "@/store/hooks";
 import { cn } from "@/lib/utils";
 import { moduleConfig, type PlatformRole } from "@/features/modules/module-config";
-import { Home, Building2, Users, CalendarDays, ClipboardList, Gift, Sparkles, Wallet, CalendarRange, History, Megaphone, X } from "lucide-react";
+import { Home, Building2, Users, CalendarDays, ClipboardList, Gift, Sparkles, Wallet, CalendarRange, History, Megaphone, Lightbulb, X } from "lucide-react";
 
 type Role = PlatformRole;
 
@@ -18,7 +18,8 @@ const item = (key: string, label: string, icon: typeof Home, also?: string[]): N
 const groups: { title: string; items: NavItem[] }[] = [
   { title: "", items: [
     { label: "Home", href: "/home", icon: Home, roles: ["CLIENT", "TOFAA_TEAM", "SUPER_ADMIN"] },
-    item("occasions", "Occasions", CalendarDays),
+    item("occasions", "Gift Calendar", CalendarDays),
+    item("gift-ideas", "Gift Ideas", Lightbulb),
     item("recipients", "People", Users, ["/recipient-groups"]),
     item("requests", "Gift requests", ClipboardList),
     item("credits", "Budgets", Wallet),

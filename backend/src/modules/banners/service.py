@@ -18,7 +18,8 @@ from src.modules.banners.schemas import BannerCreate, BannerList, BannerRead, Ba
 
 COLUMNS = "id,audience,image_url,sort_order,is_active,starts_on,ends_on,created_at,updated_at"
 MAX_LIVE = 50
-BANNER_SIZE = (1000, 90)
+BANNER_RATIO = (1000, 90)  # any size with this shape is accepted
+BANNER_MIN_WIDTH = 500
 
 
 def is_live(row: dict[str, Any], today: date) -> bool:
@@ -102,7 +103,7 @@ class BannerService:
 
     def _store(self, folder: str, content: bytes, content_type: str) -> str:
         return images.store_image(
-            self.database, f"banners/{folder}", content, content_type, max_bytes=images.PHOTO_MAX_BYTES, exact_size=BANNER_SIZE,
+            self.database, f"banners/{folder}", content, content_type, max_bytes=images.PHOTO_MAX_BYTES, aspect_ratio=BANNER_RATIO, min_width=BANNER_MIN_WIDTH,
         )
 
     def _row(self, banner_id: str) -> dict[str, Any]:

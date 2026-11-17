@@ -9,6 +9,5 @@ export const endpoints = {
     changePassword: "/auth/change-password"
   },
   tenants: "/tenants",
-  occasions: "/occasions",
   referenceData: "/reference-data"
 } as const;

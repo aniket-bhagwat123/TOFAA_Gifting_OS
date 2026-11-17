@@ -2,6 +2,7 @@
 
 import logging
 import re
+import time
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -85,11 +86,40 @@ def _read(row: dict[str, Any], today: date | None = None) -> RecipientRead:
     return item
 
 
+_IMPORT_FIELDS = ("gifting_occasion", "birthday_budget", "anniversary_budget")
+
+
 class RecipientService:
     """Manage recipient records with tenant checks on every lookup."""
 
     def __init__(self, database: Client | None = None) -> None:
         self.database = database or get_supabase_admin_client()
+        self._import_fields_ok: bool | None = None
+        self._recheck_at = 0.0
+
+    def _has_import_fields(self) -> bool:
+        """Whether the database has the import columns yet (the migration may not have been applied). Checked once, or every 30s while missing."""
+        if self._import_fields_ok is None or (not self._import_fields_ok and time.monotonic() > self._recheck_at):
+            try:
+                self.database.table("recipients").select(",".join(_IMPORT_FIELDS)).limit(1).execute()
+                self._import_fields_ok = True
+            except Exception:  # noqa: BLE001 - a missing column is the expected failure
+                self._import_fields_ok = False
+                self._recheck_at = time.monotonic() + 30
+        return self._import_fields_ok
+
+    def _columns(self) -> str:
+        return f"{RECIPIENT_RESPONSE_COLUMNS},{','.join(_IMPORT_FIELDS)}" if self._has_import_fields() else RECIPIENT_RESPONSE_COLUMNS
+
+    def _without_missing_columns(self, values: dict[str, Any]) -> dict[str, Any]:
+        """Leave the import fields out until the database has them; refuse a request that actually sets one."""
+        if self._has_import_fields():
+            return values
+        for field in _IMPORT_FIELDS:
+            if values.get(field) is not None:
+                raise HTTPException(status_code=503, detail="A database update is missing (recipient import fields). Apply the latest migrations, then retry.")
+            values.pop(field, None)
+        return values
 
     def list_recipients(
         self,
@@ -125,7 +155,7 @@ class RecipientService:
         in_memory = upcoming_days is not None or sort == "nextOccasion" or (member_ids is not None and not push_members)
         query = (
             self.database.table("recipients")
-            .select(f"{RECIPIENT_RESPONSE_COLUMNS},created_at", count="exact")
+            .select(f"{self._columns()},created_at", count="exact")
             .eq("tenant_id", tenant_id)
             .is_("deleted_at", "null")
         )
@@ -310,7 +340,7 @@ class RecipientService:
             matches = self._find_duplicates(tenant_id, payload.name, payload.mobile_number, payload.email)
             if matches:
                 raise ApiError(409, "This person may already be in your recipients.", {"duplicates": matches})
-        values = payload.model_dump(mode="json", exclude={"allow_duplicate"})
+        values = self._without_missing_columns(payload.model_dump(mode="json", exclude={"allow_duplicate"}))
         if values.get("address") and not values.get("city"):
             values["city"] = values["address"]["city"]  # keep the plain city in step with the address
         values.update(
@@ -325,7 +355,7 @@ class RecipientService:
             result = (
                 self.database.table("recipients")
                 .insert(values)
-                .select(RECIPIENT_RESPONSE_COLUMNS)
+                .select(self._columns())
                 .execute()
             )
         except Exception as exc:  # noqa: BLE001 - the unique mobile number index is the usual cause
@@ -399,7 +429,7 @@ class RecipientService:
         current_version = int(current.get("version") or 1)
         if payload.version is not None and payload.version != current_version:
             raise self._conflict(current)
-        values = payload.model_dump(mode="json", exclude_unset=True, exclude={"version"})
+        values = self._without_missing_columns(payload.model_dump(mode="json", exclude_unset=True, exclude={"version"}))
         if values.get("address") and "city" not in values:
             values["city"] = values["address"]["city"]
         values["updated_by_user_id"] = actor.id
@@ -414,7 +444,12 @@ class RecipientService:
         if payload.version is not None:
             # Atomic guard: matches nothing if someone saved between the read above and this write.
             query = query.eq("version", payload.version)
-        result = query.select(RECIPIENT_RESPONSE_COLUMNS).execute()
+        try:
+            result = query.select(self._columns()).execute()
+        except Exception as exc:  # noqa: BLE001 - the unique mobile number index is the usual cause
+            if "recipients_tenant_mobile_number_active_uq" in str(exc) or "duplicate key" in str(exc).lower():
+                raise ApiError(409, "Another recipient already has this mobile number.") from exc
+            raise
         if not result.data:
             if payload.version is not None:
                 latest = self._get_scoped_recipient(tenant_id, recipient_id, actor)
@@ -462,7 +497,7 @@ class RecipientService:
             .eq("id", recipient_id)
             .eq("tenant_id", tenant_id)
             .not_.is_("deleted_at", "null")
-            .select(RECIPIENT_RESPONSE_COLUMNS)
+            .select(self._columns())
             .execute()
         )
         if not result.data:
@@ -479,7 +514,7 @@ class RecipientService:
         self._require_tenant_access(tenant_id, actor)
         result = (
             self.database.table("recipients")
-            .select(RECIPIENT_RESPONSE_COLUMNS)
+            .select(self._columns())
             .eq("tenant_id", tenant_id)
             .eq("id", recipient_id)
             .is_("deleted_at", "null")
@@ -509,7 +544,7 @@ class RecipientService:
             self.database.table("recipients")
             .update({"avatar_url": url, "updated_by_user_id": actor.id})
             .eq("id", recipient_id).eq("tenant_id", tenant_id).is_("deleted_at", "null")
-            .select(RECIPIENT_RESPONSE_COLUMNS)
+            .select(self._columns())
             .execute()
         )
         if not result.data:

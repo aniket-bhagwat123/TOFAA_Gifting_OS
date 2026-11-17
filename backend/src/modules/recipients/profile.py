@@ -21,7 +21,7 @@ from src.modules.tenants.service import tenant_service
 router = APIRouter(tags=["Recipient profile"])
 
 RelationshipType = Literal["SPOUSE", "SON", "DAUGHTER", "PARENT", "SIBLING", "BUSINESS_ASSOCIATE", "COLLEAGUE", "OTHER"]
-AddressLabel = Literal["OFFICE", "RESIDENTIAL", "OTHER"]
+AddressLabel = Literal["PERMANENT", "CURRENT", "OFFICE", "RESIDENTIAL", "OTHER"]  # RESIDENTIAL and OTHER are the old names
 InfoStatus = Literal["PENDING", "REQUESTED_FROM_CLIENT", "KAM_FOLLOW_UP", "SUBMITTED_FOR_CONFIRMATION", "VERIFIED", "NOT_APPLICABLE"]
 # Information fields that can be tracked (the keys the completeness score also uses).
 INFO_FIELDS = frozenset({"contact", "city", "company", "designation", "relationship", "birthday", "preferences", "address"})
@@ -48,7 +48,7 @@ class PreferencesRead(PreferencesBody):
 
 
 class AddressBody(_Camel):
-    label: AddressLabel = "OFFICE"
+    label: AddressLabel = "PERMANENT"
     address_line1: str = Field(min_length=3, max_length=300)
     address_line2: str | None = Field(default=None, max_length=300)
     city: str = Field(min_length=1, max_length=100)

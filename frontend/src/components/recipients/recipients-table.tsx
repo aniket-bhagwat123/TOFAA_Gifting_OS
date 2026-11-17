@@ -15,7 +15,7 @@ export type SortState = { key: SortKey; descending: boolean };
 
 const COLUMNS: Array<{ label: string; sort?: SortKey }> = [
   { label: "Recipient", sort: "name" }, { label: "Relationship" }, { label: "Group" }, { label: "Mobile", sort: "mobile" }, { label: "City", sort: "city" },
-  { label: "Next occasion", sort: "nextOccasion" }, { label: "Profile" }, { label: "Status" },
+  { label: "Next occasion", sort: "nextOccasion" }, { label: "Status" },
 ];
 const COLUMN_COUNT = COLUMNS.length + 2;
 
@@ -34,7 +34,7 @@ function RowMenu({ row, archived, onEdit, onGift, onArchive, onDelete }: { row: 
     <PopoverTrigger asChild><button type="button" aria-label={`More actions for ${row.name ?? "recipient"}`} className={iconButton}><MoreVertical size={16} /></button></PopoverTrigger>
     <PopoverContent align="end" className="w-48 p-1.5">
       <button type="button" className={item} onClick={run(onEdit)}><Pencil size={15} className="text-muted" /> Edit</button>
-      <button type="button" className={item} onClick={run(onGift)}><Gift size={15} className="text-muted" /> Create gift request</button>
+      <button type="button" className={item} onClick={run(onGift)}><Gift size={15} className="text-muted" /> Send gift</button>
       <button type="button" className={item} onClick={run(onArchive)}>{archived ? <ArchiveRestore size={15} className="text-muted" /> : <Archive size={15} className="text-muted" />}{archived ? "Restore" : "Archive"}</button>
       <button type="button" className={cn(item, "text-rose-700 hover:bg-rose-50")} onClick={run(onDelete)}><Trash2 size={15} /> Delete</button>
     </PopoverContent>
@@ -87,18 +87,6 @@ export function RecipientsTable({ rows, loading, selected, onToggle, onTogglePag
               <td className={td}>{next
                 ? <div className="flex items-center gap-3"><OccasionIcon kind={next.kind} /><div><p className="whitespace-nowrap text-sm font-semibold text-ink">{next.label}</p><p className="whitespace-nowrap text-xs tabular-nums text-muted">{longDate(next.date)}</p></div></div>
                 : <div className="flex items-center gap-3"><span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center text-slate-300">—</span><div><p className="text-sm text-muted">—</p><p className="text-xs text-muted">No upcoming</p></div></div>}</td>
-              <td className={td}>
-                {row.completeness != null
-                  ? <div className="flex min-w-[80px] flex-col gap-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={cn("text-xs font-semibold tabular-nums", row.completeness.needsAttention ? "text-amber-600" : "text-emerald-600")}>{row.completeness.percent}%</span>
-                      </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                        <div className={cn("h-full rounded-full transition-all", row.completeness.needsAttention ? "bg-amber-400" : "bg-emerald-500")} style={{ width: `${row.completeness.percent}%` }} />
-                      </div>
-                    </div>
-                  : <span className="text-muted">—</span>}
-              </td>
               <td className={td}><StatusCell status={row.status} /></td>
               <td className={table.td}><div className="flex justify-end"><RowMenu row={row} archived={archivedView} onEdit={() => onOpen(row)} onGift={() => onGift(row)} onArchive={() => onArchive(row)} onDelete={() => onDelete(row)} /></div></td>
             </tr>;

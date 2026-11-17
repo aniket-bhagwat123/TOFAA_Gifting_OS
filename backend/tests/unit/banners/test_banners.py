@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from src.core import images
 from src.modules.auth.rbac import Role
 from src.modules.banners.schemas import BannerCreate, BannerUpdate
-from src.modules.banners.service import BANNER_SIZE, audience_allows, is_live
+from src.modules.banners.service import BANNER_MIN_WIDTH, BANNER_RATIO, audience_allows, is_live
 
 
 def actor(role):
@@ -44,12 +44,19 @@ def test_image_size_reads_png_jpeg_and_webp():
     assert images.image_size(b"garbage", "image/jpeg") is None
 
 
-def test_banner_picture_must_be_exactly_1000_by_90():
-    assert BANNER_SIZE == (1000, 90)
-    for content, kind in ((png(800, 90), "image/png"), (jpeg(1000, 100), "image/jpeg"), (webp_lossless(1000, 91), "image/webp")):
+def test_banner_picture_must_have_the_1000_by_90_shape_but_any_size():
+    assert BANNER_RATIO == (1000, 90)
+    for content, kind in ((png(800, 90), "image/png"), (jpeg(1000, 100), "image/jpeg"), (webp_lossless(1000, 120), "image/webp")):
         with pytest.raises(HTTPException) as caught:
-            images.store_image(None, "banners/x", content, kind, exact_size=BANNER_SIZE)
-        assert caught.value.status_code == 422 and "1000 × 90" in caught.value.detail
+            images.store_image(None, "banners/x", content, kind, aspect_ratio=BANNER_RATIO, min_width=BANNER_MIN_WIDTH)
+        assert caught.value.status_code == 422 and "same shape" in caught.value.detail
+    # Right shape but too small is refused; right shape at any larger size gets past the shape check (storage is not reached with None).
+    with pytest.raises(HTTPException) as small:
+        images.store_image(None, "banners/x", png(300, 27), "image/png", aspect_ratio=BANNER_RATIO, min_width=BANNER_MIN_WIDTH)
+    assert "too small" in small.value.detail
+    for content, kind in ((png(2000, 180), "image/png"), (png(1000, 90), "image/png"), (jpeg(1500, 135), "image/jpeg")):
+        with pytest.raises(AttributeError):  # past validation, it tries to use the missing storage client
+            images.store_image(None, "banners/x", content, kind, aspect_ratio=BANNER_RATIO, min_width=BANNER_MIN_WIDTH)
 
 
 def test_banner_has_no_text_fields():

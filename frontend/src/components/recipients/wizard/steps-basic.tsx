@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef } from "react";
-import { AlertTriangle, ImagePlus, Info, Plus, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { AlertTriangle, ImagePlus, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
@@ -39,21 +39,20 @@ function PhotoPicker({ name, src, onPick }: { name: string; src: string | null; 
 }
 
 // ------------------------------------------------------------------------------------------ step 1
-export function DetailsStep({ data, errors, photoUrl, onChange, onPhoto, duplicates, onConfirmDifferent, confirmedDifferent }: {
+export function DetailsStep({ data, errors, photoUrl, onChange, onPhoto, duplicates, onConfirmDifferent, confirmedDifferent, groups, groupData, onGroups }: {
+  groups: RecipientGroup[]; groupData: Pick<RelationshipData, "groupIds" | "newGroupName">; onGroups: (patch: Partial<RelationshipData>) => void;
   data: DetailsData; errors: Errors; photoUrl: string | null; onChange: (patch: Partial<DetailsData>) => void; onPhoto: (file: File | null) => void;
   duplicates: DuplicateFound["matches"]; onConfirmDifferent: () => void; confirmedDifferent: boolean;
 }) {
-  const types: Array<{ value: RecipientType; label: string }> = [{ value: "INDIVIDUAL", label: "Individual" }, { value: "BUSINESS", label: "Business contact" }];
+  const types: Array<{ value: RecipientType; label: string }> = [{ value: "EXTERNAL", label: "External" }, { value: "INTERNAL", label: "Internal" }];
   const reason = (code: string) => ({ SAME_MOBILE: "Same mobile number", SAME_EMAIL: "Same email", SAME_NAME: "Same name" }[code] ?? code);
   return <>
     <PhotoPicker name={data.name} src={photoUrl} onPick={onPhoto} />
     <div className="mt-5 grid gap-4 sm:grid-cols-2">
-      <div className="sm:col-span-2"><InputField label="Full name" required placeholder="e.g. Sachin Tendulkar" autoComplete="off" value={data.name} onChange={(event) => onChange({ name: event.target.value })} error={errors.name} /></div>
-      <InputField label="Mobile number (optional)" type="tel" inputMode="tel" placeholder="+91 98765 43210" value={data.mobile} onChange={(event) => onChange({ mobile: event.target.value })} error={errors.mobile} />
-      <InputField label="Email address (optional)" type="email" placeholder="name@company.com" value={data.email} onChange={(event) => onChange({ email: event.target.value })} error={errors.email} />
-      <InputField label="City (optional)" placeholder="e.g. Mumbai" value={data.city} onChange={(event) => onChange({ city: event.target.value })} />
-      <InputField label="Company / organisation (optional)" placeholder="e.g. BCCI" value={data.company} onChange={(event) => onChange({ company: event.target.value })} />
-      <InputField label="Designation (optional)" placeholder="e.g. VP Marketing" value={data.designation} onChange={(event) => onChange({ designation: event.target.value })} error={errors.designation} />
+      <div className="sm:col-span-2"><InputField label="Full name" required placeholder="Enter full name" autoComplete="off" value={data.name} onChange={(event) => onChange({ name: event.target.value })} error={errors.name} /></div>
+      <InputField label="Mobile number" required type="tel" inputMode="tel" placeholder="Enter mobile number" value={data.mobile} onChange={(event) => onChange({ mobile: event.target.value })} error={errors.mobile} />
+      <InputField label="Email address (optional)" type="email" placeholder="Enter email address" value={data.email} onChange={(event) => onChange({ email: event.target.value })} error={errors.email} />
+      <div className="sm:col-span-2"><GroupPicker groups={groups} groupIds={groupData.groupIds} newGroupName={groupData.newGroupName} onChange={onGroups} /></div>
     </div>
 
     <fieldset className="mt-5">
@@ -64,6 +63,7 @@ export function DetailsStep({ data, errors, photoUrl, onChange, onPhoto, duplica
         </label>)}
       </div>
     </fieldset>
+    {data.recipientType === "EXTERNAL" && <div className="mt-4 sm:max-w-[calc(50%-0.5rem)]"><InputField label="Company / organisation (optional)" placeholder="Enter company / organisation" value={data.company} onChange={(event) => onChange({ company: event.target.value })} /></div>}
 
     {duplicates.length > 0 && !confirmedDifferent && <div role="alert" className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
       <p className="flex items-center gap-2 text-sm font-semibold text-amber-900"><AlertTriangle size={16} /> This person may already be in your recipients</p>
@@ -78,11 +78,40 @@ export function DetailsStep({ data, errors, photoUrl, onChange, onPhoto, duplica
       </div>
       <p className="mt-2 text-xs text-amber-800">To avoid duplicates, cancel and open the existing recipient instead.</p>
     </div>}
-    <p className="mt-5 flex items-center gap-2 rounded-xl bg-brand-soft/60 px-4 py-3 text-sm text-ink"><Info size={16} className="shrink-0 text-brand" /> You can link this recipient to a family or group in the next step.</p>
   </>;
 }
 
 // ------------------------------------------------------------------------------------------ step 2
+/** "Add to the group": pick from the existing groups, or type a new name to create the group when the recipient is saved. */
+function GroupPicker({ groups, groupIds, newGroupName, onChange }: { groups: RecipientGroup[]; groupIds: string[]; newGroupName: string; onChange: (patch: Partial<RelationshipData>) => void }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const typed = query.trim();
+  const available = groups.filter((g) => !groupIds.includes(g.id) && g.name.toLowerCase().includes(typed.toLowerCase()));
+  const exact = groups.some((g) => g.name.trim().toLowerCase() === typed.toLowerCase()) || newGroupName.trim().toLowerCase() === typed.toLowerCase();
+  const pick = (id: string) => { onChange({ groupIds: [...groupIds, id] }); setQuery(""); };
+  const create = () => { onChange({ newGroupName: typed }); setQuery(""); setOpen(false); };
+  const selected = groups.filter((g) => groupIds.includes(g.id));
+  return <div>
+    <label htmlFor="group-picker" className="block text-sm font-medium text-ink">Add to the group</label>
+    {(selected.length > 0 || newGroupName.trim()) && <div className="mt-2 flex flex-wrap gap-2">
+      {selected.map((g) => <span key={g.id} className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-brand-soft px-3 text-sm font-medium text-brand">{g.name}<button type="button" aria-label={`Remove ${g.name}`} onClick={() => onChange({ groupIds: groupIds.filter((id) => id !== g.id) })} className="rounded-full p-0.5 hover:bg-white/70"><X size={13} /></button></span>)}
+      {newGroupName.trim() && <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-amber-50 px-3 text-sm font-medium text-amber-800">{newGroupName.trim()} <span className="text-xs font-normal">(new)</span><button type="button" aria-label="Remove new group" onClick={() => onChange({ newGroupName: "" })} className="rounded-full p-0.5 hover:bg-white/70"><X size={13} /></button></span>}
+    </div>}
+    <div className="relative mt-2">
+      <input id="group-picker" autoComplete="off" value={query} placeholder={groups.length ? "Select a group or enter a new name" : "Enter group name"}
+        onChange={(event) => { setQuery(event.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); if (available.length && !typed) return; if (typed && !exact && !available.length) create(); else if (available[0]) pick(available[0].id); } if (event.key === "Escape") setOpen(false); }}
+        className="min-h-[38px] w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/25" />
+      {open && (available.length > 0 || (typed && !exact)) && <ul role="listbox" className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-line bg-white py-1 shadow-lg">
+        {available.map((g) => <li key={g.id}><button type="button" role="option" aria-selected={false} onMouseDown={(event) => event.preventDefault()} onClick={() => pick(g.id)} className="flex w-full px-3 py-2 text-left text-sm text-ink hover:bg-slate-50">{g.name}</button></li>)}
+        {typed && !exact && <li><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={create} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-brand hover:bg-brand-soft/60"><Plus size={14} />Create group “{typed}”</button></li>}
+      </ul>}
+    </div>
+    <p className="mt-1 text-xs text-muted">Can&apos;t find the group? Type its name and choose Create. It is added to Groups when you save.</p>
+  </div>;
+}
+
 export function RelationshipStep({ data, groups, recipientsEndpoint, onChange }: {
   data: RelationshipData; groups: RecipientGroup[]; recipientsEndpoint: string; onChange: (patch: Partial<RelationshipData>) => void;
 }) {
@@ -104,7 +133,7 @@ export function RelationshipStep({ data, groups, recipientsEndpoint, onChange }:
         {groups.length ? <div className="mt-2 flex flex-wrap gap-2">
           {groups.map((group) => <button key={group.id} type="button" aria-pressed={data.groupIds.includes(group.id)} onClick={() => toggleGroup(group.id)} className={cn("press min-h-9 rounded-full border px-3.5 text-sm font-medium", data.groupIds.includes(group.id) ? "border-brand/50 bg-brand-soft text-brand" : "border-line bg-white text-ink hover:bg-slate-50")}>{group.name} <span className="text-xs opacity-70">{group.recipientIds.length}</span></button>)}
         </div> : <p className="mt-2 text-sm text-muted">No groups yet.</p>}
-        <div className="mt-3 max-w-sm"><InputField label="Create a new group" placeholder="e.g. Tendulkar Family" value={data.newGroupName} onChange={(event) => onChange({ newGroupName: event.target.value })} hint="This person becomes its first member." /></div>
+        <div className="mt-3 max-w-sm"><InputField label="Create a new group" placeholder="Enter group name" value={data.newGroupName} onChange={(event) => onChange({ newGroupName: event.target.value })} hint="This person becomes its first member." /></div>
       </div>
 
       <div>

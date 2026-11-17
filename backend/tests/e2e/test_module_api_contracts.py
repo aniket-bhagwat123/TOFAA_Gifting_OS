@@ -136,32 +136,6 @@ async def test_event_create_api_contract(e2e_client, monkeypatch, tenant_id, rec
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
-async def test_occasion_create_api_contract(e2e_client, monkeypatch):
-    from src.modules.occasions.service import occasion_service
-
-    monkeypatch.setattr(
-        occasion_service,
-        "create_global_occasion",
-        lambda payload, actor: OccasionRead(
-            id="occasion-1",
-            occasion_name=payload.occasion_name,
-            occasion_date=payload.occasion_date,
-            is_active=payload.is_active,
-            created_at="2026-10-30T00:00:00Z",
-            updated_at="2026-10-30T00:00:00Z",
-        ),
-    )
-    response = await e2e_client.post(
-        "/api/v1/occasions",
-        json={"occasionName": "Diwali", "occasionDate": "2026-11-08"},
-    )
-    assert response.status_code == 201
-    assert response.json()["data"]["occasionDate"] == "2026-11-08"
-    assert response.json()["message"] == "Global occasion created successfully."
-
-
-@pytest.mark.e2e
-@pytest.mark.asyncio
 async def test_credit_request_api_contract(e2e_client, monkeypatch, tenant_id):
     from src.modules.credits.service import credits_service
 

@@ -1,6 +1,8 @@
 "use client";
 
-import { LogOut, Menu, Eye, ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { LogOut, Menu, Eye, ChevronDown, User } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import Link from "next/link";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -15,7 +17,8 @@ const moduleTitles: Record<string, string> = {
   requests: "Gift requests",
   gifts: "Gifts",
   events: "Events",
-  occasions: "Occasions",
+  occasions: "Gift Calendar",
+  "gift-ideas": "Gift Ideas",
   credits: "Budgets",
   clients: "Clients",
   recipients: "People",
@@ -36,9 +39,24 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
   const segment = pathname.split("/").filter(Boolean)[0] ?? "home";
   const moduleTitle = moduleTitles[segment] ?? segment.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen && !confirmOpen) return;
+    const onDown = (event: MouseEvent) => { if (menuOpen && !menuRef.current?.contains(event.target as Node)) setMenuOpen(false); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { setMenuOpen(false); if (!signingOut) setConfirmOpen(false); } };
+    document.addEventListener("mousedown", onDown); document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [menuOpen, confirmOpen, signingOut]);
+
   async function handleLogout() {
-    try { await dispatch(logoutUser()).unwrap(); router.replace("/login"); }
+    setSigningOut(true);
+    try { await dispatch(logoutUser()).unwrap(); setConfirmOpen(false); router.replace("/login"); }
     catch { toast.error("We couldn't sign you out. Please try again."); }
+    finally { setSigningOut(false); }
   }
 
   const shownName = displayName(user);
@@ -85,16 +103,31 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
           </div>
         );
       })()}
-      <div className="flex items-center gap-2.5 pl-1">
-        <Link href="/profile" aria-label="Open your profile" className="press flex items-center gap-2.5 rounded-full outline-none focus-visible:ring-4 focus-visible:ring-brand/20">
+      <div ref={menuRef} className="relative pl-1">
+        <button type="button" onClick={() => setMenuOpen((open) => !open)} aria-haspopup="menu" aria-expanded={menuOpen} aria-label="Open account menu" className="press flex items-center gap-2.5 rounded-full outline-none focus-visible:ring-4 focus-visible:ring-brand/20">
           <Avatar name={shownName} src={user?.avatarUrl} />
-          <div className="hidden flex-col leading-none md:flex">
+          <div className="hidden flex-col text-left leading-none md:flex">
             <span className="text-[13px] font-medium text-ink capitalize">{shownName}</span>
             {roleLabel && <span className="mt-0.5 text-[11px] text-slate-400">{roleLabel}</span>}
           </div>
-        </Link>
-        <button onClick={handleLogout} title="Sign out" className="press flex min-h-9 items-center gap-2 rounded-[7px] px-3 text-[13px] font-medium text-slate-700 hover:bg-black/5"><LogOut size={18} /><span className="hidden md:inline">Sign out</span></button>
+          <ChevronDown size={14} className={`hidden text-slate-400 transition md:block ${menuOpen ? "rotate-180" : ""}`} />
+        </button>
+        {menuOpen && <div role="menu" className="absolute right-0 top-full z-30 mt-2 w-44 overflow-hidden rounded-lg border border-line bg-white py-1 shadow-lg">
+          <Link href="/profile" role="menuitem" onClick={() => setMenuOpen(false)} className="flex items-center gap-2.5 px-3 py-2 text-sm text-ink hover:bg-slate-50"><User size={16} className="text-slate-500" />Profile</Link>
+          <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setConfirmOpen(true); }} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"><LogOut size={16} />Logout</button>
+        </div>}
       </div>
     </div>
+    {confirmOpen && createPortal(<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 backdrop-blur-[2px]" onMouseDown={(event) => { if (event.target === event.currentTarget && !signingOut) setConfirmOpen(false); }}>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="logout-title" aria-describedby="logout-desc" className="w-full max-w-sm animate-rise-in rounded-2xl bg-white px-6 pb-6 pt-7 text-center shadow-xl">
+        <span aria-hidden className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-600"><LogOut size={26} /></span>
+        <h2 id="logout-title" className="mt-4 text-lg font-semibold text-ink">Logout</h2>
+        <p id="logout-desc" className="mt-1.5 text-sm text-muted">Are you sure you want to logout?</p>
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <button type="button" autoFocus disabled={signingOut} onClick={() => setConfirmOpen(false)} className="press min-h-10 rounded-lg border border-line bg-white px-5 text-sm font-medium text-ink hover:bg-slate-50 disabled:opacity-60">No</button>
+          <button type="button" disabled={signingOut} onClick={handleLogout} className="press min-h-10 rounded-lg bg-rose-600 px-5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60">{signingOut ? "Logging out…" : "Yes, Logout"}</button>
+        </div>
+      </div>
+    </div>, document.body)}
   </header>;
 }

@@ -105,6 +105,8 @@ async def api_http_error(request: Request, exc: StarletteHTTPException) -> JSONR
 @app.exception_handler(RequestValidationError)
 async def api_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Keep validation failures in the standard API envelope with field errors."""
+    # Field names and messages only (never the values), so a 422 in the log says what was wrong.
+    logger.warning("validation_failed method=%s path=%s errors=%s", request.method, request.url.path, [(".".join(str(p) for p in e.get("loc", ())), e.get("msg")) for e in exc.errors()])
     return JSONResponse(
         status_code=422,
         content=jsonable_encoder(

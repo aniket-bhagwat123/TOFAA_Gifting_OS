@@ -12,6 +12,7 @@ import { PeopleTabs } from "./people-tabs";
 import { OccasionsBoard } from "@/components/occasions/board/occasions-board";
 import { ActivityView } from "./activity-view";
 import { CreditsView } from "./credits-view";
+import { GiftIdeasView } from "@/components/gift-ideas/gift-ideas-view";
 
 /** Route guard: only roles listed in the module's config can open it. */
 export function ModuleGate({ moduleKey }: { moduleKey: string }) {
@@ -23,6 +24,6 @@ export function ModuleGate({ moduleKey }: { moduleKey: string }) {
   }
   return <>
     {(moduleKey === "recipients" || moduleKey === "recipient-groups") && <PeopleTabs active={moduleKey} />}
-    {moduleKey === "occasions" && (user.platformRole === "CLIENT" || user.platformRole === "SUPER_ADMIN") ? <OccasionsBoard /> :moduleKey === "activity" ? <ActivityView /> : moduleKey === "credits" ? <CreditsView /> : <ModuleList moduleKey={moduleKey} />}
+    {moduleKey === "occasions" && (user.platformRole === "CLIENT" || user.platformRole === "SUPER_ADMIN") ? <OccasionsBoard /> :moduleKey === "gift-ideas" ? <GiftIdeasView /> : moduleKey === "activity" ? <ActivityView /> : moduleKey === "credits" ? <CreditsView /> : <ModuleList moduleKey={moduleKey} />}
   </>;
 }

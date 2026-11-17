@@ -209,6 +209,14 @@ class GiftRequestService:
             raise HTTPException(status_code=422, detail="Pick at least one group or person.")
 
         rupees = payload.budget_per_recipient
+        if payload.delivery_date is not None:
+            if payload.delivery_date < date.today():
+                raise HTTPException(status_code=422, detail="The delivery date cannot be in the past.")
+            delivery_date = payload.delivery_date
+        address = (payload.delivery_address or "").strip() or None
+        time_text = self._delivery_note(payload.delivery_time, payload.poc_name, payload.poc_mobile)  # shown to TOFAA with the request
+        if self._is_organization(tenant_id):
+            return self._send_gifts_without_credits(tenant_id, source_type, source_id, sorted(recipient_ids), rupees, title, payload.note, delivery_date, actor, address, time_text)
         credits = credits_for(rupees)
 
         result = self._rpc("send_gifts", {
@@ -225,6 +233,7 @@ class GiftRequestService:
         }) or {}
         created = result.get("created") or []
         skipped = [str(item) for item in result.get("skipped") or []]
+        self._apply_delivery_details(tenant_id, created, address, time_text)
         return SendGiftsResult(
             created_count=len(created),
             skipped_count=len(skipped),
@@ -232,6 +241,92 @@ class GiftRequestService:
             skipped_recipient_ids=skipped,
             credits_per_recipient=credits,
             total_credits=credits * len(created),
+        )
+
+    @staticmethod
+    def _delivery_note(time_value: str | None, poc_name: str | None, poc_mobile: str | None) -> str | None:
+        """The delivery time and person of contact, written as the request's special instructions."""
+        lines = []
+        if time_value:
+            hour = int(time_value[:2])
+            lines.append(f"Preferred delivery time: {hour % 12 or 12}:{time_value[3:]} {'PM' if hour >= 12 else 'AM'}")
+        if poc_name:
+            lines.append(f"Contact person: {poc_name.strip()}" + (f", {poc_mobile}" if poc_mobile else ""))
+        return "\n".join(lines) or None
+
+    def _saved_addresses(self, tenant_id: str, recipient_ids: list[str]) -> dict[str, str]:
+        """Each person's default delivery address as one line of text (their address list first, then the single address on the person)."""
+        if not recipient_ids:
+            return {}
+        db = self.database
+
+        def line(parts: list[Any]) -> str:
+            return ", ".join(str(part).strip() for part in parts if part and str(part).strip())[:600]
+
+        out: dict[str, str] = {}
+        rows = db.table("recipient_addresses").select("recipient_id,address_line1,address_line2,city,state,postal_code,is_default").eq("tenant_id", tenant_id).in_("recipient_id", recipient_ids).execute().data or []
+        for row in sorted(rows, key=lambda r: not r.get("is_default")):
+            out.setdefault(str(row["recipient_id"]), line([row.get("address_line1"), row.get("address_line2"), row.get("city"), row.get("state"), row.get("postal_code")]))
+        missing = [i for i in recipient_ids if i not in out]
+        if missing:
+            for row in db.table("recipients").select("id,address").eq("tenant_id", tenant_id).in_("id", missing).execute().data or []:
+                a = row.get("address") or {}
+                text = line([a.get("address_line1") or a.get("addressLine1"), a.get("address_line2") or a.get("addressLine2"), a.get("city"), a.get("state"), a.get("postal_code") or a.get("postalCode")])
+                if text:
+                    out[str(row["id"])] = text
+        return out
+
+    def _apply_delivery_details(self, tenant_id: str, created: list[dict[str, Any]], address: str | None, time_text: str | None) -> None:
+        """Record where and when each newly created request should be delivered (the credit flow creates them without it)."""
+        if not created:
+            return
+        saved = {} if address else self._saved_addresses(tenant_id, [str(row["recipientId"]) for row in created])
+        for row in created:
+            values: dict[str, Any] = {}
+            where = address or saved.get(str(row["recipientId"]))
+            if where:
+                values["delivery_address"] = where
+            if time_text:
+                values["special_instructions"] = time_text
+            if values:
+                self.database.table("gift_requests").update(values).eq("tenant_id", tenant_id).eq("id", row["id"]).execute()
+
+    def _is_organization(self, tenant_id: str) -> bool:
+        """Credits are for individual clients only. An organisation sends and approves gifts by rupee budget."""
+        tenant = tenant_service.tenant_state(tenant_id)
+        return bool(tenant) and tenant.get("tenant_type") == "ORGANIZATION"
+
+    def _send_gifts_without_credits(
+        self, tenant_id: str, source_type: str, source_id: str, recipient_ids: list[str], rupees: Any,
+        title: str, note: str | None, delivery_date: Any, actor: UserProfileResponse,
+        address: str | None = None, time_text: str | None = None,
+    ) -> SendGiftsResult:
+        """The organisation version of send_gifts: one submitted request per person with a rupee budget, no credit checks."""
+        db = self.database
+        people = db.table("recipients").select("id,name").eq("tenant_id", tenant_id).is_("deleted_at", "null").in_("id", recipient_ids).execute().data or []
+        if len(people) != len(recipient_ids):
+            raise HTTPException(status_code=404, detail="One of the people you picked was not found.")
+        source_column = "occasion_id" if source_type == "occasion" else "event_id"
+        taken = {
+            row["recipient_id"] for row in (
+                db.table("gift_requests").select("recipient_id").eq("tenant_id", tenant_id).eq(source_column, source_id)
+                .neq("status", "CANCELLED").in_("recipient_id", recipient_ids).execute().data or []
+            )
+        }
+        todo = [p for p in people if p["id"] not in taken]
+        created: list[dict[str, Any]] = []
+        saved = self._saved_addresses(tenant_id, [p["id"] for p in todo]) if todo and not address else {}
+        if todo:
+            created = db.table("gift_requests").insert([{
+                "tenant_id": tenant_id, "recipient_id": p["id"], source_column: source_id, "created_by_user_id": actor.id,
+                "title": f"{title} gift for {p['name']}"[:180], "purpose": (note or "").strip()[:2000] or f"{title} gift",
+                "requested_budget": float(rupees), "delivery_date": str(delivery_date), "status": "SUBMITTED",
+                "delivery_address": address or saved.get(p["id"]),
+                "special_instructions": time_text,
+            } for p in todo]).execute().data or []
+        return SendGiftsResult(
+            created_count=len(created), skipped_count=len(taken), request_ids=[row["id"] for row in created],
+            skipped_recipient_ids=sorted(taken), credits_per_recipient=0, total_credits=0,
         )
 
     def occasion_activity(self, tenant_id: str, actor: UserProfileResponse) -> OccasionActivity:
@@ -562,7 +657,9 @@ class GiftRequestService:
         note: str | None = None,
         proposal: dict[str, Any] | None = None,
     ) -> GiftRequestRead:
-        if action == "approve":
+        if action == "approve" and self._is_organization(tenant_id):
+            row = self._approve_without_credits(tenant_id, request_id, actor, note)
+        elif action == "approve":
             row = self._rpc(
                 "approve_gift_request_with_spend",
                 {"p_tenant_id": tenant_id, "p_request_id": request_id, "p_actor_id": actor.id, "p_note": note},
@@ -580,6 +677,25 @@ class GiftRequestService:
                 },
             )
         return self._enrich([row])[0]
+
+    def _approve_without_credits(self, tenant_id: str, request_id: str, actor: UserProfileResponse, note: str | None) -> dict[str, Any]:
+        """Confirm a proposal for an organisation: the same status change and history entry, without spending credits."""
+        db = self.database
+        row = self._get_row(tenant_id, request_id)
+        if row["status"] != "PROPOSAL_READY":
+            raise HTTPException(status_code=409, detail="Gift request is not in a valid state for this action.")
+        text = (note or "").strip() or None
+        updated = (
+            db.table("gift_requests").update({"status": "CONFIRMED", "status_note": text})
+            .eq("tenant_id", tenant_id).eq("id", request_id).eq("status", "PROPOSAL_READY").execute().data or []
+        )
+        if not updated:
+            raise HTTPException(status_code=409, detail="Gift request is not in a valid state for this action.")
+        db.table("gift_request_events").insert({
+            "tenant_id": tenant_id, "gift_request_id": request_id, "from_status": "PROPOSAL_READY", "to_status": "CONFIRMED",
+            "actor_user_id": actor.id, "note": text,
+        }).execute()
+        return updated[0]
 
     def upload_reference(
         self, tenant_id: str, request_id: str, actor: UserProfileResponse,

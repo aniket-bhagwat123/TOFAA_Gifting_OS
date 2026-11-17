@@ -36,7 +36,7 @@ def _filled(value: Any) -> bool:
 
 def _checks(row: dict[str, Any], extras: Extras) -> dict[str, list[tuple[str, str, bool]]]:
     """Per section: (field key, label shown when missing, is it filled?)."""
-    business = row.get("recipient_type") == "BUSINESS"
+    business = row.get("recipient_type") in ("EXTERNAL", "BUSINESS")  # BUSINESS is the old name
     address = row.get("address") or {}
     basic = [
         ("name", "Full name", _filled(row.get("name"))),
@@ -44,7 +44,7 @@ def _checks(row: dict[str, Any], extras: Extras) -> dict[str, list[tuple[str, st
         ("city", "City", _filled(row.get("city")) or _filled(address.get("city")) or extras.address_count > 0),
     ]
     if business:
-        basic += [("company", "Company", _filled(row.get("company"))), ("designation", "Designation", _filled(row.get("designation")))]
+        basic += [("company", "Company", _filled(row.get("company")))]
     return {
         "basic": basic,
         "relationships": [("relationship", "Relationship", _filled(row.get("relationship")) or extras.related_people > 0 or extras.group_count > 0)],

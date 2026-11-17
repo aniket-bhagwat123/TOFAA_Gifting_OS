@@ -33,7 +33,7 @@ def _request_stage(request_status: str, gift_statuses: list[str]) -> PlanningSta
     if request_status == "PROPOSAL_READY":
         return PlanningStatus.AWAITING_APPROVAL
     if request_status in ("CONFIRMED", "IN_PROGRESS", "DISPATCHED", "DELIVERED"):
-        if gift_statuses and all(status == "DELIVERED" for status in gift_statuses):
+        if request_status == "DELIVERED" or (gift_statuses and all(status == "DELIVERED" for status in gift_statuses)):
             return PlanningStatus.DELIVERED
         return PlanningStatus.IN_PROGRESS
     return None  # DRAFT: nothing submitted yet

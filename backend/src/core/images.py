@@ -61,7 +61,7 @@ def image_size(content: bytes, content_type: str) -> tuple[int, int] | None:
 
 def store_image(
     database: Client, folder: str, content: bytes, content_type: str, *, max_bytes: int = AVATAR_MAX_BYTES,
-    exact_size: tuple[int, int] | None = None,
+    exact_size: tuple[int, int] | None = None, aspect_ratio: tuple[int, int] | None = None, min_width: int | None = None,
 ) -> str:
     """Validate and save a picture under `folder`; returns its public URL."""
     content_type = (content_type or "").split(";")[0].strip().lower()
@@ -75,6 +75,14 @@ def store_image(
         raise HTTPException(status_code=422, detail="That file is not a valid image.")
     if exact_size and image_size(content, content_type) != exact_size:
         raise HTTPException(status_code=422, detail=f"The image must be exactly {exact_size[0]} × {exact_size[1]} pixels.")
+    if aspect_ratio:
+        size = image_size(content, content_type)
+        wanted = aspect_ratio[0] / aspect_ratio[1]
+        # Any size is fine as long as the shape matches (within 2%), for example 1000 x 90 or 2000 x 180.
+        if size is None or abs(size[0] / size[1] - wanted) / wanted > 0.02:
+            raise HTTPException(status_code=422, detail=f"The image must have the same shape as {aspect_ratio[0]} × {aspect_ratio[1]} pixels, for example {aspect_ratio[0] * 2} × {aspect_ratio[1] * 2}.")
+        if min_width and size[0] < min_width:
+            raise HTTPException(status_code=422, detail=f"The image is too small. Use one at least {min_width} pixels wide.")
     path = f"{folder}/{uuid4().hex}.{IMAGE_TYPES[content_type]}"
     storage = database.storage.from_(BUCKET)
     try:

@@ -23,7 +23,7 @@ export interface AuthUser {
   /** The name as typed on the profile (empty when never set); `name` falls back to the email. */
   fullName?: string;
   mobileNumber?: string | null;
-  tenant?: { id: string; name: string };
+  tenant?: { id: string; name: string; /** ORGANIZATION or INDIVIDUAL. Credits apply to individual clients only. */ type?: string };
   permissions: string[];
   /** True while the user is still on a temporary password (e.g. just invited). */
   mustResetPassword: boolean;
@@ -32,7 +32,7 @@ export interface AuthUser {
 }
 
 export interface AuthSession { access_token: string; refresh_token: string; expires_at?: number | null; expires_in?: number | null; token_type?: string }
-export interface AuthMeResponse { id: string; email: string; full_name?: string | null; role: "CLIENT" | "KAM" | "SUPER_ADMIN"; tenant_id?: string | null; tenant_name?: string | null; client_role?: string | null; [key: string]: unknown }
+export interface AuthMeResponse { id: string; email: string; full_name?: string | null; role: "CLIENT" | "KAM" | "SUPER_ADMIN"; tenant_id?: string | null; tenant_name?: string | null; tenant_type?: string | null; client_role?: string | null; [key: string]: unknown }
 export interface LoginResponse {
   user: AuthMeResponse;
   session: AuthSession;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Plus, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Gift, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useAppSelector } from "@/store/hooks";
 import { moduleConfig } from "@/features/modules/module-config";
@@ -12,8 +12,8 @@ import { control, table } from "@/components/ui/table-styles";
 import { SearchInput } from "@/components/ui/search-input";
 import { Button } from "@/components/ui/button";
 import { PeopleTabs } from "@/components/modules/people-tabs";
-import { BudgetSheet, type BudgetTarget, type DefaultBudget } from "@/components/occasions/occasion-budget-sheet";
-import { AvailableCreditsStrip } from "@/components/occasions/available-credits";
+import { useTenantId } from "@/components/gift-requests/shared";
+import { SendGiftDialog, type SendGiftTarget } from "./send-gift-dialog";
 import { GroupSheet, type RecipientGroup } from "./group-sheet";
 import { AddRecipientsSheet } from "./add-recipients-sheet";
 
@@ -40,30 +40,6 @@ async function fetchMembers(endpoint: string, ids: string[]): Promise<Row[]> {
 }
 
 
-
-/**
- * What one person may spend. Their own budget if they have one; otherwise
- * or an equal share of what is left of the group's total budget (any odd credits go to the first people).
- */
-const memberBudget = (budgets: Record<string, DefaultBudget>, group: RecipientGroup, recipientId: string) => {
-  const groupBudget = budgets[`GROUP:${group.id}`];
-  if (!groupBudget) return undefined;
-  const own = budgets[`RECIPIENT:${group.id}:${recipientId}`]?.budgetCredits;
-  if (own !== undefined) return own;
-  if (groupBudget.budgetMode === "PER_RECIPIENT") return groupBudget.budgetCredits;
-  const sharing = group.recipientIds.filter((id) => budgets[`RECIPIENT:${group.id}:${id}`] === undefined);
-  const left = Math.max(0, groupBudget.budgetCredits - group.recipientIds.reduce((sum, id) => sum + (budgets[`RECIPIENT:${group.id}:${id}`]?.budgetCredits ?? 0), 0));
-  const index = sharing.indexOf(recipientId);
-  return Math.floor(left / sharing.length) + (index < left % sharing.length ? 1 : 0);
-};
-/** The group's total: the pool for a shared budget, otherwise the sum of everyone's amount. */
-const groupTotal = (budgets: Record<string, DefaultBudget>, group: RecipientGroup) => {
-  const own = budgets[`GROUP:${group.id}`];
-  if (own?.budgetMode === "SHARED_POOL") return own.budgetCredits;
-  const sum = group.recipientIds.reduce((total, id) => total + (memberBudget(budgets, group, id) ?? 0), 0);
-  return sum || undefined;
-};
-const credits = (value: number) => value.toLocaleString("en-IN");
 
 /** Recipient groups: open a group to load and see its people, search them, or remove someone. */
 export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
@@ -92,10 +68,10 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const [everyoneLoading, setEveryoneLoading] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [addingTo, setAddingTo] = useState<RecipientGroup | null>(null);
-  const [budgetFor, setBudgetFor] = useState<BudgetTarget | null>(null);
-  const [budgets, setBudgets] = useState<Record<string, DefaultBudget>>({});
-  // Spend budgets are for the client themselves, not for staff.
-  const canBudget = user?.platformRole === "CLIENT";
+  const [sendTarget, setSendTarget] = useState<SendGiftTarget | null>(null);
+  const { tenantId } = useTenantId();
+  // Gifts are sent by the client themselves, not by staff.
+  const canSend = user?.platformRole === "CLIENT" && !!tenantId;
 
 
   // Only the newest load may write, so a slow answer for the previous client never appears here.
@@ -117,29 +93,9 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
     finally { if (loadId === latest.current) setLoading(false); }
   }, [ready]);
   useEffect(() => { void load(); }, [load]);
-  const spendBase = ready ? ready.groups.replace(/\/groups$/, "") : null;
-  const loadBudgets = useCallback(async () => {
-    if (!canBudget || !spendBase) return;
-    try { const rows = await getModuleRecords(`${spendBase}/default-budgets`, {}) as DefaultBudget[]; setBudgets(Object.fromEntries((rows ?? []).map((row) => [row.targetType === "RECIPIENT" ? `RECIPIENT:${row.groupId}:${row.targetId}` : `GROUP:${row.targetId}`, row]))); }
-    catch { /* budgets are optional; the list still works without them */ }
-  }, [canBudget, spendBase]);
-  useEffect(() => { void loadBudgets(); }, [loadBudgets]);
-
-  // In a shared pool, personal budgets have to stay inside the pool and leave at least 1 credit for everyone else.
-  const personalOf = (groupId: string, id: string) => budgets[`RECIPIENT:${groupId}:${id}`]?.budgetCredits;
-  const openPersonBudget = (group: RecipientGroup, id: string, name: string) => {
-    const pool = budgets[`GROUP:${group.id}`];
-    if (pool?.budgetMode !== "SHARED_POOL") { setBudgetFor({ kind: "recipient", id, name, groupId: group.id, suggested: memberBudget(budgets, group, id) }); return; }
-    const others = group.recipientIds.filter((other) => other !== id);
-    const taken = others.reduce((sum, other) => sum + (personalOf(group.id, other) ?? 0), 0);
-    const waiting = others.filter((other) => personalOf(group.id, other) === undefined).length;
-    setBudgetFor({ kind: "recipient", id, name, groupId: group.id, max: pool.budgetCredits - taken - waiting, poolCredits: pool.budgetCredits, suggested: memberBudget(budgets, group, id), taken, waiting });
-  };
-  const openGroupBudget = (group: RecipientGroup) => {
-    const given = group.recipientIds.reduce((sum, id) => sum + (personalOf(group.id, id) ?? 0), 0);
-    const waiting = group.recipientIds.filter((id) => personalOf(group.id, id) === undefined).length;
-    setBudgetFor({ kind: "group", id: group.id, name: group.name, min: given + waiting });
-  };
+  const nameOf = (group: RecipientGroup, id: string) => String(members[group.id]?.rows.find((r) => String(r.id) === id)?.name ?? "Recipient");
+  const sendToGroup = (group: RecipientGroup) => setSendTarget({ title: group.name, wholeGroup: true, people: group.recipientIds.map((id) => ({ id, name: nameOf(group, id) })) });
+  const sendToPerson = (group: RecipientGroup, id: string, name: string) => setSendTarget({ title: name, wholeGroup: false, people: [{ id, name }] });
   useEffect(() => { setGroups([]); setOpen(new Set()); setMembers({}); setMemberSearch({}); setEveryone(null); }, [ready]);
 
   const loadMembers = useCallback(async (group: RecipientGroup) => {
@@ -236,7 +192,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
               return <li key={group.id} className="border-t border-line first:border-t-0">
                 <button type="button" aria-expanded={expanded} onClick={() => toggle(group.id)} className="press flex w-full items-center gap-4 px-4 py-4 text-left hover:bg-slate-50/60 sm:px-6">
                   {expanded ? <ChevronDown className="size-5 shrink-0 text-muted" /> : <ChevronRight className="size-5 shrink-0 text-muted" />}
-                  <span className="min-w-0 flex-1"><span className="block truncate text-base font-semibold text-ink">{group.name}</span><span className="block text-sm text-muted">{people(group.recipientIds.length)}</span></span>{canBudget && groupTotal(budgets, group) === undefined && <span className="hidden shrink-0 rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700 sm:block">Budget not set</span>}{canBudget && groupTotal(budgets, group) !== undefined && <span className="hidden shrink-0 rounded-full bg-brand/10 px-3 py-1 text-sm font-semibold text-brand sm:block">{credits(groupTotal(budgets, group)!)} credits{budgets[`GROUP:${group.id}`]?.budgetMode === "SHARED_POOL" ? " · shared" : ""}</span>}
+                  <span className="min-w-0 flex-1"><span className="block truncate text-base font-semibold text-ink">{group.name}</span><span className="block text-sm text-muted">{people(group.recipientIds.length)}</span></span>
                   <span className="hidden shrink-0 text-sm text-muted sm:block">{updated(group.updatedAt)}</span>
                 </button>
 
@@ -247,7 +203,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
                       <input type="search" value={memberSearch[group.id] ?? ""} onChange={(event) => setMemberSearch((current) => ({ ...current, [group.id]: event.target.value }))} aria-label={`Search recipients in ${group.name}`} placeholder="Search recipients" className="min-h-10 w-full rounded-lg border border-line bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/15" />
                     </div>
                     <div className="flex shrink-0 gap-2">
-                      {canBudget && <Button size="sm" variant="secondary" onClick={() => openGroupBudget(group)}>{budgets[`GROUP:${group.id}`] ? "Edit budget" : "Set budget"}</Button>}
+                      {canSend && <Button size="sm" variant="secondary" onClick={() => sendToGroup(group)}><Gift size={14} /> Send gift</Button>}
                       <Button size="sm" onClick={() => openAdd(group)}><Plus size={14} /> Add recipients</Button>
                       <Button size="sm" variant="secondary" onClick={() => openSheet(group)}>Edit group</Button>
                     </div>
@@ -259,7 +215,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
                         : <div className="overflow-hidden rounded-xl border border-line">
                           <table className={`${table.root} hidden md:table`}>
                             <thead className={table.head}><tr className={table.headRow}>
-                              <th className={table.th}>Recipient</th><th className={table.th}>Mobile</th><th className={table.th}>City</th><th className={table.th}>Birthday</th>{canBudget && <th className={table.th}>Budget</th>}<th className={`${table.th} text-right`}>Actions</th>
+                              <th className={table.th}>Recipient</th><th className={table.th}>Mobile</th><th className={table.th}>City</th><th className={table.th}>Birthday</th><th className={`${table.th} text-right`}>Actions</th>
                             </tr></thead>
                             <tbody>
                               {shown.map(({ id, row }) => <tr key={id} className={table.rowCompact}>
@@ -267,16 +223,15 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
                                 <td className={`${table.td} whitespace-nowrap tabular-nums text-slate-600`}>{prettyMobile(row?.mobileNumber)}</td>
                                 <td className={`${table.td} text-slate-600`}>{cityOf(row)}</td>
                                 <td className={`${table.td} whitespace-nowrap tabular-nums text-slate-600`}>{shortDate(row?.dateOfBirth)}</td>
-                                {canBudget && <td className={`${table.td} whitespace-nowrap font-semibold tabular-nums text-ink`}>{memberBudget(budgets, group, id) !== undefined ? `${credits(memberBudget(budgets, group, id)!)} credits` : <span className="font-normal text-muted">Not set</span>}</td>}
-                                <td className={`${table.td} space-x-2 whitespace-nowrap text-right`}>{canBudget && row && <Button size="sm" variant="secondary" disabled={!budgets[`GROUP:${group.id}`]} title={budgets[`GROUP:${group.id}`] ? undefined : "Set the group budget first"} onClick={() => openPersonBudget(group, id, String(row.name ?? "Recipient"))}>{memberBudget(budgets, group, id) !== undefined ? "Edit budget" : "Set budget"}</Button>}<Button size="sm" variant="secondary" className="text-rose-700" disabled={removing === id || !canRemove} title={canRemove ? undefined : "A group needs at least one recipient"} aria-label={`Remove ${String(row?.name ?? "recipient")} from ${group.name}`} onClick={() => void removeMember(group, id, String(row?.name ?? ""))}>Remove</Button></td>
+                                <td className={`${table.td} space-x-2 whitespace-nowrap text-right`}>{canSend && row && <Button size="sm" variant="secondary" onClick={() => sendToPerson(group, id, String(row.name ?? "Recipient"))}><Gift size={14} /> Send gift</Button>}<Button size="sm" variant="secondary" className="text-rose-700" disabled={removing === id || !canRemove} title={canRemove ? undefined : "A group needs at least one recipient"} aria-label={`Remove ${String(row?.name ?? "recipient")} from ${group.name}`} onClick={() => void removeMember(group, id, String(row?.name ?? ""))}>Remove</Button></td>
                               </tr>)}
                             </tbody>
                           </table>
                           <ul className="divide-y divide-line md:hidden">
                             {shown.map(({ id, row }) => <li key={id} className="space-y-3 p-4">
                               <p className="font-medium capitalize text-ink">{row ? String(row.name ?? "Unnamed") : <span className="text-muted">Removed recipient</span>}</p>
-                              <dl className="grid grid-cols-3 gap-2 text-sm"><div><dt className="text-muted">Mobile</dt><dd className="font-medium text-ink">{prettyMobile(row?.mobileNumber)}</dd></div><div><dt className="text-muted">City</dt><dd className="font-medium text-ink">{cityOf(row)}</dd></div><div><dt className="text-muted">Birthday</dt><dd className="font-medium text-ink">{shortDate(row?.dateOfBirth)}</dd></div>{canBudget && <div className="col-span-3"><dt className="text-muted">Budget</dt><dd className="font-medium text-ink">{memberBudget(budgets, group, id) !== undefined ? `${credits(memberBudget(budgets, group, id)!)} credits` : "Not set"}</dd></div>}</dl>
-                              {canBudget && row && <Button size="sm" variant="secondary" className="w-full" disabled={!budgets[`GROUP:${group.id}`]} onClick={() => openPersonBudget(group, id, String(row.name ?? "Recipient"))}>{memberBudget(budgets, group, id) !== undefined ? "Edit budget" : "Set budget"}</Button>}
+                              <dl className="grid grid-cols-3 gap-2 text-sm"><div><dt className="text-muted">Mobile</dt><dd className="font-medium text-ink">{prettyMobile(row?.mobileNumber)}</dd></div><div><dt className="text-muted">City</dt><dd className="font-medium text-ink">{cityOf(row)}</dd></div><div><dt className="text-muted">Birthday</dt><dd className="font-medium text-ink">{shortDate(row?.dateOfBirth)}</dd></div></dl>
+                              {canSend && row && <Button size="sm" variant="secondary" className="w-full" onClick={() => sendToPerson(group, id, String(row.name ?? "Recipient"))}><Gift size={14} /> Send gift</Button>}
                               <Button size="sm" variant="secondary" className="w-full text-rose-700" disabled={removing === id || !canRemove} onClick={() => void removeMember(group, id, String(row?.name ?? ""))}>Remove</Button>
                             </li>)}
                           </ul>
@@ -285,10 +240,9 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
               </li>;
             })}
           </ul>}
-      {canBudget && !loading && <AvailableCreditsStrip budgeted={groups.reduce((sum, group) => sum + (groupTotal(budgets, group) ?? 0), 0)} />}
     </section>
 
-    {canBudget && ready && <BudgetSheet target={budgetFor} current={budgetFor ? budgets[budgetFor.kind === "group" ? `GROUP:${budgetFor.id}` : `RECIPIENT:${budgetFor.groupId}:${budgetFor.id}`] : undefined} spendBase={spendBase!} onClose={() => setBudgetFor(null)} onSaved={() => { setBudgetFor(null); void loadBudgets(); }} />}
+    {canSend && <SendGiftDialog target={sendTarget} tenantId={tenantId!} onClose={() => setSendTarget(null)} onSent={() => setSendTarget(null)} />}
     <AddRecipientsSheet group={addingTo} recipients={everyone} loading={everyoneLoading || (!!addingTo && !everyone)} onClose={() => setAddingTo(null)} onSubmit={(ids, rows) => addMembers(addingTo!, ids, rows)} />
     <GroupSheet group={groupSheet} endpoint={ready?.groups ?? ""} recipients={everyone ?? []} loadingRecipients={everyoneLoading} onClose={() => setGroupSheet(null)} onSaved={() => { setGroupSheet(null); void load(); }} />
   </>;

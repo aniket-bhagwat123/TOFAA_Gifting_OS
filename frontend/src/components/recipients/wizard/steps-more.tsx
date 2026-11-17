@@ -71,16 +71,16 @@ function OccasionsStep({ items, recipientsEndpoint, onChange }, ref) {
         <select id="occ-type" value={draft.type} onChange={(event) => pick(event.target.value)} className={select}>{OCCASION_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select>
         {errors.type && <p role="alert" className="text-sm text-rose-600">{errors.type}</p>}
       </div>
-      {draft.type === "Custom" && <InputField label="Occasion name" required placeholder="e.g. Promotion" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} error={errors.name} />}
+      {draft.type === "Custom" && <InputField label="Occasion name" required placeholder="Enter occasion name" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} error={errors.name} />}
       <DatePickerField id="occ-date" label="Date" required value={draft.date} onChange={(value) => setDraft({ ...draft, date: value })} error={errors.date} />
       <label className="flex min-h-9 cursor-pointer items-center gap-2.5 self-end text-sm text-ink"><input type="checkbox" checked={draft.repeatAnnually} onChange={(event) => setDraft({ ...draft, repeatAnnually: event.target.checked })} className="h-4 w-4 accent-brand" /> Repeat every year</label>
       {draft.type !== "Birthday" && <div className="sm:col-span-2">
         <p className="text-sm font-medium text-ink">Shared with <span className="font-normal text-muted">(optional)</span></p>
         <p className="mb-2 text-xs text-muted">For an occasion that involves other people, such as a wedding anniversary. It is stored once.</p>
         <div className="flex flex-wrap gap-2">{draft.participants.map((person) => <PersonChip key={person.id} person={person} onRemove={() => setDraft({ ...draft, participants: draft.participants.filter((p) => p.id !== person.id) })} />)}</div>
-        <div className="mt-2 max-w-sm"><PersonPicker endpoint={recipientsEndpoint} label="Add someone who shares this occasion" exclude={draft.participants.map((p) => p.id)} placeholder="Search to add a person…" onPick={(person) => setDraft({ ...draft, participants: [...draft.participants, person] })} /></div>
+        <div className="mt-2 max-w-sm"><PersonPicker endpoint={recipientsEndpoint} label="Add someone who shares this occasion" exclude={draft.participants.map((p) => p.id)} placeholder="Search person" onPick={(person) => setDraft({ ...draft, participants: [...draft.participants, person] })} /></div>
       </div>}
-      <div className="sm:col-span-2"><InputField label="Notes" placeholder="Optional" value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></div>
+      <div className="sm:col-span-2"><InputField label="Notes" placeholder="Enter notes" value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></div>
       <div className="flex gap-2 sm:col-span-2"><Button onClick={save}>{editing ? "Update occasion" : "Add occasion"}</Button><Button variant="secondary" onClick={() => setDraft(null)}>Cancel</Button></div>
     </div> : <Button className="mt-4" variant="secondary" onClick={() => { setErrors({}); setDraft(blankOccasion()); }}><Plus size={16} /> Add occasion</Button>}
   </>;
@@ -106,6 +106,20 @@ function TagInput({ label, values, placeholder, onChange }: { label: string; val
 
 const blankAddress = (first: boolean): AddressItem => ({ key: newKey(), label: "OFFICE", line1: "", line2: "", city: "", postalCode: "", isDefault: first });
 
+/** The gifting preferences. Shown when editing a recipient, not when adding one. */
+export function PreferencesFields({ prefs, onPrefs }: { prefs: PreferencesData; onPrefs: (patch: Partial<PreferencesData>) => void }) {
+  return <>
+    <div className="grid gap-4 sm:grid-cols-2">
+      <TagInput label="Interests and hobbies" values={prefs.interests} placeholder="Enter interests and press Enter" onChange={(interests) => onPrefs({ interests })} />
+      <TagInput label="Preferred brands" values={prefs.brands} placeholder="Enter brands and press Enter" onChange={(brands) => onPrefs({ brands })} />
+      <div className="space-y-1.5"><label htmlFor="gp" className="block text-sm font-medium text-ink">Gift preferences</label><textarea id="gp" value={prefs.giftPreferences} maxLength={2000} onChange={(event) => onPrefs({ giftPreferences: event.target.value })} placeholder="Enter gift preferences" className={area} /></div>
+      <div className="space-y-1.5"><label htmlFor="dp" className="block text-sm font-medium text-ink">Dietary preferences</label><textarea id="dp" value={prefs.dietary} maxLength={1000} onChange={(event) => onPrefs({ dietary: event.target.value })} placeholder="Enter dietary preferences" className={area} /></div>
+      <div className="space-y-1.5"><label htmlFor="ga" className="block text-sm font-medium text-ink">Gifts to avoid</label><textarea id="ga" value={prefs.avoid} maxLength={1000} onChange={(event) => onPrefs({ avoid: event.target.value })} placeholder="Enter gifts to avoid" className={area} /></div>
+      <div className="space-y-1.5"><label htmlFor="si" className="block text-sm font-medium text-ink">Special instructions</label><textarea id="si" value={prefs.instructions} maxLength={2000} onChange={(event) => onPrefs({ instructions: event.target.value })} placeholder="Enter special instructions" className={area} /></div>
+    </div>
+  </>;
+}
+
 export function PreferencesStep({ prefs, addresses, onPrefs, onAddresses }: {
   prefs: PreferencesData; addresses: AddressItem[]; onPrefs: (patch: Partial<PreferencesData>) => void; onAddresses: (items: AddressItem[]) => void;
 }) {
@@ -126,14 +140,7 @@ export function PreferencesStep({ prefs, addresses, onPrefs, onAddresses }: {
   const remove = (key: string) => { const next = addresses.filter((a) => a.key !== key); if (next.length && !next.some((a) => a.isDefault)) next[0] = { ...next[0], isDefault: true }; onAddresses(next); };
 
   return <>
-    <div className="grid gap-4 sm:grid-cols-2">
-      <TagInput label="Interests and hobbies" values={prefs.interests} placeholder="Type and press Enter, e.g. Cricket" onChange={(interests) => onPrefs({ interests })} />
-      <TagInput label="Preferred brands" values={prefs.brands} placeholder="Type and press Enter" onChange={(brands) => onPrefs({ brands })} />
-      <div className="space-y-1.5"><label htmlFor="gp" className="block text-sm font-medium text-ink">Gift preferences</label><textarea id="gp" value={prefs.giftPreferences} maxLength={2000} onChange={(event) => onPrefs({ giftPreferences: event.target.value })} placeholder="e.g. Prefers practical gifts" className={area} /></div>
-      <div className="space-y-1.5"><label htmlFor="dp" className="block text-sm font-medium text-ink">Dietary preferences</label><textarea id="dp" value={prefs.dietary} maxLength={1000} onChange={(event) => onPrefs({ dietary: event.target.value })} placeholder="e.g. Vegetarian, no nuts" className={area} /></div>
-      <div className="space-y-1.5"><label htmlFor="ga" className="block text-sm font-medium text-ink">Gifts to avoid</label><textarea id="ga" value={prefs.avoid} maxLength={1000} onChange={(event) => onPrefs({ avoid: event.target.value })} placeholder="e.g. Alcohol" className={area} /></div>
-      <div className="space-y-1.5"><label htmlFor="si" className="block text-sm font-medium text-ink">Special instructions</label><textarea id="si" value={prefs.instructions} maxLength={2000} onChange={(event) => onPrefs({ instructions: event.target.value })} placeholder="e.g. Deliver to the front desk" className={area} /></div>
-    </div>
+    <PreferencesFields prefs={prefs} onPrefs={onPrefs} />
 
     <h3 className="mb-2 mt-7 text-base font-semibold text-ink">Delivery addresses</h3>
     <div className="space-y-2.5">
@@ -154,10 +161,10 @@ export function PreferencesStep({ prefs, addresses, onPrefs, onAddresses }: {
       <div className="space-y-1.5"><label htmlFor="al" className="block text-sm font-medium text-ink">Address type</label>
         <select id="al" value={draft.label} onChange={(event) => setDraft({ ...draft, label: event.target.value as AddressLabel })} className={select}>{ADDRESS_LABELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}</select></div>
       <label className="flex min-h-9 cursor-pointer items-center gap-2.5 self-end text-sm text-ink"><input type="checkbox" checked={draft.isDefault} onChange={(event) => setDraft({ ...draft, isDefault: event.target.checked })} className="h-4 w-4 accent-brand" /> Default delivery address</label>
-      <div className="sm:col-span-2"><InputField label="Address" required placeholder="House no., street, area" value={draft.line1} onChange={(event) => setDraft({ ...draft, line1: event.target.value })} error={errors.line1} /></div>
-      <div className="sm:col-span-2"><InputField label="Address line 2" placeholder="Landmark (optional)" value={draft.line2} onChange={(event) => setDraft({ ...draft, line2: event.target.value })} /></div>
+      <div className="sm:col-span-2"><InputField label="Address" required placeholder="Enter address" value={draft.line1} onChange={(event) => setDraft({ ...draft, line1: event.target.value })} error={errors.line1} /></div>
+      <div className="sm:col-span-2"><InputField label="Address line 2" placeholder="Enter address line 2" value={draft.line2} onChange={(event) => setDraft({ ...draft, line2: event.target.value })} /></div>
       <InputField label="City" required value={draft.city} onChange={(event) => setDraft({ ...draft, city: event.target.value })} error={errors.city} />
-      <InputField label="PIN code" required inputMode="numeric" maxLength={6} placeholder="6 digits" value={draft.postalCode} onChange={(event) => setDraft({ ...draft, postalCode: event.target.value })} error={errors.postalCode} />
+      <InputField label="PIN code" required inputMode="numeric" maxLength={6} placeholder="Enter PIN code" value={draft.postalCode} onChange={(event) => setDraft({ ...draft, postalCode: event.target.value })} error={errors.postalCode} />
       <div className="flex gap-2 sm:col-span-2"><Button onClick={saveAddress}>{editing ? "Update address" : "Add address"}</Button><Button variant="secondary" onClick={() => setDraft(null)}>Cancel</Button></div>
     </div> : <Button className={cn("mt-3")} variant="secondary" onClick={() => { setErrors({}); setDraft(blankAddress(!addresses.length)); }}><Plus size={16} /> Add address</Button>}
   </>;

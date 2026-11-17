@@ -59,7 +59,9 @@ export default function DashboardPage() {
     }
   }, [dispatch, user, role, selectedTenantId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const summary = useAsync(tenantId ? () => dashboardService.summary(tenantId) : null, `summary|${tenantId}`);
+  // One request for the calendar, the People cards and the action list; the server loads them side by side.
+  const overview = useAsync(tenantId ? () => dashboardService.overview(tenantId, `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`) : null, `overview|${tenantId}`);
+  const summary = { data: overview.data?.summary ?? null, loading: overview.loading };
   // Recent activity: the client's latest requests and change log.
   const recent = useAsync(tenantId ? async () => {
     const base = `/tenants/${tenantId}`;
@@ -105,10 +107,10 @@ export default function DashboardPage() {
 
     {!tenantId ? (!isClient && <p role="status" className="rounded-xl bg-white px-6 py-8 text-center text-sm text-muted ring-1 ring-black/5">Choose a client from the “Viewing” menu at the top to see their dashboard.</p>)
       : <>
-        <OccasionCalendar tenantId={tenantId} />
+        <OccasionCalendar tenantId={tenantId} initial={overview.data?.calendar ?? null} initialLoading={overview.loading} />
         <div className="grid items-start gap-4 lg:grid-cols-3">
-          <ImportantPeopleCard title="Important External People" icon={<Star size={18} className="fill-amber-400" />} people={summary.data?.importantExternal ?? []} loading={summary.loading} empty="Add clients or partners to see their dates here." />
-          <ImportantPeopleCard title="Important Internal People" icon={<Users size={18} className="text-brand" />} people={summary.data?.importantInternal ?? []} loading={summary.loading} empty="Add employees to see their dates here." />
+          <ImportantPeopleCard title="Upcoming External People" icon={<Star size={18} className="fill-amber-400" />} people={summary.data?.importantExternal ?? []} loading={summary.loading} empty="Add clients or partners to track key dates." />
+          <ImportantPeopleCard title="Upcoming Internal People" icon={<Users size={18} className="text-brand" />} people={summary.data?.importantInternal ?? []} loading={summary.loading} empty="Add employees to track their key dates." />
           <ActionRequiredCard items={summary.data?.actionRequired.items ?? []} total={summary.data?.actionRequired.total ?? 0} loading={summary.loading} />
         </div>
         <RecentActivityCard rows={recent.data?.rows ?? []} loading={recent.loading} />

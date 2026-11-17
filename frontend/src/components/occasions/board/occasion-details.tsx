@@ -25,12 +25,13 @@ export function OccasionDetails({ item, tenantId, canPlan, onClose, onAct, onEdi
   const [busy, setBusy] = useState(false);
   // Birthdays and anniversaries read from a person's profile are changed there; a company occasion is editable only if it is the client's own.
   const editPath = item?.eventId ? `/tenants/${tenantId}/events/${item.eventId}` : item?.occasionId && !item.isGlobal ? `/tenants/${tenantId}/occasions/${item.occasionId}` : null;
+  const deletePath = editPath;
   const action = item ? actionFor(item) : null;
 
   const remove = async () => {
-    if (!item || !editPath || !window.confirm(`Delete ${item.sourceType === "COMPANY" ? item.name : `${item.name}'s ${item.label}`}? This can't be undone.`)) return;
+    if (!item || !deletePath || !window.confirm(`Delete ${item.sourceType === "COMPANY" ? item.name : `${item.name}'s ${item.label}`}? This can't be undone.`)) return;
     setBusy(true);
-    try { await mutateModule("delete", editPath); toast.success("Occasion deleted."); onDeleted(); }
+    try { await mutateModule("delete", deletePath); toast.success("Occasion deleted."); onDeleted(); }
     catch (err) { toast.error(getApiErrorMessage(err)); }
     finally { setBusy(false); }
   };
@@ -81,7 +82,7 @@ export function OccasionDetails({ item, tenantId, canPlan, onClose, onAct, onEdi
         {action.kind !== "details" && <Button size="lg" className="w-full" disabled={(action.kind === "plan" || action.kind === "create") && !canPlan} onClick={() => onAct(item, action.kind)}><Gift size={18} /> {action.label}</Button>}
         {canPlan && editPath && <button type="button" onClick={() => onEdit(item)} className="press flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-brand/60 bg-white text-base font-semibold text-brand hover:bg-brand-soft"><Pencil size={17} />Edit Occasion</button>}
         {!item.eventId && item.sourceType === "RECIPIENT" && <p className="flex items-center gap-2 text-xs text-muted"><CalendarDays size={14} aria-hidden />This date comes from the person's profile. Change it there.</p>}
-        {canPlan && editPath && <div className="text-center">
+        {canPlan && deletePath && <div className="text-center">
           <button type="button" aria-expanded={more} onClick={() => setMore(!more)} className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-700 hover:text-ink">More options <ChevronDown size={16} className={cn("transition-transform", more && "rotate-180")} /></button>
           {more && <div className="mt-2"><button type="button" disabled={busy} onClick={remove} className="press inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"><Trash2 size={15} />Delete occasion</button></div>}
         </div>}

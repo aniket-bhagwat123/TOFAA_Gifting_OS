@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Archive, ArchiveRestore, Building2, Check, ChevronLeft, ChevronRight, Download, Filter, Gift, LogIn, Plus, Search, Trash2, Upload, UserPlus, Users, X, CalendarClock, MapPin, Heart } from "lucide-react";
+import { Archive, ArchiveRestore, Building2, Check, ChevronLeft, ChevronRight, Download, Gift, LogIn, Plus, Search, Trash2, Upload, UserPlus, Users, X, CalendarClock, MapPin, Heart } from "lucide-react";
 import { toast } from "sonner";
 import { useAppSelector } from "@/store/hooks";
+import { SendGiftDialog, type SendGiftTarget } from "./send-gift-dialog";
 import { moduleConfig } from "@/features/modules/module-config";
 import { loadAllModuleRecords, rowsOf } from "@/features/modules/module-utils";
 import { getModuleRecords, mutateModule } from "@/features/modules/module.service";
@@ -18,13 +19,17 @@ import { cn } from "@/lib/utils";
 import { RecipientDialog, type RecipientRow, type RecipientTarget } from "./recipient-dialog";
 import { GroupSheet, type RecipientGroup } from "./group-sheet";
 import { RecipientCreatePanel } from "./wizard/recipient-create-panel";
-import { ImportCsvSheet, RECIPIENT_TEMPLATE } from "./import-csv-sheet";
+import { ImportRecipientsSheet } from "./import-recipients-sheet";
+import { FormatMenu } from "@/components/ui/format-menu";
+import { type FileFormat, writeTable } from "@/lib/data-io";
+import { FIELD_HEADERS, recipientToCells } from "@/lib/recipient-fields";
 import { PeopleTabs } from "@/components/modules/people-tabs";
 import { SearchInput } from "@/components/ui/search-input";
 import { RecipientsTable, type SortKey, type SortState } from "./recipients-table";
-import { type DirectoryRow, RELATIONSHIPS, type Summary, UPCOMING_OPTIONS, recipientsToCsv, updatedLabel } from "./recipient-utils";
+import { type DirectoryRow, RELATIONSHIPS, type Summary, UPCOMING_OPTIONS, updatedLabel } from "./recipient-utils";
 
-const PAGE_SIZE = 7;
+const PAGE_SIZES = [10, 20, 30, 40, 50, 100];
+const PAGE_SIZE_KEY = "tofaa-recipients-page-size";
 const card = "rounded-lg border border-line/70 bg-white shadow-soft";
 type Filters = { relationship: string; city: string; groupId: string; upcoming: string; status: "ACTIVE" | "ARCHIVED" | "" };
 const NO_FILTERS: Filters = { relationship: "", city: "", groupId: "", upcoming: "", status: "" };
@@ -52,6 +57,9 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sort, setSort] = useState<SortState>({ key: "name", descending: false });
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  useEffect(() => { try { const saved = Number(window.localStorage.getItem(PAGE_SIZE_KEY)); if (PAGE_SIZES.includes(saved)) setPageSize(saved); } catch { /* the default is fine */ } }, []);
+  const changePageSize = (size: number) => { setPageSize(size); setPage(1); try { window.localStorage.setItem(PAGE_SIZE_KEY, String(size)); } catch { /* ignore */ } };
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [target, setTarget] = useState<RecipientTarget | null>(null);
@@ -86,7 +94,7 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
     setLoading(true); setError(null);
     try {
       const data = await getModuleRecords(ready.recipients, {
-        page, limit: PAGE_SIZE, search: query || undefined, relationship: filters.relationship || undefined, city: filters.city || undefined,
+        page, limit: pageSize, search: query || undefined, relationship: filters.relationship || undefined, city: filters.city || undefined,
         groupId: filters.groupId || undefined, status: filters.status || undefined, upcomingDays: filters.upcoming ? Number(filters.upcoming) : undefined,
         sort: sort.key, order: sort.descending ? "desc" : "asc",
       });
@@ -96,7 +104,7 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
       setTotal(Number(pagination?.totalRecords ?? pagination?.total_records ?? 0));
     } catch (err) { if (loadId === latestLoad.current) setError(getApiErrorMessage(err)); }
     finally { if (loadId === latestLoad.current) setLoading(false); }
-  }, [ready, page, query, filters, sort]);
+  }, [ready, page, pageSize, query, filters, sort]);
   useEffect(() => { void loadPage(); }, [loadPage]);
 
   const loadSide = useCallback(async () => {
@@ -138,14 +146,13 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
     return found;
   };
 
-  const exportCsv = async () => {
+  // Exports in the same columns as the import template, so a file can be exported, edited and imported again.
+  const exportAs = async (format: FileFormat, everyone = false) => {
     setBusy(true);
     try {
-      const csv = recipientsToCsv(await fetchSelected());
-      const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
-      const link = document.createElement("a");
-      link.href = url; link.download = "recipients.csv"; link.click();
-      URL.revokeObjectURL(url);
+      const people = everyone && ready ? (await loadAllModuleRecords(ready.recipients)) as DirectoryRow[] : await fetchSelected();
+      if (!people.length) { toast.error("There are no recipients to export."); return; }
+      writeTable(FIELD_HEADERS, people.map((p) => recipientToCells(p as Record<string, unknown>)), format, "recipients");
     } catch (err) { toast.error(getApiErrorMessage(err)); }
     finally { setBusy(false); }
   };
@@ -186,20 +193,18 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
     refresh();
   };
 
-  const giftFor = (row: DirectoryRow) => router.push(`/requests?new=1&recipientId=${row.id}`);
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const from = total ? (page - 1) * PAGE_SIZE + 1 : 0;
+  const [sendTarget, setSendTarget] = useState<SendGiftTarget | null>(null);
+  const clientTenantId = user?.platformRole === "CLIENT" ? user.tenant?.id ?? null : null;
+  // A client sends the gift from here; staff still open the full request form.
+  const giftFor = (row: DirectoryRow) => clientTenantId
+    ? setSendTarget({ title: String(row.name ?? "Recipient"), wholeGroup: false, people: [{ id: String(row.id), name: String(row.name ?? "Recipient") }] })
+    : router.push(`/requests?new=1&recipientId=${row.id}`);
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const from = total ? (page - 1) * pageSize + 1 : 0;
   const pageNumbers = Array.from({ length: pages }, (_, i) => i + 1).filter((n) => n === 1 || n === pages || Math.abs(n - page) <= 1);
   const archivedView = filters.status === "ARCHIVED";
   const selectedCount = selected.size;
   const pill = "press inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-white px-2.5 text-xs font-medium text-ink hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
-  const downloadTemplate = () => {
-    const url = URL.createObjectURL(new Blob([RECIPIENT_TEMPLATE], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a");
-    link.href = url; link.download = "recipients-template.csv"; link.click();
-    URL.revokeObjectURL(url);
-  };
-
   return <>
     {/* Tabs and quick filters row */}
     <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
@@ -207,8 +212,8 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
       <div className="flex flex-wrap items-center justify-end gap-2">
       <FilterMenu triggerClassName="sm:min-w-0 sm:shrink-0" icon={<Heart size={16} />} label="Relationship" value={filters.relationship} options={[{ value: "", label: "Relationship" }, ...RELATIONSHIPS.filter((r) => !summary || summary.relationships.includes(r.value) || r.value === filters.relationship).map((r) => ({ value: r.value, label: r.label }))]} onChange={(value) => setFilter({ relationship: value })} />
       <FilterMenu triggerClassName="sm:min-w-0 sm:shrink-0" icon={<MapPin size={16} />} label="City" searchable value={filters.city} options={[{ value: "", label: "City" }, ...(summary?.cities ?? []).map((c) => ({ value: c, label: c }))]} onChange={(value) => setFilter({ city: value })} />
-      <FilterMenu triggerClassName="sm:min-w-0 sm:shrink-0" icon={<Users size={16} />} label="Group" searchable width="w-64" value={filters.groupId} options={[{ value: "", label: "Group" }, ...groups.map((g) => ({ value: g.id, label: g.name, hint: `${g.recipientIds.length} people` }))]} onChange={(value) => setFilter({ groupId: value })} />
       <Button variant="secondary" className="shrink-0" onClick={() => setImportOpen(true)} disabled={!ready}><Upload size={16} /> Import</Button>
+      <FormatMenu disabled={!ready || busy} onPick={(format) => void exportAs(format, true)} className="press inline-flex min-h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[7px] border border-line bg-white px-3.5 text-sm font-medium text-ink hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"><Download size={16} /> Export</FormatMenu>
       <Button className="shrink-0 whitespace-nowrap" disabled={!ready} onClick={() => setCreateOpen(true)}><Plus size={16} /> Add Recipient</Button>
       </div>
     </div>
@@ -220,7 +225,7 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
       <section aria-label="Recipients list" className="min-w-0 space-y-3">
         {/* More filters */}
         <div className={cn(card, "flex flex-wrap items-center gap-2 px-3 py-2")}>
-          <span className="inline-flex h-[38px] items-center gap-2 rounded-md border border-line bg-white px-3 text-sm font-medium text-ink"><Filter size={16} className="text-brand" /> Filters{activeCount > 0 && <span className="rounded-full bg-brand px-1.5 text-xs text-white">{activeCount}</span>}</span>
+          <FilterMenu icon={<Users size={16} />} label="Group" searchable width="w-64" value={filters.groupId} options={[{ value: "", label: "Group" }, ...groups.map((g) => ({ value: g.id, label: g.name, hint: `${g.recipientIds.length} people` }))]} onChange={(value) => setFilter({ groupId: value })} />
           <FilterMenu icon={<CalendarClock size={16} />} label="Upcoming occasion" value={filters.upcoming} options={[{ value: "", label: "Upcoming occasion" }, ...UPCOMING_OPTIONS.slice(1)]} onChange={(value) => setFilter({ upcoming: value })} />
           <FilterMenu icon={<Archive size={16} />} label="Status" value={filters.status} options={[{ value: "", label: "All" }, { value: "ACTIVE", label: "Status: Active" }, { value: "ARCHIVED", label: `Status: Archived${summary?.archived ? ` (${summary.archived})` : ""}` }]} onChange={(value) => { setFilter({ status: value as Filters["status"] }); setSelected(new Set()); }} />
       <SearchInput value={search} onChange={setSearch} placeholder="Search by name, mobile or city…" label="Search recipients" className="ml-auto w-full sm:w-72" />
@@ -238,8 +243,8 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
               <div className="scroll-clean max-h-56 overflow-y-auto">{groups.map((group) => <button key={group.id} type="button" className="flex min-h-9 w-full items-center justify-between gap-3 rounded-lg px-3 text-left text-sm text-ink hover:bg-slate-50" onClick={() => void addToGroup(group)}><span className="truncate">{group.name}</span><span className="shrink-0 text-xs text-muted">{group.recipientIds.length}</span></button>)}</div>
             </PopoverContent>
           </Popover>
-          <button type="button" disabled={busy} onClick={() => void exportCsv()} className={pill}><Download size={16} className="text-brand" /> Export CSV</button>
-          <button type="button" disabled={selectedCount !== 1} title={selectedCount === 1 ? undefined : "A gift request is for one person. Tick one recipient."} onClick={() => { const row = rows.find((r) => selected.has(String(r.id))); if (row) giftFor(row); else router.push(`/requests?new=1&recipientId=${[...selected][0]}`); }} className={pill}><Gift size={16} className="text-brand" /> Create Gift Request</button>
+          <FormatMenu align="start" disabled={busy} onPick={(format) => void exportAs(format)} className={pill}><Download size={16} className="text-brand" /> Export</FormatMenu>
+          <button type="button" disabled={selectedCount !== 1} title={selectedCount === 1 ? undefined : "A gift request is for one person. Tick one recipient."} onClick={() => { const row = rows.find((r) => selected.has(String(r.id))); if (row) giftFor(row); else router.push(`/requests?new=1&recipientId=${[...selected][0]}`); }} className={pill}><Gift size={16} className="text-brand" /> Send Gift</button>
           <button type="button" disabled={busy} onClick={async () => void setArchived(await fetchSelected(), !archivedView)} className={pill}>{archivedView ? <ArchiveRestore size={16} className="text-brand" /> : <Archive size={16} className="text-brand" />}{archivedView ? "Restore" : "Archive"}</button>
           <button type="button" aria-label="Delete selected recipients" title="Delete selected" disabled={busy} onClick={async () => setConfirm(await fetchSelected())} className="press flex h-8 w-8 items-center justify-center rounded-lg text-rose-700 hover:bg-rose-50 disabled:opacity-50"><Trash2 size={15} /></button>
           <button type="button" aria-label="Clear selection" onClick={() => setSelected(new Set())} className="press flex h-8 w-8 items-center justify-center rounded-lg text-ink hover:bg-black/5"><X size={16} /></button>
@@ -252,6 +257,12 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
 
         <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-1">
           <p className="text-xs tabular-nums text-muted" aria-live="polite">{loading ? "Loading…" : rows.length ? `Showing ${from} – ${from + rows.length - 1} of ${total} recipient${total === 1 ? "" : "s"}` : "Showing 0 recipients"}</p>
+          <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-muted">Rows per page
+            <select aria-label="Rows per page" value={pageSize} onChange={(event) => changePageSize(Number(event.target.value))} className="h-8 rounded-md border border-line bg-white px-2 text-xs font-medium text-ink outline-none focus:border-brand">
+              {PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+            </select>
+          </label>
           {pages > 1 && <nav aria-label="Pagination" className="flex items-center gap-1.5">
             <button type="button" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage(page - 1)} className={cn(pageButton, "border border-line bg-white disabled:opacity-40")}><ChevronLeft size={16} /></button>
             {pageNumbers.map((n, i) => <span key={n} className="flex items-center gap-1.5">
@@ -260,6 +271,7 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
             </span>)}
             <button type="button" aria-label="Next page" disabled={page >= pages} onClick={() => setPage(page + 1)} className={cn(pageButton, "border border-line bg-white disabled:opacity-40")}><ChevronRight size={16} /></button>
           </nav>}
+          </div>
         </div>
       </section>
 
@@ -271,7 +283,8 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
       onViewProfile={(id) => { getModuleRecords(`${ready?.recipients}/${id}`, {}).then((row) => setTarget(row as RecipientRow)).catch(() => toast.error("We couldn't open that recipient.")); }} />
     <RecipientDialog target={target} endpoint={ready?.recipients ?? ""} onClose={() => setTarget(null)} onPhotoChanged={refresh} onSaved={(addAnother) => { if (!addAnother) setTarget(null); refresh(); }} onDelete={(row) => setConfirm([row as DirectoryRow])} />
     <GroupSheet group={groupSheet} endpoint={ready?.groups ?? ""} recipients={everyone} loadingRecipients={!everyone.length} presetIds={groupPreset} onClose={() => setGroupSheet(null)} onSaved={() => { if (groupSheet === "new" && groupPreset.length) setSelected(new Set()); setGroupSheet(null); refresh(); }} />
-    <ImportCsvSheet open={importOpen} endpoint={ready?.recipients ?? ""} onClose={() => setImportOpen(false)} onDone={refresh} />
+    {clientTenantId && <SendGiftDialog target={sendTarget} tenantId={clientTenantId} onClose={() => setSendTarget(null)} onSent={() => setSendTarget(null)} />}
+    <ImportRecipientsSheet open={importOpen} endpoint={ready?.recipients ?? ""} groupsEndpoint={ready?.groups ?? ""} onClose={() => setImportOpen(false)} onDone={refresh} />
     <Sheet open={!!confirm} locked={deleting} zIndex="z-[90]" labelledBy="confirm-delete-title" className="max-w-[26rem]" onClose={() => setConfirm(null)}>
       <h2 id="confirm-delete-title" className="text-[17px] font-semibold text-ink">Delete {confirm && confirm.length > 1 ? `${confirm.length} recipients` : "this recipient"}?</h2>
       <p className="mt-2 text-sm text-muted">{confirm && confirm.length === 1 ? `${confirm[0].name} will be removed. ` : ""}This can&apos;t be undone.</p>

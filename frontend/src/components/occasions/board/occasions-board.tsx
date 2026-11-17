@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Info, List as ListIcon, MoreVertical, Plus, Search } from "lucide-react";
+import { ArrowRight, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Info, List as ListIcon, MoreVertical, Plus, Search, X } from "lucide-react";
 import { control, iconButton, table } from "@/components/ui/table-styles";
 import { Tab as TabItem, TabBar } from "@/components/ui/tab-bar";
 import { SearchInput } from "@/components/ui/search-input";
 import { Button } from "@/components/ui/button";
 import { HoverScrollX } from "@/components/ui/hover-scroll-x";
 import { Card } from "@/components/ui/card";
-import { DatePickerField } from "@/components/ui/date-picker-field";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,8 @@ import { useOverview } from "./use-overview";
 import { KIND_META, RANGES, SORTS, TABS, actionFor, countdownText, isoOf, type ActionKind, type OverviewItem, type Sort, type Tab } from "./types";
 
 const PAGE_SIZE = 10;
+const isoDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const shortDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 const VIEW_KEY = "tofaa-occasions-view";
 
 const toSendItem = (item: OverviewItem): UpcomingEvent => ({
@@ -41,6 +44,8 @@ export function OccasionsBoard() {
   const [range, setRange] = useState("90");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [customOpen, setCustomOpen] = useState(false);
+  const firstPick = useRef(false); // true once the first date of a range has been clicked
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [text, setText] = useState("");
   const [q, setQ] = useState("");
@@ -105,19 +110,49 @@ export function OccasionsBoard() {
             <select value={`${month.getFullYear()}-${month.getMonth()}`} onChange={(event) => { const [y, m] = event.target.value.split("-").map(Number); setMonth(new Date(y, m, 1)); }} className={cn(controlClass, "appearance-none pl-9 pr-8 font-medium")}>
               {months.map((value) => <option key={`${value.getFullYear()}-${value.getMonth()}`} value={`${value.getFullYear()}-${value.getMonth()}`}>{value.toLocaleDateString("en-GB", { month: "short", year: "numeric" })}</option>)}
             </select>{chevron}</label>
-          : <label className="relative"><span className="sr-only">Date range</span>{selectIcon}
-            <select value={range} onChange={(event) => { setRange(event.target.value); setPage(1); }} className={cn(controlClass, "appearance-none pl-9 pr-8 font-medium")}>
+          : range === "custom"
+            ? <div className="relative">
+              <Popover open={customOpen} onOpenChange={(open) => { setCustomOpen(open); firstPick.current = false; }}>
+                <PopoverTrigger asChild>
+                  <button type="button" aria-label="Custom date range" className={cn(controlClass, "flex items-center gap-2 pl-3 pr-[4.5rem] font-medium")}>
+                    <CalendarDays size={16} className="shrink-0 text-brand" aria-hidden />
+                    <span className="whitespace-nowrap">{from && to ? `${shortDate(from)} – ${shortDate(to)}` : from ? `${shortDate(from)} – …` : "Custom"}</span>
+                    <ChevronDown size={15} className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 text-muted" aria-hidden />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end">
+                  <Calendar
+                    mode="range"
+                    numberOfMonths={1}
+                    selected={{ from: from ? new Date(`${from}T00:00:00`) : undefined, to: to ? new Date(`${to}T00:00:00`) : undefined }}
+                    defaultMonth={from ? new Date(`${from}T00:00:00`) : undefined}
+                    onSelect={(_range, clicked) => {
+                      const picked = isoDate(clicked);
+                      setPage(1);
+                      if (!firstPick.current) { firstPick.current = true; setFrom(picked); setTo(""); return; }
+                      firstPick.current = false;
+                      if (picked < from) { setTo(from); setFrom(picked); } else setTo(picked);
+                      setCustomOpen(false);
+                    }}
+                    captionLayout="dropdown"
+                    startMonth={new Date(new Date().getFullYear() - 5, 0)}
+                    endMonth={new Date(new Date().getFullYear() + 10, 11)}
+                    classNames={{ range_middle: "!bg-brand-soft [&>button]:!bg-transparent [&>button]:!text-ink", range_start: "rounded-l-lg bg-brand-soft", range_end: "rounded-r-lg bg-brand-soft" }}
+                    autoFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <button type="button" aria-label="Clear custom range" title="Clear" onClick={() => { setRange("90"); setFrom(""); setTo(""); setCustomOpen(false); setPage(1); }} className="absolute inset-y-0 right-1.5 my-auto flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-ink"><X size={15} /></button>
+            </div>
+            : <label className="relative"><span className="sr-only">Date range</span>{selectIcon}
+            <select value={range} onChange={(event) => { setRange(event.target.value); setPage(1); if (event.target.value === "custom") setCustomOpen(true); }} className={cn(controlClass, "appearance-none pl-9 pr-8 font-medium")}>
               {RANGES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>{chevron}</label>}
         {canPlan && <Button size="lg" onClick={() => setForm({ item: null })}><Plus size={16} /> Add Occasion</Button>}
       </div>
     </div>
 
-    {view === "list" && range === "custom" && <div className="flex flex-wrap items-start gap-3">
-      <DatePickerField compact id="occ-from" label="From date" value={from} onChange={(value) => { setFrom(value); setPage(1); }} placeholder="From date" />
-      <DatePickerField compact id="occ-to" label="To date" value={to} onChange={(value) => { setTo(value); setPage(1); }} minDate={from ? new Date(`${from}T00:00:00`) : undefined} placeholder="To date" />
-      {!customReady && <p className="self-center text-sm text-muted">Pick both dates to see occasions.</p>}
-    </div>}
+    {view === "list" && range === "custom" && !customReady && !customOpen && <p className="text-sm text-muted">Pick a start and end date to see occasions.</p>}
     {view === "calendar" && <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4 text-sm text-slate-700"><span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-500" />Recipient</span><span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-violet-400" />Company Event</span></div>
         <div className="flex items-center gap-3 text-sm font-semibold text-ink">

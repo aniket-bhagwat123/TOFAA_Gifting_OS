@@ -1,8 +1,8 @@
 /** What the Add Recipient wizard collects, how it is checked, and how a half-finished draft is kept. */
 
-export type RecipientType = "INDIVIDUAL" | "BUSINESS";
+export type RecipientType = "EXTERNAL" | "INTERNAL";
 export type LinkType = "SPOUSE" | "SON" | "DAUGHTER" | "PARENT" | "SIBLING" | "BUSINESS_ASSOCIATE" | "COLLEAGUE" | "OTHER";
-export type AddressLabel = "OFFICE" | "RESIDENTIAL" | "OTHER";
+export type AddressLabel = "PERMANENT" | "CURRENT" | "OFFICE" | "RESIDENTIAL" | "OTHER";
 export type PersonRef = { id: string; name: string };
 
 export interface DetailsData {
@@ -24,15 +24,18 @@ export interface WizardData {
   details: DetailsData; relationship: RelationshipData; occasions: OccasionItem[]; preferences: PreferencesData; addresses: AddressItem[];
   /** The user has seen the possible matches and says this is a different person. */
   allowDuplicate: boolean;
+  /** The current address is the same as the permanent one, so only the permanent one is kept. */
+  sameAddress: boolean;
 }
 
 export const EMPTY: WizardData = {
-  details: { name: "", mobile: "", email: "", city: "", company: "", designation: "", recipientType: "INDIVIDUAL" },
+  details: { name: "", mobile: "", email: "", city: "", company: "", designation: "", recipientType: "INTERNAL" },
   relationship: { relationship: "", isPrimary: false, groupIds: [], newGroupName: "", links: [] },
   occasions: [],
   preferences: { interests: [], brands: [], giftPreferences: "", dietary: "", avoid: "", instructions: "" },
   addresses: [],
   allowDuplicate: false,
+  sameAddress: false,
 };
 
 export const STEPS = [
@@ -48,7 +51,7 @@ export const LINK_TYPES: Array<{ value: LinkType; label: string }> = [
   { value: "SIBLING", label: "Sibling" }, { value: "BUSINESS_ASSOCIATE", label: "Business associate" }, { value: "COLLEAGUE", label: "Colleague" }, { value: "OTHER", label: "Other" },
 ];
 export const OCCASION_TYPES = ["Birthday", "Anniversary", "Work anniversary", "Custom"] as const;
-export const ADDRESS_LABELS: Array<{ value: AddressLabel; label: string }> = [{ value: "OFFICE", label: "Office" }, { value: "RESIDENTIAL", label: "Residential" }, { value: "OTHER", label: "Other" }];
+export const ADDRESS_LABELS: Array<{ value: AddressLabel; label: string }> = [{ value: "PERMANENT", label: "Permanent address" }, { value: "CURRENT", label: "Current address" }, { value: "OFFICE", label: "Office address" }, { value: "RESIDENTIAL", label: "Permanent address" }, { value: "OTHER", label: "Current address" }];
 
 let counter = 0;
 export const newKey = () => `k${Date.now().toString(36)}${(counter++).toString(36)}`;
@@ -68,7 +71,8 @@ export function validateDetails(data: DetailsData): Errors {
   const errors: Errors = {};
   if (!data.name.trim()) errors.name = "Please enter the full name.";
   else if (data.name.trim().length > 200) errors.name = "That name is too long.";
-  if (data.mobile.trim() && !MOBILE_OK.test(normaliseMobile(data.mobile))) errors.mobile = "Enter a mobile number like 98765 43210.";
+  if (!data.mobile.trim()) errors.mobile = "Please enter the mobile number.";
+  else if (!MOBILE_OK.test(normaliseMobile(data.mobile))) errors.mobile = "Enter a mobile number like 98765 43210.";
   if (data.email.trim() && !EMAIL_OK.test(data.email.trim())) errors.email = "Enter an email like name@company.com.";
   if (data.designation.length > 120) errors.designation = "Keep this under 120 characters.";
   return errors;
@@ -83,6 +87,8 @@ export function validateOccasion(item: OccasionItem, existing: OccasionItem[]): 
   if (item.date && existing.some((o) => o.key !== item.key && o.date === item.date && occasionLabel(o).toLowerCase() === label)) errors.date = "This occasion is already added.";
   return errors;
 }
+/** A birthday in the past is stored as the person's date of birth. A future one (an upcoming birthday) is stored as a yearly Birthday occasion instead. */
+export const isDateOfBirth = (item: Pick<OccasionItem, "type" | "date">) => item.type === "Birthday" && item.date <= new Date().toISOString().slice(0, 10);
 export const occasionLabel = (item: Pick<OccasionItem, "type" | "name">) => (item.type === "Custom" ? item.name.trim() || "Custom occasion" : item.type);
 
 export function validateAddress(item: AddressItem): Errors {

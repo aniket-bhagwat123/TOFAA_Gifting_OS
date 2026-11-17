@@ -86,7 +86,7 @@ export function GroupSheet({ group, endpoint, recipients, presetIds, loadingReci
               <input
                 id="group-name" value={name} autoFocus
                 onChange={(e) => { setName(e.target.value); setErrors((c) => ({ ...c, name: undefined })); }}
-                placeholder="e.g. Key clients"
+                placeholder="Enter group name"
                 className={`min-h-[38px] w-full rounded-md border bg-white px-4 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25 ${errors.name ? "border-rose-400" : "border-line"}`}
               />
               {errors.name && <p role="alert" className="text-sm text-rose-600">{errors.name}</p>}

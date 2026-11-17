@@ -1,7 +1,7 @@
 import { getModuleRecords, mutateModule } from "@/features/modules/module.service";
 import { sendImage } from "@/components/ui/image-upload";
 import { getApiErrorMessage } from "@/services/api-client";
-import { type WizardData, normaliseMobile, occasionLabel } from "./wizard-types";
+import { type WizardData, isDateOfBirth, normaliseMobile, occasionLabel } from "./wizard-types";
 import type { DirectoryRow } from "../recipient-utils";
 import type { RecipientGroup } from "../group-sheet";
 
@@ -32,7 +32,7 @@ export async function findDuplicates(recipientsEndpoint: string, data: WizardDat
  */
 export async function saveWizard(data: WizardData, endpoints: SaveEndpoints, photo: File | null, groups: RecipientGroup[]): Promise<SaveResult> {
   const d = data.details;
-  const birthday = data.occasions.find((o) => o.type === "Birthday");
+  const birthday = data.occasions.find(isDateOfBirth);
   // A plain anniversary lives on the recipient; one shared with other people becomes its own occasion with participants.
   const anniversary = data.occasions.find((o) => o.type === "Anniversary" && !o.participants.length);
   const home = data.addresses.find((a) => a.isDefault) ?? data.addresses[0];

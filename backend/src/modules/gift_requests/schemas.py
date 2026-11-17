@@ -183,6 +183,13 @@ class SendGiftsRequest(BaseModel):
     group_ids: list[UUID] = Field(default_factory=list, max_length=50)
     budget_per_recipient: Decimal = Field(gt=0, le=10_000_000, max_digits=12, decimal_places=2)
     note: str | None = Field(default=None, max_length=2000)
+    # Optional delivery details for every gift sent. Without them the occasion date and each person's saved address are used.
+    delivery_date: date | None = None
+    delivery_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    delivery_address: str | None = Field(default=None, max_length=600)
+    # An optional person of contact for the delivery.
+    poc_name: str | None = Field(default=None, min_length=1, max_length=120)
+    poc_mobile: str | None = Field(default=None, pattern=r"^\+?[1-9][0-9]{7,14}$")
 
 
 class SendEventGiftRequest(BaseModel):
@@ -192,6 +199,13 @@ class SendEventGiftRequest(BaseModel):
 
     budget_per_recipient: Decimal = Field(gt=0, le=10_000_000, max_digits=12, decimal_places=2)
     note: str | None = Field(default=None, max_length=2000)
+    # Optional delivery details for every gift sent. Without them the occasion date and each person's saved address are used.
+    delivery_date: date | None = None
+    delivery_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    delivery_address: str | None = Field(default=None, max_length=600)
+    # An optional person of contact for the delivery.
+    poc_name: str | None = Field(default=None, min_length=1, max_length=120)
+    poc_mobile: str | None = Field(default=None, pattern=r"^\+?[1-9][0-9]{7,14}$")
 
 
 class SendGiftsResult(BaseModel):

@@ -66,7 +66,7 @@ export function DetailsStepPage({ data, errors, photoUrl, cities, onChange, onPh
   const { code, number } = splitMobile(data.mobile);
   const setMobile = (nextCode: string, nextNumber: string) => onChange({ mobile: nextNumber.trim() ? `${nextCode}${nextNumber.replace(/[^\d\s-]/g, "")}` : "" });
   const cityList = [...new Set([...cities, ...BASE_CITIES])];
-  const types: Array<{ value: RecipientType; label: string; Icon: typeof User }> = [{ value: "INDIVIDUAL", label: "Individual", Icon: User }, { value: "BUSINESS", label: "Business Contact", Icon: Building2 }];
+  const types: Array<{ value: RecipientType; label: string; Icon: typeof User }> = [{ value: "EXTERNAL", label: "External", Icon: Building2 }, { value: "INTERNAL", label: "Internal", Icon: User }];
   const reason = (reasonCode: string) => ({ SAME_MOBILE: "Same mobile number", SAME_EMAIL: "Same email", SAME_NAME: "Same name" }[reasonCode] ?? reasonCode);
 
   return <div className="grid gap-8 lg:grid-cols-[10rem_minmax(0,1fr)]">
@@ -74,7 +74,7 @@ export function DetailsStepPage({ data, errors, photoUrl, cities, onChange, onPh
     <div className="space-y-6">
       <div className="grid gap-x-5 gap-y-6 sm:grid-cols-2 xl:grid-cols-3">
         <Field label="Full Name" htmlFor="wz-name" required error={errors.name}>
-          <IconInput id="wz-name" icon={<User size={18} />} placeholder="e.g. Sachin Tendulkar" autoComplete="off" value={data.name} onChange={(event) => onChange({ name: event.target.value })} aria-invalid={!!errors.name}
+          <IconInput id="wz-name" icon={<User size={18} />} placeholder="Enter full name" autoComplete="off" value={data.name} onChange={(event) => onChange({ name: event.target.value })} aria-invalid={!!errors.name}
             trailing={data.name.trim().length >= 2 && !errors.name ? <CheckCircle2 size={20} className="text-emerald-500" aria-label="Looks good" /> : undefined} />
         </Field>
         <Field label="Mobile Number" htmlFor="wz-mobile" error={errors.mobile}>
@@ -85,21 +85,21 @@ export function DetailsStepPage({ data, errors, photoUrl, cities, onChange, onPh
               </select>
               <ChevronDown size={15} aria-hidden className="pointer-events-none absolute right-3 text-slate-500" />
             </div>
-            <input id="wz-mobile" type="tel" inputMode="tel" placeholder="98765 43210" value={number} onChange={(event) => setMobile(code, event.target.value)} className="h-full min-w-0 flex-1 bg-transparent px-4 text-[0.9375rem] text-ink outline-none placeholder:text-slate-400" style={{ border: 0, boxShadow: "none", borderRadius: 0 }} />
+            <input id="wz-mobile" type="tel" inputMode="tel" placeholder="Enter mobile number" value={number} onChange={(event) => setMobile(code, event.target.value)} className="h-full min-w-0 flex-1 bg-transparent px-4 text-[0.9375rem] text-ink outline-none placeholder:text-slate-400" style={{ border: 0, boxShadow: "none", borderRadius: 0 }} />
           </div>
         </Field>
         <Field label="Email Address" htmlFor="wz-email" error={errors.email}>
-          <input id="wz-email" type="email" placeholder="name@company.com" autoComplete="off" value={data.email} onChange={(event) => onChange({ email: event.target.value })} className={cn(field, errors.email && "border-rose-400")} />
+          <input id="wz-email" type="email" placeholder="Enter email address" autoComplete="off" value={data.email} onChange={(event) => onChange({ email: event.target.value })} className={cn(field, errors.email && "border-rose-400")} />
         </Field>
         <Field label="City" htmlFor="wz-city">
-          <IconInput id="wz-city" icon={<MapPin size={18} />} trailing={<ChevronDown size={15} className="pointer-events-none text-slate-500" />} list="wz-cities" placeholder="e.g. Mumbai" autoComplete="off" value={data.city} onChange={(event) => onChange({ city: event.target.value })} />
+          <IconInput id="wz-city" icon={<MapPin size={18} />} trailing={<ChevronDown size={15} className="pointer-events-none text-slate-500" />} list="wz-cities" placeholder="Enter city" autoComplete="off" value={data.city} onChange={(event) => onChange({ city: event.target.value })} />
           <datalist id="wz-cities">{cityList.map((city) => <option key={city} value={city} />)}</datalist>
         </Field>
         <Field label="Company / Organisation" htmlFor="wz-company">
-          <IconInput id="wz-company" icon={<Building2 size={18} />} placeholder="e.g. BCCI" autoComplete="off" value={data.company} onChange={(event) => onChange({ company: event.target.value })} />
+          <IconInput id="wz-company" icon={<Building2 size={18} />} placeholder="Enter company / organisation" autoComplete="off" value={data.company} onChange={(event) => onChange({ company: event.target.value })} />
         </Field>
         <Field label="Designation" htmlFor="wz-designation" error={errors.designation}>
-          <IconInput id="wz-designation" icon={<Briefcase size={18} />} placeholder="e.g. VP Marketing" autoComplete="off" value={data.designation} onChange={(event) => onChange({ designation: event.target.value })} />
+          <IconInput id="wz-designation" icon={<Briefcase size={18} />} placeholder="Enter designation" autoComplete="off" value={data.designation} onChange={(event) => onChange({ designation: event.target.value })} />
         </Field>
       </div>
 

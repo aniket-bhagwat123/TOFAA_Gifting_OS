@@ -143,16 +143,10 @@ export function RecipientWizardPage() {
   if (endpoints && "error" in endpoints) return <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{endpoints.error} <Link href="/recipients" className="font-semibold underline">Back to Recipients</Link></p>;
 
   if (result) {
-    const percent = (result.profile?.completeness as { percent?: number } | null | undefined)?.percent;
     return <div ref={top} className="wizard-surface mx-auto max-w-2xl rounded-lg border border-line/70 bg-white p-6 text-center shadow-soft">
       <span aria-hidden className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand"><CheckCircle2 size={26} /></span>
       <h2 className="mt-4 text-xl font-semibold text-ink">Recipient added</h2>
       <p className="mt-1 text-sm text-muted"><span className="font-semibold capitalize text-ink">{result.name}</span> is saved and shared with your TOFAA team.</p>
-      {percent !== undefined && <div className="mx-auto mt-6 max-w-sm text-left">
-        <div className="flex justify-between text-sm"><span className="font-medium text-ink">Profile completeness</span><span className="font-semibold tabular-nums text-ink">{percent}%</span></div>
-        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand" style={{ width: `${percent}%` }} /></div>
-        <p className="mt-2 text-xs text-muted">Add the missing details from the recipient&apos;s profile to raise it.</p>
-      </div>}
       {result.warnings.length > 0 && <div role="alert" className="mx-auto mt-6 max-w-md rounded-xl border border-amber-200 bg-amber-50 p-4 text-left text-sm text-amber-900">
         <p className="font-semibold">Some details could not be saved</p>
         <ul className="mt-1 list-disc pl-5">{result.warnings.map((warning) => <li key={warning.section}>{warning.section}: {warning.message}</li>)}</ul>

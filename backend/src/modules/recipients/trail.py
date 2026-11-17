@@ -22,7 +22,7 @@ SOURCE_HEADER = "X-Change-Source"
 # Columns whose changes are written to the trail (never the avatar link, version counter or timestamps).
 TRACKED = (
     "name", "mobile_number", "email", "company", "city", "designation", "recipient_type", "relationship", "date_of_birth",
-    "anniversary_date", "address", "budget", "remark", "status", "is_primary",
+    "anniversary_date", "address", "budget", "remark", "status", "is_primary", "gifting_occasion", "birthday_budget", "anniversary_budget",
 )
 
 

@@ -12,7 +12,7 @@ from src.core.schema import to_camel
 
 Relationship = Literal["CLIENT", "EMPLOYEE", "PARTNER", "ADVISOR", "VENDOR", "FAMILY", "SPOUSE", "CHILD", "PARENT", "SIBLING", "FRIEND", "OTHER"]
 RecipientStatus = Literal["ACTIVE", "ARCHIVED"]
-RecipientType = Literal["INDIVIDUAL", "BUSINESS"]
+RecipientType = Literal["EXTERNAL", "INTERNAL", "INDIVIDUAL", "BUSINESS"]  # the last two are the old names
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
 
@@ -48,7 +48,7 @@ class RecipientCreate(BaseModel):
     email: str | None = Field(default=None, max_length=254, pattern=EMAIL_PATTERN)
     company: str | None = Field(default=None, max_length=200)
     city: str | None = Field(default=None, max_length=100)
-    recipient_type: RecipientType = "INDIVIDUAL"
+    recipient_type: RecipientType = "INTERNAL"
     # Skip the "this person may already exist" check after the user has seen the possible matches.
     allow_duplicate: bool = False
     # Set later, when the recipient is edited.
@@ -63,6 +63,10 @@ class RecipientCreate(BaseModel):
     relationship: Relationship | None = None
     designation: str | None = Field(default=None, max_length=120)
     is_primary: bool = False
+    # From the import sheet: the occasion this person is gifted for, and a budget for their birthday and their anniversary.
+    gifting_occasion: str | None = Field(default=None, min_length=1, max_length=200)
+    birthday_budget: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    anniversary_budget: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
 
     @field_validator("date_of_birth")
     @classmethod
@@ -91,6 +95,9 @@ class RecipientUpdate(BaseModel):
     designation: str | None = Field(default=None, max_length=120)
     status: RecipientStatus | None = None
     is_primary: bool | None = None
+    gifting_occasion: str | None = Field(default=None, min_length=1, max_length=200)
+    birthday_budget: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    anniversary_budget: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     email: str | None = Field(default=None, max_length=254, pattern=EMAIL_PATTERN)
     company: str | None = Field(default=None, max_length=200)
     city: str | None = Field(default=None, max_length=100)
@@ -156,7 +163,10 @@ class RecipientRead(BaseModel):
     email: str | None = None
     company: str | None = None
     city: str | None = None
-    recipient_type: str = "INDIVIDUAL"
+    recipient_type: str = "INTERNAL"
+    gifting_occasion: str | None = None
+    birthday_budget: Decimal | None = None
+    anniversary_budget: Decimal | None = None
     version: int = 1
     next_occasion: NextOccasion | None = None
     completeness: dict | None = None

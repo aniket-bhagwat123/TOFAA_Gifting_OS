@@ -7,7 +7,7 @@ import { useAsync } from "./use-async";
 
 const ROTATE_MS = 8000;
 
-/** The dashboard banner strip. Each slide is a 1000 × 90 picture a super admin uploaded. */
+/** The dashboard banner strip. Each slide is a picture with the 1000 × 90 shape a super admin uploaded. */
 export function InsightBanner() {
   const { data } = useAsync(() => dashboardService.banners(), "banners");
   const [index, setIndex] = useState(0);
@@ -24,7 +24,7 @@ export function InsightBanner() {
   const arrow = "absolute top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 text-ink shadow hover:bg-white";
 
   return <section aria-label="Announcements" aria-roledescription="carousel" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
-    className="relative overflow-hidden rounded-xl border border-line/70 bg-white">
+    className="relative overflow-hidden rounded-xl">
     <img key={banner.id} src={banner.imageUrl} alt="" width={1000} height={90} className="block h-auto w-full" />
     {count > 1 && <>
       <button type="button" aria-label="Previous banner" onClick={() => go(-1)} className={`${arrow} left-2`}><ChevronLeft size={16} /></button>

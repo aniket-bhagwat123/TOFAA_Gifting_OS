@@ -97,7 +97,7 @@ export function OccasionSend({ occasionId }: { occasionId: string }) {
 
   return <div className="w-full space-y-6">
     <div>
-      <Link href="/occasions" className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-ink"><ChevronLeft size={16} /> Occasions</Link>
+      <Link href="/occasions" className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-ink"><ChevronLeft size={16} /> Gift Calendar</Link>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         <h2 className="text-3xl font-bold capitalize text-ink">{occasion.occasionName}</h2>
         {daysAway !== null && daysAway >= 0 && <span className={`rounded-full px-3 py-1 text-sm font-semibold ${daysAway <= 7 ? "bg-amber-50 text-amber-800" : "bg-slate-100 text-slate-700"}`}>{countdown(daysAway)}</span>}

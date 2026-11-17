@@ -19,6 +19,16 @@ def test_category_follows_relationship_and_company_occasions():
     assert category_of(Item("RECIPIENT"), "FRIEND") == "OTHER" and category_of(Item("RECIPIENT"), None) == "OTHER"
 
 
+def test_the_external_internal_type_decides_when_there_is_no_relationship():
+    person = Item("RECIPIENT")
+    assert category_of(person, {"relationship": None, "recipient_type": "EXTERNAL"}) == "EXTERNAL"
+    assert category_of(person, {"relationship": None, "recipient_type": "INTERNAL"}) == "INTERNAL"
+    assert category_of(person, {"recipient_type": "BUSINESS"}) == "EXTERNAL" and category_of(person, {"recipient_type": "INDIVIDUAL"}) == "INTERNAL"
+    # an older recipient's relationship still wins
+    assert category_of(person, {"relationship": "CLIENT", "recipient_type": "INTERNAL"}) == "EXTERNAL"
+    assert category_of(person, {"relationship": "FRIEND", "recipient_type": "INTERNAL"}) == "INTERNAL"
+
+
 def test_month_range_handles_leap_february_and_rejects_bad_input():
     assert month_range("2028-02") == (date(2028, 2, 1), date(2028, 2, 29))
     assert month_range("2026-11") == (date(2026, 11, 1), date(2026, 11, 30))

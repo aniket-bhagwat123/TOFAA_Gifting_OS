@@ -64,3 +64,15 @@ class DashboardSummary(_Camel):
     important_external: list[PersonCard] = Field(default_factory=list)
     important_internal: list[PersonCard] = Field(default_factory=list)
     action_required: ActionRequired
+
+
+class UpcomingPeople(_Camel):
+    external: list[PersonCard] = Field(default_factory=list)
+    internal: list[PersonCard] = Field(default_factory=list)
+
+
+class DashboardOverview(_Camel):
+    """The home page in one response."""
+
+    calendar: CalendarResponse
+    summary: DashboardSummary

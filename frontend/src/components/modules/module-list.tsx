@@ -37,15 +37,17 @@ type ModuleDialog =
   | { kind: "confirm"; title: string; message: string; confirmLabel: string; destructive: boolean; icon: "status" | "delete"; onConfirm: () => Promise<void> }
   | { kind: "action"; action: ModuleAction; values: Record<string, string>; errors: Record<string, string> };
 
-/** Banner pictures must be exactly this size; the API checks it too. */
-const BANNER_W = 1000, BANNER_H = 90;
+/** Banner pictures can be any size with this shape (1000 : 90), at least 500 pixels wide; the API checks it too. */
+const BANNER_W = 1000, BANNER_H = 90, BANNER_MIN_W = 500;
 async function bannerImageError(file: File): Promise<string | null> {
   if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) return "Choose a PNG, JPG or WebP image.";
   if (file.size > 5 * 1024 * 1024) return "That image is over 5 MB. Choose a smaller one.";
   const url = URL.createObjectURL(file);
   try {
     const size = await new Promise<{ w: number; h: number }>((resolve, reject) => { const img = new Image(); img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight }); img.onerror = reject; img.src = url; });
-    return size.w === BANNER_W && size.h === BANNER_H ? null : `The image is ${size.w} × ${size.h} pixels. It must be exactly ${BANNER_W} × ${BANNER_H}.`;
+    const wanted = BANNER_W / BANNER_H;
+    if (Math.abs(size.w / size.h - wanted) / wanted > 0.02) return `The image is ${size.w} × ${size.h} pixels. It must have the same shape as ${BANNER_W} × ${BANNER_H}, for example ${BANNER_W * 2} × ${BANNER_H * 2}.`;
+    return size.w >= BANNER_MIN_W ? null : `The image is too small. Use one at least ${BANNER_MIN_W} pixels wide.`;
   } catch { return "That file is not a valid image."; }
   finally { URL.revokeObjectURL(url); }
 }

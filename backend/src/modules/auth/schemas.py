@@ -89,6 +89,7 @@ class UserProfileResponse(BaseModel):
     must_reset_password: bool = Field(default=False, description="Whether the user must replace their temporary password")
     client_role: str | None = Field(default=None, description="Business role within a client org (OWNER/EA/HR); null for platform staff")
     tenant_name: str | None = Field(default=None, description="Display name of the user's tenant organisation")
+    tenant_type: str | None = Field(default=None, description="ORGANIZATION or INDIVIDUAL. Credits apply to individual clients only.")
     created_at: datetime | str | None = Field(default=None, description="Timestamp user was created")
     updated_at: datetime | str | None = Field(default=None, description="Timestamp profile was last updated")
 

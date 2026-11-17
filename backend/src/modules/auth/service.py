@@ -296,6 +296,7 @@ class AuthService:
                     # information; their access comes from their role and assignments.
                     tenant_id=tenant_id,
                     tenant_name=tenant_name,
+                    tenant_type=self._active_tenant_type_from(record.get("tenant_memberships")),
                     created_at=record.get("created_at"),
                     updated_at=record.get("updated_at"),
                 ), True
@@ -317,7 +318,7 @@ class AuthService:
         try:
             response = (
                 self.admin_client.table("profiles")
-                .select("*,tenant_memberships(tenant_id,status,tenants(status,name))")
+                .select("*,tenant_memberships(tenant_id,status,tenants(status,name,tenant_type))")
                 .eq("id", user_id)
                 .limit(1)
                 .execute()
@@ -332,6 +333,17 @@ class AuthService:
         """The tenant of an ACTIVE membership whose tenant is ACTIVE too."""
         tenant_id, _ = AuthService._active_tenant_info_from(memberships)
         return tenant_id
+
+    @staticmethod
+    def _active_tenant_type_from(memberships: object) -> str | None:
+        """ORGANIZATION, INDIVIDUAL or INTERNAL for the same tenant `_active_tenant_info_from` picks."""
+        if isinstance(memberships, dict):
+            memberships = [memberships]
+        for membership in memberships or []:
+            tenant = membership.get("tenants")
+            if membership.get("status") == "ACTIVE" and isinstance(tenant, dict) and tenant.get("status") == "ACTIVE":
+                return tenant.get("tenant_type")
+        return None
 
     @staticmethod
     def _active_tenant_info_from(memberships: object) -> tuple[str | None, str | None]:

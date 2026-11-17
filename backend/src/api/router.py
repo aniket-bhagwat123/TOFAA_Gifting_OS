@@ -5,6 +5,7 @@ from src.modules.auth.schemas import UserProfileResponse
 from src.modules.auth.rbac import Role
 from src.modules.auth.router import router as auth_router
 from src.modules.banners.router import router as banners_router
+from src.modules.gift_ideas.router import router as gift_ideas_router
 from src.modules.credits.router import router as credits_router
 from src.modules.dashboard.router import router as dashboard_router
 from src.modules.contract_workspace.router import router as contract_workspace_router
@@ -27,6 +28,7 @@ api_router.include_router(invitation_router)
 api_router.include_router(tenants_router)
 # Banners are platform-wide (not tied to a client), so they sit outside the tenant guard.
 api_router.include_router(banners_router)
+api_router.include_router(gift_ideas_router)
 
 # Everything else validates the tenant ID on every request.
 tenant_scoped = [Depends(enforce_tenant_scope)]

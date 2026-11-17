@@ -56,10 +56,10 @@ def test_only_the_name_is_needed_to_start_and_extras_never_lower_the_score():
     assert full["percent"] == 100 and all(section["missing"] == [] for section in full["sections"])
 
 
-def test_business_contacts_also_need_company_and_designation_but_individuals_do_not():
+def test_business_contacts_also_need_company_but_individuals_do_not():
     individual = completeness.compute(person())["sections"][0]
     business = completeness.compute(person(recipient_type="BUSINESS"))["sections"][0]
-    assert individual["missing"] == [] and set(business["missing"]) == {"Company", "Designation"}
+    assert individual["missing"] == [] and set(business["missing"]) == {"Company"}
 
 
 def test_not_applicable_information_is_left_out_of_the_score():
@@ -104,7 +104,7 @@ def create_payload(**extra):
 
 def test_a_recipient_needs_only_a_name():
     created = create_payload()
-    assert created.mobile_number is None and created.address is None and created.date_of_birth is None and created.recipient_type == "INDIVIDUAL"
+    assert created.mobile_number is None and created.address is None and created.date_of_birth is None and created.recipient_type == "INTERNAL"
     with pytest.raises(ValueError):
         RecipientCreate.model_validate({"mobileNumber": "+919876543210"})
     for bad in ({"email": "not-an-email"}, {"mobileNumber": "12"}, {"recipientType": "ROBOT"}):
