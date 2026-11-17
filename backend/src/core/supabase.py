@@ -1,3 +1,4 @@
+import sys
 from functools import lru_cache
 
 import httpx
@@ -19,13 +20,19 @@ def get_supabase_client() -> Client:
     )
 
 
+# HTTP/2 shares one connection between parallel queries, but on Windows its sockets randomly fail under
+# concurrency (ReadError WinError 10035, ~8% of calls), which showed up as random 500s while developing locally.
+_HTTP2 = sys.platform != "win32"
+
+
 @lru_cache
 def _shared_http_client() -> httpx.Client:
     """One connection pool for every database call: HTTP/2 (calls share a connection), connections
     kept open between requests (no new TLS handshake each time), and room for parallel queries."""
+    # keepalive_expiry stays below the idle timeout of proxies/the database edge, so a connection that
+    # the other side already closed is never reused (that surfaced as a random 500 on the first call after idle).
     return httpx.Client(
-        http2=True,
-        limits=httpx.Limits(max_connections=64, max_keepalive_connections=32, keepalive_expiry=120),
+        transport=httpx.HTTPTransport(http2=_HTTP2, retries=2, limits=httpx.Limits(max_connections=64, max_keepalive_connections=32, keepalive_expiry=30)),
         timeout=httpx.Timeout(20.0, connect=5.0),
         follow_redirects=True,
         event_hooks={"request": [telemetry.on_request], "response": [telemetry.on_response]},

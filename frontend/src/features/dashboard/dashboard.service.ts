@@ -1,6 +1,6 @@
 import { getModuleRecords } from "@/features/modules/module.service";
 
-export type Banner = { id: string; placement: "INSIGHT" | "NOTE"; eyebrow?: string | null; title: string; body?: string | null; ctaLabel?: string | null; ctaUrl?: string | null; imageUrl?: string | null };
+export type Banner = { id: string; imageUrl: string };
 export type CalendarFilter = "ALL" | "EXTERNAL" | "INTERNAL" | "COMPANY";
 export type CalendarItem = { key: string; date: string; title: string; label: string; kind: string; category: "EXTERNAL" | "INTERNAL" | "COMPANY" | "OTHER"; recipientId?: string | null };
 export type CalendarData = { month: string; items: CalendarItem[]; counts: Record<CalendarFilter, number> };
@@ -9,7 +9,7 @@ export type ActionItem = { key: string; kind: "PROPOSAL_REVIEW" | "ADDRESS_MISSI
 export type DashboardSummary = { importantExternal: PersonCard[]; importantInternal: PersonCard[]; actionRequired: { total: number; items: ActionItem[] } };
 
 export const dashboardService = {
-  banners: (placement: Banner["placement"]) => getModuleRecords("/banners", { placement }, { ttl: 60_000 }) as Promise<Banner[]>,
+  banners: () => getModuleRecords("/banners", {}, { ttl: 60_000 }) as Promise<Banner[]>,
   calendar: (tenantId: string, month: string, category: CalendarFilter) => getModuleRecords(`/tenants/${tenantId}/dashboard/calendar`, { month, category }) as Promise<CalendarData>,
   summary: (tenantId: string) => getModuleRecords(`/tenants/${tenantId}/dashboard/summary`, {}) as Promise<DashboardSummary>,
 };

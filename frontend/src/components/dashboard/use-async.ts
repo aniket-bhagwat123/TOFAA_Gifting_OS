@@ -7,7 +7,8 @@ export function useAsync<T>(load: (() => Promise<T>) | null, key: string) {
     if (!load) { setState({ data: null, loading: false, failed: false }); return; }
     let cancelled = false;
     setState((current) => ({ ...current, loading: true, failed: false }));
-    load().then((data) => { if (!cancelled) setState({ data, loading: false, failed: false }); })
+    // One quiet retry: a first call after the server was idle can fail once and work straight after.
+    load().catch(() => new Promise<T>((resolve, reject) => setTimeout(() => load().then(resolve, reject), 800))).then((data) => { if (!cancelled) setState({ data, loading: false, failed: false }); })
       .catch(() => { if (!cancelled) setState({ data: null, loading: false, failed: true }); });
     return () => { cancelled = true; };
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps

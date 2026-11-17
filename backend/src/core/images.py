@@ -24,8 +24,44 @@ def _looks_like(content: bytes, content_type: str) -> bool:
     return content[:4] == b"RIFF" and content[8:12] == b"WEBP"
 
 
+def image_size(content: bytes, content_type: str) -> tuple[int, int] | None:
+    """Width and height read from the file header (PNG, JPEG, WebP), or None if it can't be read."""
+    try:
+        if content_type == "image/png":
+            return int.from_bytes(content[16:20], "big"), int.from_bytes(content[20:24], "big")
+        if content_type == "image/jpeg":
+            i = 2
+            while i + 9 < len(content):
+                if content[i] != 0xFF:
+                    i += 1
+                    continue
+                marker = content[i + 1]
+                if marker == 0xFF:
+                    i += 1
+                    continue
+                if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:
+                    i += 2
+                    continue
+                if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                    return int.from_bytes(content[i + 7:i + 9], "big"), int.from_bytes(content[i + 5:i + 7], "big")
+                i += 2 + int.from_bytes(content[i + 2:i + 4], "big")
+            return None
+        chunk = content[12:16]
+        if chunk == b"VP8X":
+            return int.from_bytes(content[24:27], "little") + 1, int.from_bytes(content[27:30], "little") + 1
+        if chunk == b"VP8L":
+            bits = int.from_bytes(content[21:25], "little")
+            return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+        if chunk == b"VP8 ":
+            return int.from_bytes(content[26:28], "little") & 0x3FFF, int.from_bytes(content[28:30], "little") & 0x3FFF
+    except Exception:
+        return None
+    return None
+
+
 def store_image(
-    database: Client, folder: str, content: bytes, content_type: str, *, max_bytes: int = AVATAR_MAX_BYTES
+    database: Client, folder: str, content: bytes, content_type: str, *, max_bytes: int = AVATAR_MAX_BYTES,
+    exact_size: tuple[int, int] | None = None,
 ) -> str:
     """Validate and save a picture under `folder`; returns its public URL."""
     content_type = (content_type or "").split(";")[0].strip().lower()
@@ -37,6 +73,8 @@ def store_image(
         raise HTTPException(status_code=413, detail=f"The image is too large. Use one under {max_bytes // (1024 * 1024)} MB.")
     if not _looks_like(content, content_type):
         raise HTTPException(status_code=422, detail="That file is not a valid image.")
+    if exact_size and image_size(content, content_type) != exact_size:
+        raise HTTPException(status_code=422, detail=f"The image must be exactly {exact_size[0]} × {exact_size[1]} pixels.")
     path = f"{folder}/{uuid4().hex}.{IMAGE_TYPES[content_type]}"
     storage = database.storage.from_(BUCKET)
     try:

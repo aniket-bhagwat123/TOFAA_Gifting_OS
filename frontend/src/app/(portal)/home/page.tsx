@@ -15,7 +15,6 @@ import { ActionRequiredCard } from "@/components/dashboard/action-required-card"
 import { ImportantPeopleCard } from "@/components/dashboard/important-people-card";
 import { InsightBanner } from "@/components/dashboard/insight-banner";
 import { OccasionCalendar } from "@/components/dashboard/occasion-calendar";
-import { QuickNoteCard } from "@/components/dashboard/quick-note-card";
 import { type ActivityRow, RecentActivityCard } from "@/components/dashboard/recent-activity-card";
 import { useAsync } from "@/components/dashboard/use-async";
 
@@ -35,10 +34,10 @@ const staffActions: Record<Exclude<Role, "CLIENT">, StaffAction[]> = {
   TOFAA_TEAM: [{ title: "Review Requests", href: "/requests" }, { title: "View Events", href: "/events" }],
   SUPER_ADMIN: [{ title: "Review Requests", href: "/requests" }, { title: "Add a Client", href: "/clients?new=1" }]
 };
-const clientActions = [{ title: "New Gift Request", href: "/requests?new=1", primary: true }, { title: "Add Recipient", href: "/recipients?new=1" }, { title: "Add Occasion", href: "/occasions?new=1" }];
+const clientActions = [{ title: "Gift Request", href: "/requests?new=1", primary: true }, { title: "Recipient", href: "/recipients?new=1" }, { title: "Occasion", href: "/occasions?new=1" }];
 
 const greeting = () => { const hour = new Date().getHours(); return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"; };
-const actionClass = (primary: boolean) => `press inline-flex min-h-10 items-center gap-2 rounded-lg border px-5 text-sm font-semibold transition ${primary ? "border-brand bg-brand text-white hover:bg-brand-dark" : "border-brand/60 bg-white text-brand hover:bg-brand-soft/50"}`;
+const actionClass = (primary: boolean) => `press inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-4 text-xs font-semibold transition ${primary ? "border-brand bg-brand text-white hover:bg-brand-dark" : "border-brand/60 bg-white text-brand hover:bg-brand-soft/50"}`;
 
 type ActivityRecord = { id: string; title?: string; description?: string; summary: string; changedAt: string };
 
@@ -71,7 +70,7 @@ export default function DashboardPage() {
     const rows: Array<ActivityRow & { time: number }> = [
       ...(requests.items ?? []).filter((r) => r.status !== "DRAFT").map((r): ActivityRow & { time: number } => ({ key: `r-${r.id}`, title: `Gift ${STATUS_META[r.status]?.label.toLowerCase() ?? r.status.toLowerCase()} – ${r.title}`, at: r.updatedAt, kind: r.status === "DELIVERED" ? "done" : r.status === "DISPATCHED" ? "shipping" : "update", time: new Date(r.updatedAt).getTime() })),
       ...(activity.items ?? []).map((a): ActivityRow & { time: number } => ({ key: `a-${a.id}`, title: a.title ?? a.description ?? a.summary, at: a.changedAt, kind: "update", time: new Date(a.changedAt).getTime() })),
-    ].sort((a, b) => b.time - a.time).slice(0, 4);
+    ].sort((a, b) => b.time - a.time).slice(0, 3);
     return { rows };
   } : null, `recent|${tenantId}`);
 
@@ -83,11 +82,11 @@ export default function DashboardPage() {
   const firstName = displayName(user).split(" ")[0];
   const actions = isClient ? clientActions : staffActions[role].map((a, i) => ({ ...a, primary: i === 0 }));
 
-  return <div className="space-y-4">
+  return <div className="space-y-3">
     <InsightBanner />
 
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 className="text-xl font-semibold text-ink sm:text-2xl">{greeting()}{firstName ? `, ${firstName}` : ""}! <span aria-hidden>👋</span></h2>
+      <h2 className="text-lg font-semibold text-ink sm:text-xl">{greeting()}{firstName ? `, ${firstName}` : ""}! <span aria-hidden>👋</span></h2>
       <div className="flex flex-wrap gap-3">
         {actions.map((action) => <Link key={action.href} href={action.href} className={actionClass(!!action.primary)}><Plus size={16} />{action.title}</Link>)}
       </div>
@@ -108,14 +107,11 @@ export default function DashboardPage() {
       : <>
         <OccasionCalendar tenantId={tenantId} />
         <div className="grid items-start gap-4 lg:grid-cols-3">
-          <ImportantPeopleCard title="Important External People" subtitle="Clients & Business Associates" icon={<Star size={18} className="fill-amber-400" />} people={summary.data?.importantExternal ?? []} loading={summary.loading} empty="Add clients or partners to see their dates here." />
-          <ImportantPeopleCard title="Important Internal People" subtitle="Leadership & Key Employees" icon={<Users size={18} className="text-brand" />} people={summary.data?.importantInternal ?? []} loading={summary.loading} empty="Add employees to see their dates here." />
+          <ImportantPeopleCard title="Important External People" icon={<Star size={18} className="fill-amber-400" />} people={summary.data?.importantExternal ?? []} loading={summary.loading} empty="Add clients or partners to see their dates here." />
+          <ImportantPeopleCard title="Important Internal People" icon={<Users size={18} className="text-brand" />} people={summary.data?.importantInternal ?? []} loading={summary.loading} empty="Add employees to see their dates here." />
           <ActionRequiredCard items={summary.data?.actionRequired.items ?? []} total={summary.data?.actionRequired.total ?? 0} loading={summary.loading} />
         </div>
-        <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-          <RecentActivityCard rows={recent.data?.rows ?? []} loading={recent.loading} />
-          <QuickNoteCard />
-        </div>
+        <RecentActivityCard rows={recent.data?.rows ?? []} loading={recent.loading} />
       </>}
   </div>;
 }

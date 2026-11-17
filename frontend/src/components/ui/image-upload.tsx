@@ -11,8 +11,8 @@ import { Avatar } from "@/components/ui/avatar";
 const TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 /** Sends a picture as the raw request body (PUT for avatars and logos, POST for proposal photos). Returns the API's data. */
-export async function sendImage<T = unknown>(method: "put" | "post", url: string, file: File): Promise<T> {
-  const { data } = await api.request({ method, url, data: file, headers: { "Content-Type": file.type }, timeout: 60_000 });
+export async function sendImage<T = unknown>(method: "put" | "post", url: string, file: File, params?: Record<string, string>): Promise<T> {
+  const { data } = await api.request({ method, url, params, data: file, headers: { "Content-Type": file.type }, timeout: 60_000 });
   clearRequestCache();
   return (data?.data ?? data) as T;
 }

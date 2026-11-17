@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { InputField } from "@/components/ui/input-field";
 import { Button } from "@/components/ui/button";
 import { getApiErrorMessage } from "@/services/api-client";
-import { Sparkles } from "lucide-react";
+import { Eye, EyeOff, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { Suspense, useState } from "react";
 
@@ -39,9 +39,9 @@ function LoginForm() {
   return <form noValidate onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5">
     <InputField label="Email" required type="email" inputMode="email" placeholder="you@company.com" autoComplete="username" autoFocus registration={register("email")} error={errors.email?.message} />
     <div>
-      <InputField label="Password" required type={show ? "text" : "password"} placeholder="Your password" autoComplete="current-password" registration={register("password")} error={errors.password?.message} />
-      <div className="mt-2 flex items-center justify-between">
-        <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm text-muted"><input type="checkbox" checked={show} onChange={(event) => setShow(event.target.checked)} className="h-4 w-4 accent-brand" /> Show password</label>
+      <InputField label="Password" required type={show ? "text" : "password"} placeholder="Your password" autoComplete="current-password" registration={register("password")} error={errors.password?.message}
+        trailing={<button type="button" onClick={() => setShow((value) => !value)} aria-label={show ? "Hide password" : "Show password"} aria-pressed={show} className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-black/5 hover:text-ink">{show ? <EyeOff size={18} /> : <Eye size={18} />}</button>} />
+      <div className="mt-2 flex items-center justify-end">
         <Link href="/forgot-password" className="flex min-h-10 items-center text-sm font-medium text-brand hover:underline">Forgot password?</Link>
       </div>
     </div>

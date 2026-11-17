@@ -2,6 +2,7 @@
 
 from datetime import date
 from typing import Any
+from uuid import uuid4
 
 from fastapi import HTTPException
 from supabase import Client
@@ -15,8 +16,9 @@ from src.modules.auth.rbac import Role
 from src.modules.auth.schemas import UserProfileResponse
 from src.modules.banners.schemas import BannerCreate, BannerList, BannerRead, BannerUpdate
 
-COLUMNS = "id,placement,audience,eyebrow,title,body,cta_label,cta_url,image_url,sort_order,is_active,starts_on,ends_on,created_at,updated_at"
+COLUMNS = "id,audience,image_url,sort_order,is_active,starts_on,ends_on,created_at,updated_at"
 MAX_LIVE = 50
+BANNER_SIZE = (1000, 90)
 
 
 def is_live(row: dict[str, Any], today: date) -> bool:
@@ -35,7 +37,7 @@ class BannerService:
     def __init__(self, database: Client | None = None) -> None:
         self.database = database or get_supabase_admin_client()
 
-    def live(self, actor: UserProfileResponse, placement: str | None = None) -> list[BannerRead]:
+    def live(self, actor: UserProfileResponse) -> list[BannerRead]:
         """The banners this user should see today, in the order a super admin set. Remembered briefly; any write clears it."""
         key = ("banners-live",)
         rows = lookups.get(key, settings.AUTH_CACHE_SECONDS)
@@ -48,15 +50,13 @@ class BannerService:
         today = date.today()
         return [
             BannerRead.model_validate(row) for row in rows
-            if is_live(row, today) and audience_allows(row["audience"], actor) and (placement is None or row["placement"] == placement)
+            if is_live(row, today) and audience_allows(row["audience"], actor)
         ]
 
-    def manage_list(self, *, page: int, limit: int, placement: str | None) -> BannerList:
+    def manage_list(self, *, page: int, limit: int) -> BannerList:
         query = self.database.table("dashboard_banners").select(COLUMNS, count="exact")
-        if placement:
-            query = query.eq("placement", placement)
         offset = (page - 1) * limit
-        result = query.order("placement").order("sort_order").order("created_at").range(offset, offset + limit - 1).execute()
+        result = query.order("sort_order").order("created_at").range(offset, offset + limit - 1).execute()
         total = result.count or 0
         return BannerList(
             items=[BannerRead.model_validate(row) for row in result.data or []],
@@ -67,11 +67,16 @@ class BannerService:
     def get(self, banner_id: str) -> BannerRead:
         return BannerRead.model_validate(self._row(banner_id))
 
-    def create(self, payload: BannerCreate, actor: UserProfileResponse) -> BannerRead:
-        values = payload.model_dump(mode="json")
-        values["created_by_user_id"] = actor.id
-        data = self.database.table("dashboard_banners").insert(values).execute().data
+    def create(self, payload: BannerCreate, actor: UserProfileResponse, *, content: bytes, content_type: str) -> BannerRead:
+        url = self._store(uuid4().hex, content, content_type)
+        values = payload.model_dump(mode="json") | {"image_url": url, "created_by_user_id": actor.id}
+        try:
+            data = self.database.table("dashboard_banners").insert(values).execute().data
+        except Exception:
+            images.remove_image(self.database, url)
+            raise
         if not data:
+            images.remove_image(self.database, url)
             raise HTTPException(status_code=500, detail="The banner could not be saved.")
         return BannerRead.model_validate(data[0])
 
@@ -90,10 +95,15 @@ class BannerService:
 
     def set_image(self, banner_id: str, *, content: bytes, content_type: str) -> BannerRead:
         old = self._row(banner_id).get("image_url")
-        url = images.store_image(self.database, f"banners/{banner_id}", content, content_type, max_bytes=images.PHOTO_MAX_BYTES)
+        url = self._store(banner_id, content, content_type)
         data = self.database.table("dashboard_banners").update({"image_url": url}).eq("id", banner_id).execute().data
         images.remove_image(self.database, old)
         return BannerRead.model_validate(data[0])
+
+    def _store(self, folder: str, content: bytes, content_type: str) -> str:
+        return images.store_image(
+            self.database, f"banners/{folder}", content, content_type, max_bytes=images.PHOTO_MAX_BYTES, exact_size=BANNER_SIZE,
+        )
 
     def _row(self, banner_id: str) -> dict[str, Any]:
         data = self.database.table("dashboard_banners").select(COLUMNS).eq("id", banner_id).limit(1).execute().data

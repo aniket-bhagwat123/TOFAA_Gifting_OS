@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, Menu, Eye, ChevronDown, Building2 } from "lucide-react";
+import { LogOut, Menu, Eye, ChevronDown } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import Link from "next/link";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -55,16 +55,6 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
       <button onClick={onMenu} className="press flex h-9 w-9 items-center justify-center rounded-lg text-slate-700 hover:bg-black/5 lg:hidden" aria-label="Open menu"><Menu size={22} /></button>
       <h1 className="truncate text-xl font-semibold text-ink">{moduleTitle}</h1>
     </div>
-    {user?.platformRole === "CLIENT" && user.tenant?.name && (
-      <div className="pointer-events-none absolute inset-x-0 top-0 hidden h-full items-center justify-center sm:flex">
-        <div className="flex items-center gap-2 rounded-lg border border-brand/20 bg-gradient-to-r from-brand/5 to-emerald-50/60 px-4 py-1.5 shadow-sm">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-brand text-white shadow-sm">
-            <Building2 size={13} />
-          </div>
-          <span className="max-w-[180px] truncate text-[13px] font-semibold text-slate-800">{user.tenant.name}</span>
-        </div>
-      </div>
-    )}
     <div className="flex items-center gap-1.5 sm:gap-3">
       {user?.platformRole !== "CLIENT" && tenants.length > 0 && segment !== "clients" && (() => {
         const activeTenant = tenants.find((t: { id: string; name: string }) => t.id === selectedTenantId);

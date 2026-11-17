@@ -37,6 +37,19 @@ type ModuleDialog =
   | { kind: "confirm"; title: string; message: string; confirmLabel: string; destructive: boolean; icon: "status" | "delete"; onConfirm: () => Promise<void> }
   | { kind: "action"; action: ModuleAction; values: Record<string, string>; errors: Record<string, string> };
 
+/** Banner pictures must be exactly this size; the API checks it too. */
+const BANNER_W = 1000, BANNER_H = 90;
+async function bannerImageError(file: File): Promise<string | null> {
+  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) return "Choose a PNG, JPG or WebP image.";
+  if (file.size > 5 * 1024 * 1024) return "That image is over 5 MB. Choose a smaller one.";
+  const url = URL.createObjectURL(file);
+  try {
+    const size = await new Promise<{ w: number; h: number }>((resolve, reject) => { const img = new Image(); img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight }); img.onerror = reject; img.src = url; });
+    return size.w === BANNER_W && size.h === BANNER_H ? null : `The image is ${size.w} × ${size.h} pixels. It must be exactly ${BANNER_W} × ${BANNER_H}.`;
+  } catch { return "That file is not a valid image."; }
+  finally { URL.revokeObjectURL(url); }
+}
+
 export function ModuleList({ moduleKey }: { moduleKey: string }) {
   const config = moduleConfig[moduleKey];
   const dispatch = useAppDispatch();
@@ -150,6 +163,7 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
     const params: Record<string, string> = {};
     const nextErrors: Record<string, string> = {};
     for (const field of fields) {
+      if (field.type === "image") continue;
       const selectedIds = field.type === "recipient-multi-select" ? form.getAll(field.name).map(String) : [];
       const raw = field.type === "recipient-multi-select" ? selectedIds.join(",") : String(form.get(field.name) ?? "").trim();
       if (field.type === "checkbox") { body[field.name] = !!raw; continue; }
@@ -163,6 +177,12 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
       if (field.query) { params[field.name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)] = raw; continue; }
       if (field.name === "addressLine1" || field.name === "city" || field.name === "postalCode") continue;
       body[field.name] = field.type === "recipient-multi-select" ? selectedIds : field.name === "recipientIds" ? raw.split(/[\n,]+/).map((id) => id.trim()).filter(Boolean) : field.type === "number-list" ? raw.split(/[\n,]+/).map(Number).filter(Number.isFinite) : field.type === "number" ? Number(raw) : field.type === "select" && (raw === "true" || raw === "false") ? raw === "true" : raw;
+    }
+    const file = form.get("image");
+    const picture = file instanceof File && file.size ? file : null;
+    if (fields.some((field) => field.type === "image")) {
+      if (!picture && !editor) nextErrors.image = "Choose a banner picture.";
+      else if (picture) { const problem = await bannerImageError(picture); if (problem) nextErrors.image = problem; }
     }
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
@@ -185,7 +205,15 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
     } else if (moduleKey === "team-users") path = `/tenants/${selectedTenantId}/users`;
     setSaving(true);
     try {
-      const saved = await mutateModule(editor ? config.updateMethod ?? "patch" : "post", path, body, params, moduleKey === "credits" && !editor ? { "Idempotency-Key": crypto.randomUUID() } : undefined) as { invitationWarning?: string } | undefined;
+      let saved: { invitationWarning?: string } | undefined;
+      if (moduleKey === "banners" && !editor) {
+        // A banner is created by uploading its picture; the settings travel in the query string.
+        const query = Object.fromEntries(Object.entries(body).map(([key, value]) => [key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), String(value)]));
+        await sendImage("post", path, picture!, query);
+      } else {
+        if (moduleKey === "banners" && picture) await sendImage("put", `${path}/image`, picture);
+        saved = await mutateModule(editor ? config.updateMethod ?? "patch" : "post", path, body, params, moduleKey === "credits" && !editor ? { "Idempotency-Key": crypto.randomUUID() } : undefined) as { invitationWarning?: string } | undefined;
+      }
       toast.success(editor ? `Changes saved.` : isUserModule ? (body.sendInvitation ? "Invitation sent. They'll receive a temporary password by email." : "User created. Share the temporary password with them.") : `Your ${noun} has been added.`);
       if (saved?.invitationWarning) toast.warning(saved.invitationWarning, { duration: 10000 });
       setEditor(undefined);
@@ -271,6 +299,7 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
   const pictureOf = (row: Record<string, unknown>) => (moduleKey === "clients" || moduleKey === "team-users" ? { url: (row.logoUrl ?? row.avatarUrl) as string | undefined } : null);
   const pictureEndpoint = (row: Record<string, unknown>) => (moduleKey === "clients" ? `/tenants/${row.id}/logo` : `/tenants/${selectedTenantId}/users/${row.id}/avatar`);
   const renderCell = (col: string, value: unknown): React.ReactNode => {
+    if (moduleKey === "banners" && col === "imageUrl") return typeof value === "string" ? <img src={value} alt="Banner" className="h-9 w-auto max-w-[22rem] rounded border border-line" /> : "—";
     if (col === "role") return value === "CLIENT" ? "Client" : titleCase(String(value ?? "—"));
     if (moduleKey === "recipient-groups" && col === "recipientIds" && Array.isArray(value)) {
       // Names arrive after the recipients load: say so once, not once per person.
@@ -346,9 +375,9 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
               const sourceOptions = field.source === "events" ? eventOptions : field.source === "occasions" ? occasionOptions : [];
               const sourceLoading = field.source === "events" ? eventOptionsLoading : occasionOptionsLoading;
               const sourceError = field.source === "events" ? eventOptionsError : occasionOptionsError;
-              return <div key={field.name} className={`space-y-1.5 text-sm ${field.type === "textarea" || field.type === "password" || field.type === "checkbox" || field.type === "recipient-multi-select" ? "sm:col-span-2" : ""}`}>
+              return <div key={field.name} className={`space-y-1.5 text-sm ${field.type === "textarea" || field.type === "password" || field.type === "checkbox" || field.type === "image" || field.type === "recipient-multi-select" ? "sm:col-span-2" : ""}`}>
                 {field.type !== "date" && field.type !== "password" && field.type !== "checkbox" && <label id={`${fieldId}-label`} htmlFor={fieldId} className="block text-sm font-medium text-ink"><span>{field.label}{field.required && <RequiredMark />}</span></label>}
-                {field.type === "checkbox" ? <label htmlFor={fieldId} className="flex cursor-pointer items-start gap-3 rounded-xl border border-line px-4 py-3"><input id={fieldId} name={field.name} type="checkbox" className="mt-0.5 h-5 w-5 accent-brand" /><span><span className="block text-base font-medium text-ink">{field.label}</span>{field.hint && <span className="block text-sm text-muted">{field.hint}</span>}</span></label> : field.type === "password" ? <><input type="hidden" name={field.name} value={userPassword} /><PasswordField key={String(editor?.id ?? "new")} label={editor ? "New password" : "Temporary password"} required={!editor} value={userPassword} onChange={(next) => { setUserPassword(next); setFieldErrors((current) => ({ ...current, [field.name]: "" })); }} error={error} allowGenerate showStrength={!!userPassword} defaultVisible={!editor} hint={editor ? "Leave blank to keep the current password." : "We generated a secure one for you. Change it if you like."} /></> : field.type === "date" ? <DatePickerField id={fieldId} name={field.name} label={field.label} value={dateValues[field.name] ?? String(value ?? "")} error={error} required={field.required} onChange={(picked) => { setDateValues((current) => ({ ...current, [field.name]: picked })); setFieldErrors((current) => ({ ...current, [field.name]: "" })); }} /> : field.type === "recipient-multi-select" ? <RecipientMultiSelect
+                {field.type === "image" ? <div className="space-y-2">{typeof editor?.imageUrl === "string" && <img src={editor.imageUrl} alt="Current banner" className="h-auto w-full rounded-md border border-line" />}<input id={fieldId} name={field.name} type="file" accept="image/png,image/jpeg,image/webp" aria-invalid={!!error} onChange={() => setFieldErrors((current) => ({ ...current, [field.name]: "" }))} className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-brand/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand" />{field.hint && <p className="text-xs text-muted">{field.hint}{editor ? " Leave empty to keep the current picture." : ""}</p>}</div> : field.type === "checkbox" ? <label htmlFor={fieldId} className="flex cursor-pointer items-start gap-3 rounded-xl border border-line px-4 py-3"><input id={fieldId} name={field.name} type="checkbox" className="mt-0.5 h-5 w-5 accent-brand" /><span><span className="block text-base font-medium text-ink">{field.label}</span>{field.hint && <span className="block text-sm text-muted">{field.hint}</span>}</span></label> : field.type === "password" ? <><input type="hidden" name={field.name} value={userPassword} /><PasswordField key={String(editor?.id ?? "new")} label={editor ? "New password" : "Temporary password"} required={!editor} value={userPassword} onChange={(next) => { setUserPassword(next); setFieldErrors((current) => ({ ...current, [field.name]: "" })); }} error={error} allowGenerate showStrength={!!userPassword} defaultVisible={!editor} hint={editor ? "Leave blank to keep the current password." : "We generated a secure one for you. Change it if you like."} /></> : field.type === "date" ? <DatePickerField id={fieldId} name={field.name} label={field.label} value={dateValues[field.name] ?? String(value ?? "")} error={error} required={field.required} onChange={(picked) => { setDateValues((current) => ({ ...current, [field.name]: picked })); setFieldErrors((current) => ({ ...current, [field.name]: "" })); }} /> : field.type === "recipient-multi-select" ? <RecipientMultiSelect
                   options={recipientOptions}
                   selectedIds={selectedRecipientIds}
                   loading={recipientsLoading}
