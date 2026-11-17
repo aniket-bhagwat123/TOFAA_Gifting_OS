@@ -22,7 +22,7 @@ def get_supabase_client() -> Client:
 
 # HTTP/2 shares one connection between parallel queries, but on Windows its sockets randomly fail under
 # concurrency (ReadError WinError 10035, ~8% of calls), which showed up as random 500s while developing locally.
-_HTTP2 = sys.platform != "win32"
+_HTTP2 = False  # one multiplexed connection was reset under concurrent requests (random 500s on import); separate connections are steadier
 
 
 @lru_cache

@@ -6,8 +6,8 @@ import { Download, FileUp } from "lucide-react";
 import { Sheet } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { FormatMenu } from "@/components/ui/format-menu";
-import { loadAllModuleRecords } from "@/features/modules/module-utils";
-import { mutateModule } from "@/features/modules/module.service";
+import { loadAllModuleRecords, rowsOf } from "@/features/modules/module-utils";
+import { getModuleRecords, mutateModule } from "@/features/modules/module.service";
 import { getApiErrorMessage } from "@/services/api-client";
 import { ACCEPT, type FileFormat, type Table, readTable, writeTable } from "@/lib/data-io";
 import { FIELDS, FIELD_HEADERS, type BuiltRow, type FieldKey, autoMap, buildRecipient, templateRows } from "@/lib/recipient-fields";
@@ -19,15 +19,23 @@ interface Prepared extends BuiltRow { line: number; duplicate?: boolean }
 const select = "min-h-9 w-full rounded-md border border-line bg-white px-2.5 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25";
 const POOL = 3;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const isNetworkFailure = (error: unknown) => !(error as { response?: unknown })?.response;
+const statusOf = (error: unknown) => (error as { response?: { status?: number } })?.response?.status;
+// No reply at all, or the server answering that it is busy or failed: worth another try.
+const isTransient = (error: unknown) => { const status = statusOf(error); return status === undefined || status === 500 || status === 502 || status === 503 || status === 504; };
 
-/** Creates one recipient. If the connection drops (no reply at all), try again a couple of times: the server may be busy or just woke up. */
-async function createWithRetry(payload: Record<string, unknown>, headers: Record<string, string>, endpoint = ""): Promise<{ id?: string }> {
+/** Creates one recipient. A dropped connection or a busy server is retried a couple of times. If the earlier try had in fact saved the
+ *  person, the retry is refused as a duplicate mobile number, and that is treated as success. */
+async function createWithRetry(payload: Record<string, unknown>, headers: Record<string, string>, endpoint: string): Promise<{ id?: string }> {
   for (let attempt = 0; ; attempt++) {
     try { return await mutateModule("post", endpoint, payload, undefined, headers) as { id?: string }; }
     catch (error) {
-      if (attempt >= 2 || !isNetworkFailure(error)) throw error;
-      await sleep(800 * (attempt + 1));
+      if (attempt > 0 && statusOf(error) === 409 && /mobile number already exists/i.test(getApiErrorMessage(error))) {
+        const found = await getModuleRecords(endpoint, { search: String(payload.mobileNumber ?? ""), limit: 5, page: 1 }).catch(() => null);
+        const match = (rowsOf(found) as Array<{ id?: string; mobileNumber?: string }>).find((r) => r.mobileNumber === payload.mobileNumber);
+        if (match) return { id: match.id };
+      }
+      if (attempt >= 2 || !isTransient(error)) throw error;
+      await sleep(1000 * (attempt + 1));
     }
   }
 }

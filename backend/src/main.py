@@ -151,7 +151,7 @@ async def log_unhandled_exception(request: Request, exc: Exception) -> JSONRespo
         headers.update({"Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true", "Vary": "Origin", "Access-Control-Expose-Headers": "X-Request-Id"})
     return JSONResponse(
         status_code=500,
-        content={"data": {}, "message": "Internal Server Error"},
+        content={"data": {}, "message": f"Internal Server Error (ref {request_id[:8]})"},
         headers=headers,
     )
 
