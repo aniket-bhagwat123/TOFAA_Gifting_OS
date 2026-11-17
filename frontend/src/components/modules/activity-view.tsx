@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Building2, CalendarDays, Filter, Gift, Search, Users, Wallet } from "lucide-react";
+import { Activity, Building2, CalendarDays, FileUp, Filter, Gift, Search, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAppSelector } from "@/store/hooks";
 import { moduleConfig } from "@/features/modules/module-config";
@@ -12,6 +12,8 @@ import { SearchInput } from "@/components/ui/search-input";
 import { Spinner } from "@/components/ui/spinner";
 import { control } from "@/components/ui/table-styles";
 import { cn } from "@/lib/utils";
+import { Tab, TabBar } from "@/components/ui/tab-bar";
+import { ImportHistory } from "./import-history";
 
 type Entry = { id: string; title: string; description: string; category: string; actorName: string; actorKind: "TOFAA" | "USER"; changedAt: string };
 
@@ -44,6 +46,7 @@ export function ActivityView() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
+  const [tab, setTab] = useState<"activity" | "imports">("activity");
 
   useEffect(() => {
     setEntries(null); setError(null);
@@ -73,6 +76,11 @@ export function ActivityView() {
   const filtered = !!search.trim() || !!category;
 
   return <div className="flex w-full flex-col gap-4 lg:h-[calc(100dvh-8.5rem)]">
+    <TabBar label="Activity views" wrapperClassName="shrink-0">
+      <Tab variant="solid" active={tab === "activity"} onClick={() => setTab("activity")} icon={<Activity size={16} />}>Activity</Tab>
+      <Tab variant="solid" active={tab === "imports"} onClick={() => setTab("imports")} icon={<FileUp size={16} />}>Imports</Tab>
+    </TabBar>
+    {tab === "imports" ? <ImportHistory /> : <>
     <div className="flex shrink-0 flex-wrap items-center gap-2.5">
       <div className="relative min-w-[14rem] flex-1 sm:max-w-md">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -112,5 +120,6 @@ export function ActivityView() {
           </ul>
         </section>)}
     </div>
+    </>}
   </div>;
 }

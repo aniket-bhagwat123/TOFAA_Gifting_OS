@@ -212,6 +212,27 @@ class GiftSpendService:
         if not result.data:
             raise HTTPException(status_code=404, detail="Recipient group not found.")
 
+    def bulk_delete_groups(self, tenant_id: str, group_ids: list[str], actor: UserProfileResponse) -> tuple[int, list[str]]:
+        """Delete many groups in one query. If an occasion uses some of them the database refuses the lot, so the rest are tried one by one
+        and the names of the ones that are in use are returned."""
+        self._require_tenant(tenant_id, actor, Permission.GIFT_SPEND_MANAGE)
+        db = self.database
+        try:
+            rows = db.table("spend_recipient_groups").delete().eq("tenant_id", tenant_id).in_("id", group_ids).select("id").execute().data or []
+            return len(rows), []
+        except APIError as exc:
+            if exc.code != "23503":
+                logger.exception("Could not delete recipient groups")
+                raise HTTPException(status_code=409, detail="Recipient groups could not be deleted.") from exc
+        names = {str(r["id"]): r.get("name") for r in db.table("spend_recipient_groups").select("id,name").eq("tenant_id", tenant_id).in_("id", group_ids).execute().data or []}
+        deleted, blocked = 0, []
+        for gid in group_ids:
+            try:
+                deleted += len(db.table("spend_recipient_groups").delete().eq("tenant_id", tenant_id).eq("id", gid).select("id").execute().data or [])
+            except APIError:
+                blocked.append(str(names.get(gid) or gid))
+        return deleted, blocked
+
     def import_group(
         self,
         tenant_id: str,

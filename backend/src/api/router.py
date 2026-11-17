@@ -12,6 +12,7 @@ from src.modules.contract_workspace.router import router as contract_workspace_r
 from src.modules.events.router import router as events_router
 from src.modules.gift_requests.router import router as gift_requests_router
 from src.modules.gift_spend.router import router as gift_spend_router
+from src.modules.imports.router import router as imports_router
 from src.modules.occasions.router import router as occasions_router
 from src.modules.recipients.profile import router as recipient_profile_router
 from src.modules.recipients.router import router as recipients_router
@@ -38,6 +39,7 @@ api_router.include_router(contract_workspace_router, dependencies=tenant_scoped)
 api_router.include_router(events_router, dependencies=tenant_scoped)
 api_router.include_router(gift_requests_router, dependencies=tenant_scoped)
 api_router.include_router(gift_spend_router, dependencies=tenant_scoped)
+api_router.include_router(imports_router, dependencies=tenant_scoped)
 api_router.include_router(occasions_router, dependencies=tenant_scoped)
 api_router.include_router(recipients_router, dependencies=tenant_scoped)
 api_router.include_router(recipient_profile_router, dependencies=tenant_scoped)

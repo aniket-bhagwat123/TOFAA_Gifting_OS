@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Gift, Plus, Search } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Gift, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAppSelector } from "@/store/hooks";
 import { moduleConfig } from "@/features/modules/module-config";
@@ -11,6 +11,7 @@ import { getApiErrorMessage } from "@/services/api-client";
 import { control, table } from "@/components/ui/table-styles";
 import { SearchInput } from "@/components/ui/search-input";
 import { Button } from "@/components/ui/button";
+import { Sheet } from "@/components/ui/sheet";
 import { PeopleTabs } from "@/components/modules/people-tabs";
 import { useTenantId } from "@/components/gift-requests/shared";
 import { SendGiftDialog, type SendGiftTarget } from "./send-gift-dialog";
@@ -67,6 +68,9 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const [everyone, setEveryone] = useState<Row[] | null>(null);
   const [everyoneLoading, setEveryoneLoading] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletingGroups, setDeletingGroups] = useState(false);
   const [addingTo, setAddingTo] = useState<RecipientGroup | null>(null);
   const [sendTarget, setSendTarget] = useState<SendGiftTarget | null>(null);
   const { tenantId } = useTenantId();
@@ -132,6 +136,23 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const filtered = useMemo(() => { const q = search.trim().toLowerCase(); return q ? groups.filter((g) => g.name.toLowerCase().includes(q)) : groups; }, [groups, search]);
   const uniquePeople = new Set(groups.flatMap((g) => g.recipientIds)).size;
   // One group open at a time: opening another closes the one that was open.
+  const pick = (id: string) => setPicked((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const deleteGroups = async () => {
+    if (!ready || !picked.size) return;
+    setDeletingGroups(true);
+    try {
+      const ids = [...picked];
+      let deleted = 0; const blocked: string[] = [];
+      for (let i = 0; i < ids.length; i += 200) {
+        const result = await mutateModule("post", `${ready.groups}/bulk-delete`, { groupIds: ids.slice(i, i + 200) }) as { deleted?: number; blocked?: string[] };
+        deleted += result?.deleted ?? 0; blocked.push(...(result?.blocked ?? []));
+      }
+      if (deleted) toast.success(`${deleted} group${deleted === 1 ? "" : "s"} deleted.`);
+      if (blocked.length) toast.error(`${blocked.length} could not be deleted because an occasion uses ${blocked.length === 1 ? "it" : "them"}: ${blocked.slice(0, 3).join(", ")}${blocked.length > 3 ? "…" : ""}`);
+      setPicked(new Set()); setConfirmDelete(false); await load();
+    } catch (err) { toast.error(getApiErrorMessage(err)); }
+    finally { setDeletingGroups(false); }
+  };
   const toggle = (id: string) => setOpen((current) => (current.has(id) ? new Set<string>() : new Set([id])));
 
   const removeMember = async (group: RecipientGroup, recipientId: string, name: string) => {
@@ -177,6 +198,14 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
         <p className="text-sm text-muted" aria-live="polite">{loading ? "Loading…" : `${groups.length} ${groups.length === 1 ? "group" : "groups"} · ${people(uniquePeople)}`}</p>
       </div>
 
+      {picked.size > 0 && <div role="region" aria-label="Selected groups" aria-live="polite" className="flex flex-wrap items-center gap-2 border-b border-line bg-brand-soft/60 px-4 py-2.5 sm:px-6">
+        <span aria-hidden className="flex h-5 w-5 items-center justify-center rounded bg-brand text-white"><Check size={14} strokeWidth={3} /></span>
+        <span className="text-xs font-semibold text-ink">{picked.size} selected</span>
+        {picked.size < filtered.length && <button type="button" onClick={() => setPicked(new Set(filtered.map((g) => g.id)))} className="press inline-flex h-8 items-center rounded-md px-2.5 text-xs font-semibold text-brand hover:bg-white/70">Select all {filtered.length} groups</button>}
+        <button type="button" onClick={() => setConfirmDelete(true)} className="press inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-xs font-medium text-rose-700 hover:bg-rose-50"><Trash2 size={15} /> Delete</button>
+        <button type="button" aria-label="Clear selection" onClick={() => setPicked(new Set())} className="press ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-ink hover:bg-black/5"><X size={16} /></button>
+      </div>}
+
       {loading ? <div className="space-y-3 p-6">{[0, 1, 2].map((i) => <div key={i} className="h-14 animate-pulse rounded-xl bg-slate-100" />)}</div>
         : !filtered.length ? <p className="px-6 py-12 text-center text-muted">{search ? "No groups match your search." : "No groups yet. Create one to gift many people at once."}</p>
           : <ul>
@@ -190,11 +219,14 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
                 .filter(({ row }) => !query || (row && `${row.name ?? ""} ${row.mobileNumber ?? ""} ${cityOf(row)}`.toLowerCase().includes(query)));
               const canRemove = group.recipientIds.length > 1;
               return <li key={group.id} className="border-t border-line first:border-t-0">
-                <button type="button" aria-expanded={expanded} onClick={() => toggle(group.id)} className="press flex w-full items-center gap-4 px-4 py-4 text-left hover:bg-slate-50/60 sm:px-6">
+                <div className="flex items-center hover:bg-slate-50/60">
+                <label className="flex shrink-0 cursor-pointer items-center py-4 pl-4 sm:pl-6"><input type="checkbox" aria-label={`Select ${group.name}`} checked={picked.has(group.id)} onChange={() => pick(group.id)} className="h-4 w-4 rounded accent-brand" /></label>
+                <button type="button" aria-expanded={expanded} onClick={() => toggle(group.id)} className="press flex w-full items-center gap-4 px-4 py-4 text-left sm:pr-6">
                   {expanded ? <ChevronDown className="size-5 shrink-0 text-muted" /> : <ChevronRight className="size-5 shrink-0 text-muted" />}
                   <span className="min-w-0 flex-1"><span className="block truncate text-base font-semibold text-ink">{group.name}</span><span className="block text-sm text-muted">{people(group.recipientIds.length)}</span></span>
                   <span className="hidden shrink-0 text-sm text-muted sm:block">{updated(group.updatedAt)}</span>
                 </button>
+                </div>
 
                 {expanded && <div className="space-y-4 px-4 pb-5 sm:px-6 md:pl-[3.70rem]">
                   <div className="flex flex-col gap-3 rounded-xl border border-line bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -243,6 +275,11 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
     </section>
 
     {canSend && <SendGiftDialog target={sendTarget} tenantId={tenantId!} onClose={() => setSendTarget(null)} onSent={() => setSendTarget(null)} />}
+    <Sheet open={confirmDelete} locked={deletingGroups} zIndex="z-[90]" labelledBy="delete-groups-title" className="max-w-[26rem]" onClose={() => setConfirmDelete(false)}>
+      <h2 id="delete-groups-title" className="text-[17px] font-semibold text-ink">Delete {picked.size === 1 ? "this group" : `${picked.size} groups`}?</h2>
+      <p className="mt-2 text-sm text-muted">The people in {picked.size === 1 ? "it" : "them"} stay in your recipients; only the {picked.size === 1 ? "group is" : "groups are"} removed. Groups an occasion already uses are skipped.</p>
+      <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="secondary" disabled={deletingGroups} onClick={() => setConfirmDelete(false)}>Cancel</Button><Button className="bg-rose-600 hover:bg-rose-700" disabled={deletingGroups} onClick={() => void deleteGroups()}>{deletingGroups ? "Deleting…" : "Delete"}</Button></div>
+    </Sheet>
     <AddRecipientsSheet group={addingTo} recipients={everyone} loading={everyoneLoading || (!!addingTo && !everyone)} onClose={() => setAddingTo(null)} onSubmit={(ids, rows) => addMembers(addingTo!, ids, rows)} />
     <GroupSheet group={groupSheet} endpoint={ready?.groups ?? ""} recipients={everyone ?? []} loadingRecipients={everyoneLoading} onClose={() => setGroupSheet(null)} onSaved={() => { setGroupSheet(null); void load(); }} />
   </>;

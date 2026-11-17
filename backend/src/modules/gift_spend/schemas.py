@@ -32,6 +32,20 @@ class RecipientGroupUpdate(RecipientGroupCreate):
     pass
 
 
+class BulkGroupDelete(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    group_ids: list[UUID] = Field(min_length=1, max_length=200)
+
+
+class BulkGroupDeleteResult(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    deleted: int
+    # Groups that could not be deleted because an occasion uses them.
+    blocked: list[str] = Field(default_factory=list)
+
+
 class RecipientGroupRead(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 

@@ -3,6 +3,7 @@
 from datetime import date
 from decimal import Decimal
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -172,6 +173,24 @@ class RecipientRead(BaseModel):
     completeness: dict | None = None
     # Filled in on the list only.
     groups: list[GroupRef] = Field(default_factory=list)
+
+
+class BulkRecipientIds(BaseModel):
+    """Who a bulk action is for. Up to 1,000 people at a time."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    recipient_ids: list[UUID] = Field(min_length=1, max_length=1000)
+
+
+class BulkRecipientStatus(BulkRecipientIds):
+    status: RecipientStatus
+
+
+class BulkResult(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    affected: int
 
 
 class RecipientSummary(BaseModel):

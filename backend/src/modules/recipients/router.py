@@ -10,6 +10,9 @@ from src.core.schema import ApiResponse
 from src.modules.auth.dependencies import CurrentUserDep
 from src.modules.recipients import trail
 from src.modules.recipients.schemas import (
+    BulkRecipientIds,
+    BulkRecipientStatus,
+    BulkResult,
     Relationship,
     RecipientCreate,
     RecipientList,
@@ -123,9 +126,26 @@ def create_recipient(
     the information came from (MANUAL, EXCEL_IMPORT, CALL, WHATSAPP, MEETING, EMAIL, OTHER).
     """
     return ApiResponse(
-        data=recipient_service.create_recipient(str(tenant_id), payload, actor, source=trail.source_of(request.headers.get(trail.SOURCE_HEADER))),
+        data=recipient_service.create_recipient(
+            str(tenant_id), payload, actor, source=trail.source_of(request.headers.get(trail.SOURCE_HEADER)),
+            import_batch_id=(request.headers.get("X-Import-Batch") or "").strip() or None,
+        ),
         message="Recipient added successfully.",
     )
+
+
+@router.post("/tenants/{tenant_id}/recipients/bulk-delete", response_model=ApiResponse[BulkResult])
+def bulk_delete_recipients(tenant_id: UUID, payload: Annotated[BulkRecipientIds, Body()], actor: CurrentUserDep) -> ApiResponse[BulkResult]:
+    """Delete up to 1,000 recipients in one call. `affected` is how many were really deleted."""
+    count = recipient_service.bulk_soft_delete(str(tenant_id), [str(i) for i in dict.fromkeys(payload.recipient_ids)], actor)
+    return ApiResponse(data=BulkResult(affected=count), message=f"{count} recipient{'s' if count != 1 else ''} deleted.")
+
+
+@router.post("/tenants/{tenant_id}/recipients/bulk-status", response_model=ApiResponse[BulkResult])
+def bulk_recipient_status(tenant_id: UUID, payload: Annotated[BulkRecipientStatus, Body()], actor: CurrentUserDep) -> ApiResponse[BulkResult]:
+    """Archive or restore up to 1,000 recipients in one call."""
+    count = recipient_service.bulk_set_status(str(tenant_id), [str(i) for i in dict.fromkeys(payload.recipient_ids)], payload.status, actor)
+    return ApiResponse(data=BulkResult(affected=count), message=f"{count} recipient{'s' if count != 1 else ''} updated.")
 
 
 @router.get("/tenants/{tenant_id}/recipients/{recipient_id}", response_model=RecipientRead)

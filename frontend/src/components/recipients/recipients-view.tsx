@@ -133,11 +133,36 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
   const toggle = (id: string) => setSelected((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const togglePage = () => setSelected((current) => { const next = new Set(current); const all = rows.every((r) => next.has(String(r.id))); rows.forEach((r) => (all ? next.delete(String(r.id)) : next.add(String(r.id)))); return next; });
 
+  // Rows loaded when everyone matching the filters was selected, so they are not fetched again.
+  const rowCache = useRef(new Map<string, DirectoryRow>());
+  const filterQuery = () => {
+    const q = new URLSearchParams();
+    if (query) q.set("search", query);
+    if (filters.relationship) q.set("relationship", filters.relationship);
+    if (filters.city) q.set("city", filters.city);
+    if (filters.groupId) q.set("groupId", filters.groupId);
+    if (filters.status) q.set("status", filters.status);
+    if (filters.upcoming) q.set("upcomingDays", filters.upcoming);
+    return q.toString();
+  };
+  /** Selects every recipient that matches the current search and filters, on all pages, not only the ones shown. */
+  const selectAllMatching = async () => {
+    if (!ready) return;
+    setBusy(true);
+    try {
+      const qs = filterQuery();
+      const all = await loadAllModuleRecords(qs ? `${ready.recipients}?${qs}` : ready.recipients) as DirectoryRow[];
+      all.forEach((r) => rowCache.current.set(String(r.id), r));
+      setSelected(new Set(all.map((r) => String(r.id))));
+    } catch (err) { toast.error(getApiErrorMessage(err)); }
+    finally { setBusy(false); }
+  };
+
   /** Rows for the ticked people, even those on other pages. */
   const fetchSelected = async (): Promise<DirectoryRow[]> => {
     if (!ready) return [];
     const ids = [...selected];
-    const found: DirectoryRow[] = rows.filter((r) => selected.has(String(r.id)));
+    const found: DirectoryRow[] = ids.map((id) => rowCache.current.get(id) ?? rows.find((r) => String(r.id) === id)).filter((r): r is DirectoryRow => !!r);
     const missing = ids.filter((id) => !found.some((r) => String(r.id) === id));
     for (let i = 0; i < missing.length; i += 100) {
       const data = await getModuleRecords(ready.recipients, { recipientIds: missing.slice(i, i + 100).join(","), limit: 100, page: 1 });
@@ -157,16 +182,24 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
     finally { setBusy(false); }
   };
 
-  const setArchived = async (people: DirectoryRow[], archived: boolean) => {
-    if (!ready) return;
-    setBusy(true);
-    let done = 0;
-    for (const person of people) {
-      try { await mutateModule("patch", `${ready.recipients}/${person.id}`, { status: archived ? "ARCHIVED" : "ACTIVE" }); done++; }
-      catch (err) { toast.error(`${person.name}: ${getApiErrorMessage(err)}`); }
+  const bulk = async (path: "bulk-delete" | "bulk-status", people: DirectoryRow[], extra?: Record<string, unknown>) => {
+    let affected = 0;
+    const ids = people.map((p) => String(p.id));
+    for (let i = 0; i < ids.length; i += 1000) {
+      const result = await mutateModule("post", `${ready!.recipients}/${path}`, { recipientIds: ids.slice(i, i + 1000), ...extra }) as { affected?: number };
+      affected += result?.affected ?? 0;
     }
-    setBusy(false);
-    if (done) toast.success(`${done} recipient${done === 1 ? "" : "s"} ${archived ? "archived" : "restored"}.`);
+    return affected;
+  };
+
+  const setArchived = async (people: DirectoryRow[], archived: boolean) => {
+    if (!ready || !people.length) return;
+    setBusy(true);
+    try {
+      const done = await bulk("bulk-status", people, { status: archived ? "ARCHIVED" : "ACTIVE" });
+      toast.success(`${done} recipient${done === 1 ? "" : "s"} ${archived ? "archived" : "restored"}.`);
+    } catch (err) { toast.error(getApiErrorMessage(err)); }
+    finally { setBusy(false); }
     setSelected(new Set()); refresh();
   };
 
@@ -183,13 +216,11 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
   const remove = async () => {
     if (!confirm || !ready) return;
     setDeleting(true);
-    let done = 0;
-    for (const r of confirm) {
-      try { await mutateModule("delete", `${ready.recipients}/${r.id}`); done++; }
-      catch (err) { toast.error(`${r.name}: ${getApiErrorMessage(err)}`); }
-    }
+    try {
+      const done = await bulk("bulk-delete", confirm);
+      toast.success(`${done} recipient${done === 1 ? "" : "s"} deleted.`);
+    } catch (err) { toast.error(getApiErrorMessage(err)); }
     setDeleting(false); setConfirm(null); setTarget(null); setSelected(new Set());
-    if (done) toast.success(`${done} recipient${done === 1 ? "" : "s"} deleted.`);
     refresh();
   };
 
@@ -236,6 +267,7 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
         {selectedCount > 0 && <div role="region" aria-label="Selected recipients" aria-live="polite" className="flex flex-wrap items-center gap-1.5 rounded-xl border border-brand/20 bg-brand-soft/60 px-4 py-2.5">
           <span aria-hidden className="flex h-5 w-5 items-center justify-center rounded bg-brand text-white"><Check size={14} strokeWidth={3} /></span>
           <span className="font-semibold text-ink text-xs">{selectedCount} selected</span>
+          {selectedCount < total && <button type="button" disabled={busy} onClick={() => void selectAllMatching()} className="press inline-flex h-8 items-center rounded-md px-2.5 text-xs font-semibold text-brand hover:bg-white/70 disabled:opacity-50">Select all {total} recipients</button>}
           <Popover>
             <PopoverTrigger asChild><button type="button" disabled={busy} className={pill}><UserPlus size={16} className="text-brand" /> Add to Group</button></PopoverTrigger>
             <PopoverContent align="start" className="w-64 p-2">

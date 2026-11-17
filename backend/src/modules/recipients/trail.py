@@ -71,6 +71,21 @@ def record(
         logger.exception("recipient_trail_write_failed recipient=%s action=%s", recipient_id, action)
 
 
+def record_many(database: Any, tenant_id: str, recipient_ids: list[str], actor: Any, action: str, source: str = "MANUAL") -> None:
+    """One history row per person for a bulk action, written in as few inserts as possible. Never raises."""
+    name = (getattr(actor, "full_name", None) or "").strip() or str(getattr(actor, "email", "")).split("@")[0] or "Unknown"
+    base = {
+        "tenant_id": tenant_id, "actor_user_id": str(actor.id), "actor_name": name,
+        "actor_role": str(getattr(actor.role, "value", actor.role)), "action": action, "source": source_of(source),
+        "field": None, "old_value": None, "new_value": None,
+    }
+    try:
+        for start in range(0, len(recipient_ids), 500):
+            database.table("recipient_audit").insert([{**base, "recipient_id": rid} for rid in recipient_ids[start:start + 500]]).execute()
+    except Exception:  # noqa: BLE001
+        logger.exception("recipient_trail_bulk_write_failed action=%s", action)
+
+
 class TrailEntry(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 

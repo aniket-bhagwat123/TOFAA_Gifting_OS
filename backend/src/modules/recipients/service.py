@@ -333,6 +333,7 @@ class RecipientService:
         payload: RecipientCreate,
         actor: UserProfileResponse,
         source: str = "MANUAL",
+        import_batch_id: str | None = None,
     ) -> RecipientRead:
         require_permission(actor, Permission.RECIPIENT_CREATE)
         self._require_tenant_access(tenant_id, actor)
@@ -343,6 +344,8 @@ class RecipientService:
         values = self._without_missing_columns(payload.model_dump(mode="json", exclude={"allow_duplicate"}))
         if values.get("address") and not values.get("city"):
             values["city"] = values["address"]["city"]  # keep the plain city in step with the address
+        if import_batch_id:
+            values["import_batch_id"] = import_batch_id  # which import created this person, so the import can be reverted
         values.update(
             {
                 "tenant_id": tenant_id,
@@ -487,6 +490,35 @@ class RecipientService:
         if not result.data:
             raise HTTPException(status_code=404, detail="Recipient not found.")
         trail.record(self.database, tenant_id, recipient_id, actor, "DELETE")
+
+    def bulk_soft_delete(self, tenant_id: str, ids: list[str], actor: UserProfileResponse) -> int:
+        """Delete many recipients with a few queries (not one per person). Only people of this tenant that are not already deleted count."""
+        require_permission(actor, Permission.RECIPIENT_DELETE)
+        self._require_tenant_access(tenant_id, actor)
+        now = datetime.now(timezone.utc).isoformat()
+        done: list[str] = []
+        for start in range(0, len(ids), 150):
+            rows = (
+                self.database.table("recipients").update({"deleted_at": now, "updated_by_user_id": actor.id})
+                .eq("tenant_id", tenant_id).in_("id", ids[start:start + 150]).is_("deleted_at", "null").select("id").execute().data or []
+            )
+            done.extend(str(row["id"]) for row in rows)
+        trail.record_many(self.database, tenant_id, done, actor, "DELETE")
+        return len(done)
+
+    def bulk_set_status(self, tenant_id: str, ids: list[str], status: str, actor: UserProfileResponse) -> int:
+        """Archive or restore many recipients with a few queries."""
+        require_permission(actor, Permission.RECIPIENT_UPDATE)
+        self._require_tenant_access(tenant_id, actor)
+        done: list[str] = []
+        for start in range(0, len(ids), 150):
+            rows = (
+                self.database.table("recipients").update({"status": status, "updated_by_user_id": actor.id})
+                .eq("tenant_id", tenant_id).in_("id", ids[start:start + 150]).is_("deleted_at", "null").neq("status", status).select("id").execute().data or []
+            )
+            done.extend(str(row["id"]) for row in rows)
+        trail.record_many(self.database, tenant_id, done, actor, "ARCHIVE" if status == "ARCHIVED" else "RESTORE")
+        return len(done)
 
     def restore(self, tenant_id: str, recipient_id: str, actor: UserProfileResponse) -> RecipientRead:
         require_permission(actor, Permission.RECIPIENT_RESTORE)

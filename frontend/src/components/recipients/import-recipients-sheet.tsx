@@ -73,6 +73,12 @@ export function ImportRecipientsSheet({ open, endpoint, groupsEndpoint, onClose,
 
   const run = async () => {
     const failed: typeof failures = [];
+    // Record the import first, so it shows up in Activity and can be reverted. If that is not available the import still runs.
+    const batchesEndpoint = endpoint.replace(/\/recipients$/, "/import-batches");
+    let batchId: string | null = null;
+    try { batchId = ((await mutateModule("post", batchesEndpoint, { fileName: fileName || undefined, totalRows: table?.rows.length ?? valid.length })) as { id?: string })?.id ?? null; } catch { batchId = null; }
+    const headers = { "X-Change-Source": "EXCEL_IMPORT", ...(batchId ? { "X-Import-Batch": batchId } : {}) };
+    const madeGroupIds: string[] = [];
     const members = new Map<string, { name: string; ids: string[] }>(); // group -> the people just added to it
     let done = 0, finished = 0, next = 0;
     setPhase("people"); setProgress(0);
@@ -80,7 +86,7 @@ export function ImportRecipientsSheet({ open, endpoint, groupsEndpoint, onClose,
       while (next < valid.length) {
         const row = valid[next++];
         try {
-          const created = await mutateModule("post", endpoint, row.payload, undefined, { "X-Change-Source": "EXCEL_IMPORT" }) as { id?: string };
+          const created = await mutateModule("post", endpoint, row.payload, undefined, headers) as { id?: string };
           done++;
           if (created?.id) for (const g of row.groups) { const key = g.toLowerCase(); const entry = members.get(key) ?? { name: g, ids: [] }; entry.ids.push(created.id); members.set(key, entry); }
         } catch (error) { failed.push({ line: row.line, name: row.name, reason: getApiErrorMessage(error) }); }
@@ -101,11 +107,12 @@ export function ImportRecipientsSheet({ open, endpoint, groupsEndpoint, onClose,
         const found = current.find((g) => g.name.trim().toLowerCase() === key);
         try {
           if (found) { await mutateModule("put", `${groupsEndpoint}/${found.id}`, { name: found.name, recipientIds: [...new Set([...found.recipientIds, ...entry.ids])] }); filled++; }
-          else { await mutateModule("post", groupsEndpoint, { name: entry.name, recipientIds: entry.ids }); made++; }
+          else { const group = await mutateModule("post", groupsEndpoint, { name: entry.name, recipientIds: entry.ids }) as { id?: string }; if (group?.id) madeGroupIds.push(group.id); made++; }
         } catch (error) { groupProblems.push(`${entry.name}: ${getApiErrorMessage(error)}`); }
         setProgress(++step);
       }
     }
+    if (batchId) { try { await mutateModule("patch", `${batchesEndpoint}/${batchId}`, { createdCount: done, failedCount: failed.length + invalid.length, groupsCreated: madeGroupIds, groupsUpdated: filled }); } catch { /* the people are saved; only the history line is missing */ } }
     setProgress(null);
     if (done) { toast.success(`${done} recipient${done === 1 ? "" : "s"} added.${made || filled ? ` ${made ? `${made} group${made === 1 ? "" : "s"} created` : ""}${made && filled ? ", " : ""}${filled ? `${filled} group${filled === 1 ? "" : "s"} updated` : ""}.` : ""}`); onDone(); }
     if (groupProblems.length) toast.error(`Some groups could not be saved. ${groupProblems[0]}`);

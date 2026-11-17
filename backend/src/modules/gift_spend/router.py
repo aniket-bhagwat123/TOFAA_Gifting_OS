@@ -8,6 +8,8 @@ from fastapi import APIRouter, Body, Query, status
 from src.core.schema import ApiResponse
 from src.modules.auth.dependencies import CurrentUserDep
 from src.modules.gift_spend.schemas import (
+    BulkGroupDelete,
+    BulkGroupDeleteResult,
     DefaultBudgetRead,
     DefaultBudgetSet,
     DefaultBudgetTarget,
@@ -100,6 +102,13 @@ def delete_default_budget(
         str(tenant_id), target_type, str(target_id), str(group_id) if group_id else None, actor,
     )
     return ApiResponse(data={}, message="Budget removed successfully.")
+
+
+@router.post("/groups/bulk-delete", response_model=ApiResponse[BulkGroupDeleteResult])
+def bulk_delete_recipient_groups(tenant_id: UUID, payload: Annotated[BulkGroupDelete, Body()], actor: CurrentUserDep) -> ApiResponse[BulkGroupDeleteResult]:
+    """Delete up to 200 groups at once. Groups an occasion already uses are skipped and named in `blocked`."""
+    deleted, blocked = gift_spend_service.bulk_delete_groups(str(tenant_id), [str(i) for i in dict.fromkeys(payload.group_ids)], actor)
+    return ApiResponse(data=BulkGroupDeleteResult(deleted=deleted, blocked=blocked), message=f"{deleted} group{'s' if deleted != 1 else ''} deleted.")
 
 
 @router.delete("/groups/{group_id}", response_model=ApiResponse[dict])
