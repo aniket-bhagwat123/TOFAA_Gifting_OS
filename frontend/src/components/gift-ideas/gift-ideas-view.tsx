@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { DatePickerField } from "@/components/ui/date-picker-field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FormPanel } from "@/components/ui/form-panel";
-import { Sheet } from "@/components/ui/sheet";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { inputClass } from "@/components/gift-requests/shared";
 import { SendGiftDialog, type SendGiftTarget } from "@/components/recipients/send-gift-dialog";
@@ -123,14 +123,7 @@ export function GiftIdeasView() {
 
     {isAdmin && <IdeaForm idea={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void load(); }} />}
 
-    <Sheet open={!!deleting} locked={removing} labelledBy="delete-idea-title" className="max-w-md" onClose={() => setDeleting(null)}>
-      <h2 id="delete-idea-title" className="text-[17px] font-semibold text-ink">Delete this gift idea?</h2>
-      <p className="mt-2 text-sm text-muted">&ldquo;{deleting?.occasion}&rdquo; will be removed for every client. This can&apos;t be undone.</p>
-      <div className="mt-6 flex justify-end gap-3">
-        <Button variant="secondary" disabled={removing} onClick={() => setDeleting(null)}>Cancel</Button>
-        <Button className="bg-rose-600 hover:bg-rose-700" disabled={removing} onClick={() => void remove()}>{removing ? "Deleting…" : "Delete"}</Button>
-      </div>
-    </Sheet>
+    <DeleteDialog open={!!deleting} busy={removing} message={<>Are you sure you want to delete &ldquo;{deleting?.occasion}&rdquo;? It will be removed for every client.</>} onConfirm={() => void remove()} onClose={() => setDeleting(null)} />
 
     {clientTenantId && <SendGiftDialog target={sendTarget} tenantId={clientTenantId} onClose={() => setSendTarget(null)} onSent={() => setSendTarget(null)} />}
   </>;

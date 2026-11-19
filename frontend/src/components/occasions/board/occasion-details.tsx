@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CalendarDays, ChevronDown, Gift, Pencil, Repeat, Star, StickyNote, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { SidePanel } from "@/components/ui/side-panel";
 import { cn } from "@/lib/utils";
 import { STATUS_META as REQUEST_STATUS, day, inr } from "@/components/gift-requests/shared";
@@ -23,20 +24,23 @@ export function OccasionDetails({ item, tenantId, canPlan, onClose, onAct, onEdi
 }) {
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   // Birthdays and anniversaries read from a person's profile are changed there; a company occasion is editable only if it is the client's own.
   const editPath = item?.eventId ? `/tenants/${tenantId}/events/${item.eventId}` : item?.occasionId && !item.isGlobal ? `/tenants/${tenantId}/occasions/${item.occasionId}` : null;
   const deletePath = editPath;
   const action = item ? actionFor(item) : null;
 
   const remove = async () => {
-    if (!item || !deletePath || !window.confirm(`Delete ${item.sourceType === "COMPANY" ? item.name : `${item.name}'s ${item.label}`}? This can't be undone.`)) return;
+    if (!item || !deletePath) return;
     setBusy(true);
-    try { await mutateModule("delete", deletePath); toast.success("Occasion deleted."); onDeleted(); }
+    try { await mutateModule("delete", deletePath); toast.success("Occasion deleted."); setConfirmDelete(false); onDeleted(); }
     catch (err) { toast.error(getApiErrorMessage(err)); }
     finally { setBusy(false); }
   };
+  const deleteName = item ? (item.sourceType === "COMPANY" ? item.name : `${item.name}'s ${item.label}`) : "";
 
-  return <SidePanel open={!!item} labelledBy="occ-details-title" onClose={onClose} locked={busy}>
+  return <>
+  <SidePanel open={!!item} labelledBy="occ-details-title" onClose={onClose} locked={busy}>
     {item && action && <div className="space-y-5">
       <div className="flex items-start gap-4">
         <Subject item={item} size="h-16 w-16 text-xl" />
@@ -84,9 +88,11 @@ export function OccasionDetails({ item, tenantId, canPlan, onClose, onAct, onEdi
         {!item.eventId && item.sourceType === "RECIPIENT" && <p className="flex items-center gap-2 text-xs text-muted"><CalendarDays size={14} aria-hidden />This date comes from the person's profile. Change it there.</p>}
         {canPlan && deletePath && <div className="text-center">
           <button type="button" aria-expanded={more} onClick={() => setMore(!more)} className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-700 hover:text-ink">More options <ChevronDown size={16} className={cn("transition-transform", more && "rotate-180")} /></button>
-          {more && <div className="mt-2"><button type="button" disabled={busy} onClick={remove} className="press inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"><Trash2 size={15} />Delete occasion</button></div>}
+          {more && <div className="mt-2"><button type="button" disabled={busy} onClick={() => setConfirmDelete(true)} className="press inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"><Trash2 size={15} />Delete occasion</button></div>}
         </div>}
       </div>
     </div>}
-  </SidePanel>;
+  </SidePanel>
+  <DeleteDialog open={confirmDelete} busy={busy} message={`Are you sure you want to delete ${deleteName}?`} onConfirm={() => void remove()} onClose={() => setConfirmDelete(false)} />
+  </>;
 }

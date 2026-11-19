@@ -11,7 +11,7 @@ import { getApiErrorMessage } from "@/services/api-client";
 import { control, table } from "@/components/ui/table-styles";
 import { SearchInput } from "@/components/ui/search-input";
 import { Button } from "@/components/ui/button";
-import { Sheet } from "@/components/ui/sheet";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { PeopleTabs } from "@/components/modules/people-tabs";
 import { useTenantId } from "@/components/gift-requests/shared";
 import { SendGiftDialog, type SendGiftTarget } from "./send-gift-dialog";
@@ -70,6 +70,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const [removing, setRemoving] = useState<string | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState<{ group: RecipientGroup; id: string; name: string } | null>(null);
   const [deletingGroups, setDeletingGroups] = useState(false);
   const [addingTo, setAddingTo] = useState<RecipientGroup | null>(null);
   const [sendTarget, setSendTarget] = useState<SendGiftTarget | null>(null);
@@ -199,7 +200,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
       </div>
 
       {picked.size > 0 && <div role="region" aria-label="Selected groups" aria-live="polite" className="flex flex-wrap items-center gap-2 border-b border-line bg-brand-soft/60 px-4 py-2.5 sm:px-6">
-        <span aria-hidden className="flex h-5 w-5 items-center justify-center rounded bg-brand text-white"><Check size={14} strokeWidth={3} /></span>
+        <button type="button" role="checkbox" aria-checked="true" aria-label="Unselect all groups" onClick={() => setPicked(new Set())} className="press flex h-5 w-5 items-center justify-center rounded bg-brand text-white"><Check size={14} strokeWidth={3} /></button>
         <span className="text-xs font-semibold text-ink">{picked.size} selected</span>
         {picked.size < filtered.length && <button type="button" onClick={() => setPicked(new Set(filtered.map((g) => g.id)))} className="press inline-flex h-8 items-center rounded-md px-2.5 text-xs font-semibold text-brand hover:bg-white/70">Select all {filtered.length} groups</button>}
         <button type="button" onClick={() => setConfirmDelete(true)} className="press inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-xs font-medium text-rose-700 hover:bg-rose-50"><Trash2 size={15} /> Delete</button>
@@ -255,7 +256,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
                                 <td className={`${table.td} whitespace-nowrap tabular-nums text-slate-600`}>{prettyMobile(row?.mobileNumber)}</td>
                                 <td className={`${table.td} text-slate-600`}>{cityOf(row)}</td>
                                 <td className={`${table.td} whitespace-nowrap tabular-nums text-slate-600`}>{shortDate(row?.dateOfBirth)}</td>
-                                <td className={`${table.td} space-x-2 whitespace-nowrap text-right`}>{canSend && row && <Button size="sm" variant="secondary" onClick={() => sendToPerson(group, id, String(row.name ?? "Recipient"))}><Gift size={14} /> Send gift</Button>}<Button size="sm" variant="secondary" className="text-rose-700" disabled={removing === id || !canRemove} title={canRemove ? undefined : "A group needs at least one recipient"} aria-label={`Remove ${String(row?.name ?? "recipient")} from ${group.name}`} onClick={() => void removeMember(group, id, String(row?.name ?? ""))}>Remove</Button></td>
+                                <td className={`${table.td} space-x-2 whitespace-nowrap text-right`}>{canSend && row && <Button size="sm" variant="secondary" onClick={() => sendToPerson(group, id, String(row.name ?? "Recipient"))}><Gift size={14} /> Send gift</Button>}<Button size="sm" variant="secondary" className="text-rose-700" disabled={removing === id || !canRemove} title={canRemove ? undefined : "A group needs at least one recipient"} aria-label={`Remove ${String(row?.name ?? "recipient")} from ${group.name}`} onClick={() => setMemberToRemove({ group, id, name: String(row?.name ?? "") })}>Remove</Button></td>
                               </tr>)}
                             </tbody>
                           </table>
@@ -264,7 +265,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
                               <p className="font-medium capitalize text-ink">{row ? String(row.name ?? "Unnamed") : <span className="text-muted">Removed recipient</span>}</p>
                               <dl className="grid grid-cols-3 gap-2 text-sm"><div><dt className="text-muted">Mobile</dt><dd className="font-medium text-ink">{prettyMobile(row?.mobileNumber)}</dd></div><div><dt className="text-muted">City</dt><dd className="font-medium text-ink">{cityOf(row)}</dd></div><div><dt className="text-muted">Birthday</dt><dd className="font-medium text-ink">{shortDate(row?.dateOfBirth)}</dd></div></dl>
                               {canSend && row && <Button size="sm" variant="secondary" className="w-full" onClick={() => sendToPerson(group, id, String(row.name ?? "Recipient"))}><Gift size={14} /> Send gift</Button>}
-                              <Button size="sm" variant="secondary" className="w-full text-rose-700" disabled={removing === id || !canRemove} onClick={() => void removeMember(group, id, String(row?.name ?? ""))}>Remove</Button>
+                              <Button size="sm" variant="secondary" className="w-full text-rose-700" disabled={removing === id || !canRemove} onClick={() => setMemberToRemove({ group, id, name: String(row?.name ?? "") })}>Remove</Button>
                             </li>)}
                           </ul>
                         </div>}
@@ -275,11 +276,9 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
     </section>
 
     {canSend && <SendGiftDialog target={sendTarget} tenantId={tenantId!} onClose={() => setSendTarget(null)} onSent={() => setSendTarget(null)} />}
-    <Sheet open={confirmDelete} locked={deletingGroups} zIndex="z-[90]" labelledBy="delete-groups-title" className="max-w-[26rem]" onClose={() => setConfirmDelete(false)}>
-      <h2 id="delete-groups-title" className="text-[17px] font-semibold text-ink">Delete {picked.size === 1 ? "this group" : `${picked.size} groups`}?</h2>
-      <p className="mt-2 text-sm text-muted">The people in {picked.size === 1 ? "it" : "them"} stay in your recipients; only the {picked.size === 1 ? "group is" : "groups are"} removed. Groups an occasion already uses are skipped.</p>
-      <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="secondary" disabled={deletingGroups} onClick={() => setConfirmDelete(false)}>Cancel</Button><Button className="bg-rose-600 hover:bg-rose-700" disabled={deletingGroups} onClick={() => void deleteGroups()}>{deletingGroups ? "Deleting…" : "Delete"}</Button></div>
-    </Sheet>
+    <DeleteDialog open={!!memberToRemove} busy={!!memberToRemove && removing === memberToRemove.id} title="Remove" confirmLabel="Yes, Remove" message={`Are you sure you want to remove ${memberToRemove?.name || "this recipient"} from ${memberToRemove?.group.name ?? "this group"}? They stay in your recipients.`}
+      onConfirm={async () => { const m = memberToRemove; if (!m) return; await removeMember(m.group, m.id, m.name); setMemberToRemove(null); }} onClose={() => setMemberToRemove(null)} />
+    <DeleteDialog open={confirmDelete} busy={deletingGroups} message={`Are you sure you want to delete ${picked.size === 1 ? "this group" : `${picked.size} groups`}? The people in ${picked.size === 1 ? "it" : "them"} stay in your recipients.`} onConfirm={() => void deleteGroups()} onClose={() => setConfirmDelete(false)} />
     <AddRecipientsSheet group={addingTo} recipients={everyone} loading={everyoneLoading || (!!addingTo && !everyone)} onClose={() => setAddingTo(null)} onSubmit={(ids, rows) => addMembers(addingTo!, ids, rows)} />
     <GroupSheet group={groupSheet} endpoint={ready?.groups ?? ""} recipients={everyone ?? []} loadingRecipients={everyoneLoading} onClose={() => setGroupSheet(null)} onSaved={() => { setGroupSheet(null); void load(); }} />
   </>;

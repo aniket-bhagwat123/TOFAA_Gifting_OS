@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet } from "@/components/ui/sheet";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { Button } from "@/components/ui/button";
 import { RequiredMark } from "@/components/ui/required-mark";
 import { RecipientMultiSelect } from "@/components/modules/recipient-multi-select";
@@ -58,16 +59,7 @@ export function GroupSheet({ group, endpoint, recipients, presetIds, loadingReci
 
   return (
     <Sheet open={!!group} onClose={onClose} labelledBy={titleId} locked={busy} className="max-w-lg">
-      {confirmDelete ? (
-        <>
-          <h2 id={titleId} className="text-[17px] font-semibold text-ink">Delete this group?</h2>
-          <p className="mt-2 text-sm text-muted">Delete &ldquo;{editing?.name}&rdquo;? The recipients stay; only the group is removed.</p>
-          <div className="mt-6 flex justify-end gap-3">
-            <Button variant="secondary" disabled={busy} onClick={() => setConfirmDelete(false)}>Keep group</Button>
-            <Button variant="danger" disabled={busy} onClick={() => void remove()}>{busy ? "Deleting…" : "Yes, delete"}</Button>
-          </div>
-        </>
-      ) : (
+      {(
         <form noValidate onSubmit={(e) => void save(e)}>
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -113,6 +105,7 @@ export function GroupSheet({ group, endpoint, recipients, presetIds, loadingReci
           </div>
         </form>
       )}
+      <DeleteDialog open={confirmDelete} busy={busy} message={<>Are you sure you want to delete &ldquo;{editing?.name}&rdquo;? The recipients stay; only the group is removed.</>} onConfirm={() => void remove()} onClose={() => setConfirmDelete(false)} />
     </Sheet>
   );
 }

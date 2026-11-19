@@ -25,6 +25,7 @@ import { PasswordField } from "@/components/ui/password-field";
 import { RequiredMark } from "@/components/ui/required-mark";
 import { Avatar } from "@/components/ui/avatar";
 import { ImageUpload, deleteImage, sendImage } from "@/components/ui/image-upload";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { generatePassword, PASSWORD_MIN } from "@/lib/password";
 import { rowsOf, loadAllModuleRecords, formatTimestamp, labelOf, moneyColumns, dateColumns } from "@/features/modules/module-utils";
 import Link from "next/link";
@@ -397,7 +398,8 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
             })}
           </div>
     </FormPanel>
-    <Sheet open={!!dialog} locked={saving} zIndex="z-[90]" labelledBy="action-dialog-title" className="max-w-md" onClose={() => setDialog(null)}>
+    <DeleteDialog open={dialog?.kind === "confirm" && dialog.icon === "delete"} busy={saving} message={dialog?.kind === "confirm" ? `Are you sure you want to delete this ${noun}?` : ""} onConfirm={() => void (dialog?.kind === "confirm" && dialog.onConfirm())} onClose={() => setDialog(null)} />
+    <Sheet open={!!dialog && !(dialog.kind === "confirm" && dialog.icon === "delete")} locked={saving} zIndex="z-[90]" labelledBy="action-dialog-title" className="max-w-md" onClose={() => setDialog(null)}>
       {dialog && <>
         <div className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full ${dialog.kind === "confirm" && dialog.destructive ? "bg-rose-50 text-rose-600" : "bg-brand/10 text-brand"}`}>
           {dialog.kind === "action" ? <ShieldQuestion size={26} /> : dialog.icon === "delete" ? <Trash2 size={25} /> : <Power size={25} />}

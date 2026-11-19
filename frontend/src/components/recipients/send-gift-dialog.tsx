@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getModuleRecords, mutateModule } from "@/features/modules/module.service";
 import { getApiErrorMessage } from "@/services/api-client";
-import { Plus, X } from "lucide-react";
+import { ChevronDown, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { loadAllModuleRecords } from "@/features/modules/module-utils";
 import { RecipientMultiSelect } from "@/components/modules/recipient-multi-select";
@@ -57,6 +57,7 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
   const [directoryState, setDirectoryState] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null });
   const [pickedGroups, setPickedGroups] = useState<string[]>([]);
   const [pickedPeople, setPickedPeople] = useState<string[]>([]);
+  const [showEach, setShowEach] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
@@ -64,7 +65,7 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
     if (!target) return;
     setTitle(target.pickRecipients || target.occasionId || target.event ? target.title : ""); setBudget(target.budget ? String(target.budget) : ""); setOwn({}); setSearch(""); setNote(target.note ?? ""); setError(null);
     setPoc(null); setDate(target.date && target.date >= today() ? target.date : today()); setTime(""); setOther({ line1: "", line2: "", city: "", postalCode: "" });
-    setPickedGroups([]); setPickedPeople([]);
+    setPickedGroups([]); setPickedPeople([]); setShowEach(false);
     if (!target.pickRecipients) return;
     // Choosing who gets it: load the client's groups and people.
     let cancelled = false;
@@ -111,13 +112,15 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
 
   const groupAmount = Number(budget);
   const groupValid = Number.isFinite(groupAmount) && groupAmount > 0;
-  // What each person gets: their own amount if one is entered, otherwise the amount for everyone.
+  // What each person gets: their own amount if one is entered, otherwise the amount for everyone. A budget cleared on purpose means no gift for that person.
   const amounts = useMemo(() => people.map((p) => {
     const raw = own[p.id]?.trim();
+    const skip = raw === "";
     const mine = raw ? Number(raw) : NaN;
-    return { ...p, amount: Number.isFinite(mine) && mine > 0 ? mine : groupValid ? groupAmount : null, custom: !!raw };
+    return { ...p, skip, amount: skip ? null : Number.isFinite(mine) && mine > 0 ? mine : groupValid ? groupAmount : null, custom: !!raw };
   }), [people, own, groupValid, groupAmount]);
-  const missing = amounts.some((p) => p.amount === null);
+  const missing = amounts.some((p) => p.amount === null && !p.skip);
+  const sendList = amounts.filter((p) => p.amount !== null);
   const total = amounts.reduce((sum, p) => sum + (p.amount ?? 0), 0);
   const credits = creditsApply && unitPriceMinor ? amounts.reduce((sum, p) => sum + (p.amount ? creditsFor(p.amount, unitPriceMinor) : 0), 0) : null;
   const short = credits !== null && available !== null && credits > available;
@@ -142,18 +145,19 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
       }
     }
     if (missing) { setError(people.length > 1 ? "Enter a budget for everyone, or a budget for each person." : "Enter a budget greater than 0."); return; }
+    if (!sendList.length) { setError("Enter a budget for at least one person."); return; }
     setSending(true); setError(null);
     try {
       // One request per distinct amount, since each send uses a single budget.
       const byAmount = new Map<number, string[]>();
-      for (const p of amounts) byAmount.set(p.amount!, [...(byAmount.get(p.amount!) ?? []), p.id]);
+      for (const p of sendList)byAmount.set(p.amount!, [...(byAmount.get(p.amount!) ?? []), p.id]);
       const details = { note: note.trim() || undefined, deliveryDate: date, deliveryTime: time || undefined, deliveryAddress, pocName: poc?.name.trim() || undefined, pocMobile };
       let created = 0, skipped = 0;
       if (target?.event) {
         // A person's birthday, anniversary or event. A birthday has no event record until the first time you send for it.
         let eventId = target.event.eventId;
         if (!eventId) eventId = (await mutateModule("post", `/tenants/${tenantId}/recipients/${target.event.recipientId}/events`, { eventName: target.event.name, eventDate: target.date ?? date }) as { id: string }).id;
-        const result = await mutateModule("post", `/tenants/${tenantId}/events/${eventId}/send`, { budgetPerRecipient: amounts[0].amount, ...details }) as Result;
+        const result = await mutateModule("post", `/tenants/${tenantId}/events/${eventId}/send`, { budgetPerRecipient: sendList[0].amount, ...details }) as Result;
         created += result.createdCount; skipped += result.skippedCount;
       } else {
         // An existing occasion, or a one-off one named by the title.
@@ -177,7 +181,7 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
   const many = people.length > 1;
   const single = people.length === 1;
   const shown = people.filter((p) => !search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase()));
-  const customCount = people.filter((p) => own[p.id]?.trim() && own[p.id].trim() !== budget.trim()).length;
+  const customCount = people.filter((p) => own[p.id] !== undefined && own[p.id].trim() !== budget.trim()).length;
   return <Sheet open={!!target} locked={sending} labelledBy="send-gift-title" className="max-w-lg" onClose={onClose}>
     {target && <form noValidate onSubmit={send} className="space-y-5">
       <div>
@@ -204,22 +208,23 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
       </label>
 
       {many && <div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-medium text-ink">Budget for each recipient</p>
-          <span className="text-xs text-muted">{customCount ? `${customCount} adjusted` : "Change any amount below"}</span>
-        </div>
-        {people.length > 8 && <input type="search" aria-label="Search recipients" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search recipients" className={`${inputClass} mt-2`} />}
-        <ul className="mt-2 max-h-64 divide-y divide-line/70 overflow-auto rounded-xl border border-line">
+        <button type="button" aria-expanded={showEach} onClick={() => setShowEach((v) => !v)} className="flex w-full flex-wrap items-center justify-between gap-2 text-left">
+          <span className="flex items-center gap-1.5 text-sm font-medium text-ink">Budget for each recipient <ChevronDown size={16} className={`transition-transform ${showEach ? "rotate-180" : ""}`} /></span>
+          <span className="text-xs text-muted">{customCount ? `${customCount} adjusted` : "Change an amount, or leave it empty"}</span>
+        </button>
+        {showEach && people.length > 8 &&<input type="search" aria-label="Search recipients" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search recipients" className={`${inputClass} mt-2`} />}
+        {showEach && <ul className="mt-2 max-h-64 divide-y divide-line/70 overflow-auto rounded-xl border border-line">
           {shown.map((p) => {
-            const custom = own[p.id]?.trim() !== undefined && own[p.id]?.trim() !== "" && own[p.id].trim() !== budget.trim();
+            const empty = own[p.id]?.trim() === "";
+            const custom = !empty && own[p.id] !== undefined && own[p.id].trim() !== budget.trim();
             return <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2">
-              <span className="min-w-0 truncate text-sm capitalize text-ink">{p.name}{custom && <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium normal-case text-amber-800">Adjusted</span>}</span>
-              <input aria-label={`Budget for ${p.name}`} type="number" min={1} step="any" inputMode="decimal" value={own[p.id] ?? budget} placeholder="Budget"
-                onChange={(event) => { const v = event.target.value; setOwn((c) => { const next = { ...c }; if (v === "" || v === budget) delete next[p.id]; else next[p.id] = v; return next; }); setError(null); }} className={`${inputClass} !w-32 shrink-0`} />
+              <span className="min-w-0 truncate text-sm capitalize text-ink">{p.name}{custom && <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium normal-case text-amber-800">Adjusted</span>}{empty && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium normal-case text-slate-600">No gift</span>}</span>
+              <input aria-label={`Budget for ${p.name}`} type="number" min={1} step="any" inputMode="decimal" value={own[p.id] ?? budget} placeholder="No budget"
+                onChange={(event) => { const v = event.target.value; setOwn((c) => { const next = { ...c }; if (v !== "" && v === budget) delete next[p.id]; else next[p.id] = v; return next; }); setError(null); }} className={`${inputClass} !w-32 shrink-0`} />
             </li>;
           })}
           {!shown.length && <li className="px-3 py-4 text-center text-sm text-muted">No recipients match.</li>}
-        </ul>
+        </ul>}
       </div>}
 
       <DateTimePickerField id="sg-date" label="Delivery date & time" required date={date} time={time} onDate={setDate} onTime={setTime} minDate={new Date(new Date().setHours(0, 0, 0, 0))} placeholder="Select delivery date and time" />
@@ -263,7 +268,7 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
       </label>
 
       <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
-        <div className="flex items-center justify-between"><span className="text-muted">{people.length} {people.length === 1 ? "person" : "people"}</span><span className="font-semibold tabular-nums text-ink">{missing ? "—" : inr(total)}</span></div>
+        <div className="flex items-center justify-between"><span className="text-muted">{sendList.length} {sendList.length === 1 ? "person" : "people"}</span><span className="font-semibold tabular-nums text-ink">{missing ? "—" : inr(total)}</span></div>
         {credits !== null && !missing && <p className="mt-1 text-xs text-muted">About {num(credits)} credits{available !== null ? ` · you have ${num(available)} free` : ""}</p>}
       </div>
       {short && <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">This is more than your free credits ({num(available ?? 0)}). Request credits first, or lower the budget.</p>}

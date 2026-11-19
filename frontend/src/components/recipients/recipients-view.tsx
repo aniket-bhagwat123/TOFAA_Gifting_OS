@@ -10,7 +10,7 @@ import { moduleConfig } from "@/features/modules/module-config";
 import { loadAllModuleRecords, rowsOf } from "@/features/modules/module-utils";
 import { getModuleRecords, mutateModule } from "@/features/modules/module.service";
 import { getApiErrorMessage } from "@/services/api-client";
-import { Sheet } from "@/components/ui/sheet";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { Button } from "@/components/ui/button";
 import { FilterMenu } from "@/components/ui/filter-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -317,10 +317,6 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
     <GroupSheet group={groupSheet} endpoint={ready?.groups ?? ""} recipients={everyone} loadingRecipients={!everyone.length} presetIds={groupPreset} onClose={() => setGroupSheet(null)} onSaved={() => { if (groupSheet === "new" && groupPreset.length) setSelected(new Set()); setGroupSheet(null); refresh(); }} />
     {clientTenantId && <SendGiftDialog target={sendTarget} tenantId={clientTenantId} onClose={() => setSendTarget(null)} onSent={() => setSendTarget(null)} />}
     <ImportRecipientsSheet open={importOpen} endpoint={ready?.recipients ?? ""} groupsEndpoint={ready?.groups ?? ""} onClose={() => setImportOpen(false)} onDone={refresh} />
-    <Sheet open={!!confirm} locked={deleting} zIndex="z-[90]" labelledBy="confirm-delete-title" className="max-w-[26rem]" onClose={() => setConfirm(null)}>
-      <h2 id="confirm-delete-title" className="text-[17px] font-semibold text-ink">Delete {confirm && confirm.length > 1 ? `${confirm.length} recipients` : "this recipient"}?</h2>
-      <p className="mt-2 text-sm text-muted">{confirm && confirm.length === 1 ? `${confirm[0].name} will be removed. ` : ""}This can&apos;t be undone.</p>
-      <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="secondary" disabled={deleting} onClick={() => setConfirm(null)}>Cancel</Button><Button variant="danger" disabled={deleting} onClick={() => void remove()}>{deleting ? "Deleting…" : "Yes, delete"}</Button></div>
-    </Sheet>
+    <DeleteDialog open={!!confirm} busy={deleting} message={confirm && confirm.length > 1 ? `Are you sure you want to delete ${confirm.length} recipients?` : `Are you sure you want to delete ${confirm?.[0]?.name ?? "this recipient"}?`} onConfirm={() => void remove()} onClose={() => setConfirm(null)} />
   </>;
 }
