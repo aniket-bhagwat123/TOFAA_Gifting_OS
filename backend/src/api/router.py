@@ -5,6 +5,7 @@ from src.modules.auth.schemas import UserProfileResponse
 from src.modules.auth.rbac import Role
 from src.modules.auth.router import router as auth_router
 from src.modules.crm_banners.router import router as banners_router
+from src.modules.crm_people.router import router as crm_people_router
 from src.modules.gift_ideas.router import router as gift_ideas_router
 from src.modules.credits.router import router as credits_router
 from src.modules.dashboard.router import router as dashboard_router
@@ -29,6 +30,8 @@ api_router.include_router(invitation_router)
 api_router.include_router(tenants_router)
 # Banners come from TOFAA CRM and are the same for everyone (not tied to a client), so they sit outside the tenant guard.
 api_router.include_router(banners_router)
+# The CRM (master copy of People) says People changed: server to server, shared key, no signed-in user.
+api_router.include_router(crm_people_router)
 api_router.include_router(gift_ideas_router)
 
 # Everything else validates the tenant ID on every request.

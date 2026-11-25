@@ -13,6 +13,9 @@ os.environ["SUPABASE_SERVICE_ROLE_KEY"] = "test-service-role-key"
 os.environ["SUPABASE_JWT_SECRET"] = "super-secret-test-jwt-key-32-chars-long!"
 os.environ["SUPABASE_JWT_ALGORITHM"] = "HS256"
 os.environ["SUPABASE_JWT_AUDIENCE"] = "authenticated"
+# Tests never reach a real CRM (banners, People). A test that needs it sets these itself and fakes the calls.
+os.environ["CRM_API_URL"] = ""
+os.environ["CRM_API_KEY"] = ""
 
 from src.core.config import get_settings
 # Clear lru_cache to pick up testing environment

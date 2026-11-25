@@ -3,6 +3,7 @@ import json
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 import logging
+import os
 from typing import AsyncGenerator
 from uuid import uuid4
 
@@ -25,7 +26,11 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    # Startup actions
+    # Startup actions: catch the People mirror up with the CRM (in the background; tests never call out)
+    if not os.environ.get("PYTEST_CURRENT_TEST"):
+        from src.modules.crm_people.sync import people_mirror
+
+        people_mirror.catch_up_in_background()
     yield
     # Shutdown actions
 

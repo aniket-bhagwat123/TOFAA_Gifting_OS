@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     # 0 = ask the CRM on every dashboard load, so a banner uploaded or deleted there shows on the very next page open.
     # (The CRM keeps its own copy, cleared the moment any banner changes, so this stays fast.)
     CRM_BANNERS_CACHE_SECONDS: float = 0
+    # People are mastered in the CRM too: every People change is saved there (same URL and key), with this time limit.
+    CRM_PEOPLE_TIMEOUT_SECONDS: float = 20
 
     # Supabase Settings
     SUPABASE_URL: str = "https://mock.supabase.co"

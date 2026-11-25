@@ -48,6 +48,30 @@ class TableFake:
         return call
 
 
+class CrmFake:
+    """Stands in for the CRM People API: records each call and answers with what the test set."""
+
+    def __init__(self, answer=None, error=None):
+        self.calls, self.answer, self.error, self.synced = [], answer, error, []
+
+    def company_id(self, tenant_id, actor):
+        return "crm-company-1"
+
+    def call(self, method, path, tenant_id, actor, **kwargs):
+        self.calls.append((method, path, kwargs.get("json")))
+        if self.error:
+            raise self.error
+        return self.answer
+
+    def sync_ids(self, ids):
+        self.synced.extend(ids)
+
+
+def use_crm(monkeypatch, fake, module="service"):
+    monkeypatch.setattr(f"src.modules.recipients.{module}.crm_people", fake)
+    monkeypatch.setattr(f"src.modules.recipients.{module}.people_mirror", SimpleNamespace(sync_ids=fake.sync_ids))
+
+
 # ------------------------------------------------------------------------------------------ completeness
 def test_only_the_name_is_needed_to_start_and_extras_never_lower_the_score():
     bare = completeness.compute({"name": "A", "recipient_type": "INDIVIDUAL"})
@@ -112,24 +136,35 @@ def test_a_recipient_needs_only_a_name():
             create_payload(**bad)
 
 
-def test_a_possible_duplicate_stops_the_save_and_lists_the_matches():
-    db = TableFake({"recipients": [person(id="existing", name="Rohan Mehta")]})
+def test_a_possible_duplicate_stops_the_save_and_lists_the_matches(monkeypatch):
+    """The CRM (master copy) finds duplicates; its answer reaches the screen unchanged and nothing is written here."""
+    duplicates = {"duplicates": [{"id": "existing", "name": "Rohan Mehta", "reasons": ["SAME_MOBILE"]}]}
+    crm = CrmFake(error=ApiError(409, "This person may already be in this client's people.", duplicates))
+    use_crm(monkeypatch, crm)
+    db = TableFake({"recipients": []})
     with pytest.raises(ApiError) as caught:
         RecipientService(database=db).create_recipient(TENANT, create_payload(mobileNumber="+919876543210"), actor("SUPER_ADMIN"))
     assert caught.value.status_code == 409
     match = caught.value.data["duplicates"][0]
     assert match["id"] == "existing" and "SAME_MOBILE" in match["reasons"]
-    assert not any(method == "insert" and table == "recipients" for table, method, _ in db.writes)
+    assert db.writes == [] and crm.synced == []
 
 
-def test_after_the_user_confirms_the_person_is_saved_and_recorded_in_history():
+def test_after_the_user_confirms_the_person_is_saved_in_the_crm_and_mirrored(monkeypatch):
+    crm = CrmFake(answer={"id": "new-one"})
+    use_crm(monkeypatch, crm)
     db = TableFake({"recipients": [person(id="new-one", name="Rohan Mehta")]})
-    saved = RecipientService(database=db).create_recipient(TENANT, create_payload(allowDuplicate=True), actor("SUPER_ADMIN"), source="CALL")
+    saved = RecipientService(database=db).create_recipient(
+        TENANT, create_payload(allowDuplicate=True, company="Acme", recipientType="BUSINESS"), actor("SUPER_ADMIN"), import_batch_id="batch-7")
     assert saved.id == "new-one"
-    inserted = next(rows for table, method, rows in db.writes if table == "recipients" and method == "insert")
-    assert "allow_duplicate" not in inserted
-    audit = next(rows for table, _, rows in db.writes if table == "recipient_audit")
-    assert audit[0]["action"] == "CREATE" and audit[0]["source"] == "CALL"
+    method, path, body = crm.calls[0]
+    assert (method, path) == ("POST", "/people")
+    assert body["companyId"] == "crm-company-1" and body["allowDuplicate"] is True and body["name"] == "Rohan Mehta"
+    assert body["companyName"] == "Acme" and body["recipientType"] == "EXTERNAL"  # renamed field, old type name
+    assert crm.synced == ["new-one"]
+    local = next(rows for table, method, rows in db.writes if table == "recipients" and method == "update")
+    assert local == {"created_by_user_id": "u1", "updated_by_user_id": "u1", "import_batch_id": "batch-7"}
+    assert not any(table == "recipients" and method == "insert" for table, method, _ in db.writes)
 
 
 # ---------------------------------------------------------------------------------------------- conflicts
@@ -142,19 +177,31 @@ def test_saving_from_an_old_version_is_refused_with_the_latest_copy():
     assert not any(method == "update" for _, method, _ in db.writes)
 
 
-def test_a_matching_version_saves_bumps_the_version_and_writes_history():
+def test_an_edit_goes_to_the_crm_with_the_version_and_is_mirrored(monkeypatch):
+    crm = CrmFake(answer={"id": "r1"})
+    use_crm(monkeypatch, crm)
     db = TableFake({"recipients": [person(version=3)]})
-    RecipientService(database=db).update_recipient(TENANT, "r1", RecipientUpdate.model_validate({"mobileNumber": "+919000000000", "version": 3}), actor("SUPER_ADMIN"), source="MEETING")
-    values = next(rows for table, method, rows in db.writes if table == "recipients" and method == "update")
-    assert values["version"] == 4 and "version" in values and values["mobile_number"] == "+919000000000"
-    audit = next(rows for table, _, rows in db.writes if table == "recipient_audit")
-    assert (audit[0]["field"], audit[0]["old_value"], audit[0]["new_value"], audit[0]["source"]) == ("mobile_number", "+919876543210", "+919000000000", "MEETING")
+    RecipientService(database=db).update_recipient(TENANT, "r1", RecipientUpdate.model_validate({"mobileNumber": "+919000000000", "version": 3}), actor("SUPER_ADMIN"))
+    assert crm.calls == [("PATCH", "/people/r1", {"mobileNumber": "+919000000000", "version": 3})]
+    assert crm.synced == ["r1"]
 
 
-def test_archiving_is_recorded_as_an_archive_not_an_edit():
+def test_a_crm_version_conflict_returns_the_latest_copy(monkeypatch):
+    crm = CrmFake(error=ApiError(409, "Someone else saved this person.", {"reason": "VERSION_CONFLICT"}))
+    use_crm(monkeypatch, crm)
+    db = TableFake({"recipients": [person(version=3, name="Changed by the KAM")]})
+    with pytest.raises(ApiError) as caught:
+        RecipientService(database=db).update_recipient(TENANT, "r1", RecipientUpdate.model_validate({"remark": "mine", "version": 3}), actor("SUPER_ADMIN"))
+    assert caught.value.data["reason"] == "VERSION_CONFLICT" and caught.value.data["current"]["name"] == "Changed by the KAM"
+    assert crm.synced == ["r1"]  # the mirror was refreshed before answering
+
+
+def test_archiving_is_sent_to_the_crm_as_a_status_change(monkeypatch):
+    crm = CrmFake(answer={"id": "r1"})
+    use_crm(monkeypatch, crm)
     db = TableFake({"recipients": [person()]})
     RecipientService(database=db).update_recipient(TENANT, "r1", RecipientUpdate.model_validate({"status": "ARCHIVED"}), actor("SUPER_ADMIN"))
-    assert next(rows for table, _, rows in db.writes if table == "recipient_audit")[0]["action"] == "ARCHIVE"
+    assert crm.calls == [("PATCH", "/people/r1", {"status": "ARCHIVED", "version": 3})]
 
 
 def test_a_patch_that_only_carries_a_version_is_not_a_change():
@@ -194,15 +241,18 @@ def test_a_person_cannot_be_related_to_themselves_or_listed_twice(monkeypatch):
         service.save_relationships(TENANT, "r1", twice, actor(), "MANUAL")
 
 
-def test_the_first_address_becomes_the_default(monkeypatch):
+def test_a_new_address_is_saved_in_the_crm(monkeypatch):
     from src.modules.recipients.profile import AddressBody
 
-    db = TableFake({"recipient_addresses": []})
+    crm = CrmFake(answer={"id": "a1"})
+    use_crm(monkeypatch, crm, module="profile")
+    db = TableFake({"recipient_addresses": [{"id": "a1", "label": "PERMANENT", "address_line1": "1 Marine Drive", "city": "Mumbai",
+                                             "postal_code": "400001", "country": "IN", "is_default": True}]})
     use(monkeypatch, db)
-    # The insert result comes back from the same fake table; give it a row to return.
-    db.tables["recipient_addresses"] = [{"id": "a1", "label": "OFFICE", "address_line1": "1 Marine Drive", "city": "Mumbai", "postal_code": "400001", "country": "IN", "is_default": True}]
-    service = ProfileService()
-    service.list_addresses = lambda *_a, **_k: []  # no address yet
-    service.add_address(TENANT, "r1", AddressBody.model_validate({"label": "OFFICE", "addressLine1": "1 Marine Drive", "city": "Mumbai", "postalCode": "400001"}), actor(), "MANUAL")
-    inserted = next(rows for table, method, rows in db.writes if table == "recipient_addresses" and method == "insert")
-    assert inserted["is_default"] is True
+    saved = ProfileService().add_address(TENANT, "r1", AddressBody.model_validate(
+        {"label": "RESIDENTIAL", "addressLine1": "1 Marine Drive", "city": "Mumbai", "postalCode": "400001"}), actor(), "MANUAL")
+    method, path, body = crm.calls[0]
+    assert (method, path) == ("POST", "/people/r1/addresses")
+    assert body["label"] == "PERMANENT" and body["addressLine1"] == "1 Marine Drive"  # old label name mapped
+    assert saved.id == "a1" and crm.synced == ["r1"]
+    assert db.writes == []  # the CRM decides the default; the mirror only follows

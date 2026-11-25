@@ -3,23 +3,25 @@
 import logging
 import re
 import time
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import Any
 
 from fastapi import HTTPException
 from supabase import Client
 
-from src.core import images
 from src.core.config import settings
 from src.core.concurrency import run_parallel
 from src.core.errors import ApiError
 from src.core.ttl_cache import MISSING, lookups
 from src.core.pagination import PaginationMeta, next_page_cursor
 from src.core.supabase import get_supabase_admin_client
-from src.modules.auth.rbac import Permission, Role, require_permission
+from src.modules.auth.rbac import Permission, require_permission
 from src.modules.auth.schemas import UserProfileResponse
 from src.modules.tenants.service import tenant_service
-from src.modules.recipients import completeness, trail
+from src.modules.crm_people import mapping
+from src.modules.crm_people.client import crm_people
+from src.modules.crm_people.sync import people_mirror
+from src.modules.recipients import completeness
 from src.modules.recipients.schemas import (
     GroupRef,
     NextOccasion,
@@ -335,46 +337,25 @@ class RecipientService:
         source: str = "MANUAL",
         import_batch_id: str | None = None,
     ) -> RecipientRead:
+        """Saved in the CRM (the master copy: it checks duplicates and keeps the history), then mirrored here."""
         require_permission(actor, Permission.RECIPIENT_CREATE)
         self._require_tenant_access(tenant_id, actor)
-        if not payload.allow_duplicate:
-            matches = self._find_duplicates(tenant_id, payload.name, payload.mobile_number, payload.email)
-            if matches:
-                raise ApiError(409, "This person may already be in your recipients.", {"duplicates": matches})
-        values = self._without_missing_columns(payload.model_dump(mode="json", exclude={"allow_duplicate"}))
-        if values.get("address") and not values.get("city"):
-            values["city"] = values["address"]["city"]  # keep the plain city in step with the address
+        values = payload.model_dump(mode="json", exclude={"allow_duplicate", "address"})
+        if payload.address and not values.get("city"):
+            values["city"] = payload.address.city  # keep the plain city in step with the address
+        body = {**mapping.person_body(values), "companyId": crm_people.company_id(tenant_id, actor), "allowDuplicate": payload.allow_duplicate}
+        body.pop("status", None)
+        body.pop("version", None)
+        if payload.address:
+            body["address"] = mapping.address_body(payload.address.model_dump(mode="json"), default=True)
+        created = crm_people.call("POST", "/people", tenant_id, actor, json=body)
+        recipient_id = str(created["id"])
+        people_mirror.sync_ids([recipient_id])
+        local = {"created_by_user_id": actor.id, "updated_by_user_id": actor.id}
         if import_batch_id:
-            values["import_batch_id"] = import_batch_id  # which import created this person, so the import can be reverted
-        values.update(
-            {
-                "tenant_id": tenant_id,
-                "source": "CLIENT" if actor.role == Role.CLIENT else "TOFAA",
-                "created_by_user_id": actor.id,
-                "updated_by_user_id": actor.id,
-            }
-        )
-        try:
-            result = (
-                self.database.table("recipients")
-                .insert(values)
-                .select(self._columns())
-                .execute()
-            )
-        except Exception as exc:  # noqa: BLE001 - the unique mobile number index is the usual cause
-            if "recipients_tenant_mobile_number_active_uq" in str(exc) or "duplicate key" in str(exc).lower():
-                raise ApiError(409, "A recipient with this mobile number already exists.") from exc
-            raise
-        if not result.data:
-            raise HTTPException(status_code=409, detail="Recipient could not be created.")
-        created = result.data[0]
-        trail.record(
-            self.database, tenant_id, str(created["id"]), actor, "IMPORT" if source == "EXCEL_IMPORT" else "CREATE",
-            [(field, None, created.get(field)) for field in trail.TRACKED if created.get(field) not in (None, "")
-             and not (field == "status" or (field in ("is_primary",) and created.get(field) is False) or (field == "recipient_type" and created.get(field) == "INDIVIDUAL"))],
-            source,
-        )
-        return _read(created)
+            local["import_batch_id"] = import_batch_id  # which import created this person, so the import can be reverted
+        self.database.table("recipients").update(local).eq("id", recipient_id).execute()
+        return _read(self._mirror_row(tenant_id, recipient_id))
 
     def find_duplicates(
         self, tenant_id: str, actor: UserProfileResponse, *, name: str | None, mobile_number: str | None, email: str | None
@@ -427,43 +408,47 @@ class RecipientService:
         actor: UserProfileResponse,
         source: str = "MANUAL",
     ) -> RecipientRead:
+        """Saved in the CRM (which refuses an edit of an out-of-date copy), then mirrored here."""
         require_permission(actor, Permission.RECIPIENT_UPDATE)
         current = self._get_scoped_recipient(tenant_id, recipient_id, actor)
         current_version = int(current.get("version") or 1)
         if payload.version is not None and payload.version != current_version:
             raise self._conflict(current)
-        values = self._without_missing_columns(payload.model_dump(mode="json", exclude_unset=True, exclude={"version"}))
-        if values.get("address") and "city" not in values:
-            values["city"] = values["address"]["city"]
-        values["updated_by_user_id"] = actor.id
-        values["version"] = current_version + 1
-        query = (
-            self.database.table("recipients")
-            .update(values)
-            .eq("id", recipient_id)
-            .eq("tenant_id", tenant_id)
-            .is_("deleted_at", "null")
-        )
-        if payload.version is not None:
-            # Atomic guard: matches nothing if someone saved between the read above and this write.
-            query = query.eq("version", payload.version)
+        values = payload.model_dump(mode="json", exclude_unset=True, exclude={"version", "address"})
+        if payload.address and "city" not in values:
+            values["city"] = payload.address.city
         try:
-            result = query.select(self._columns()).execute()
-        except Exception as exc:  # noqa: BLE001 - the unique mobile number index is the usual cause
-            if "recipients_tenant_mobile_number_active_uq" in str(exc) or "duplicate key" in str(exc).lower():
-                raise ApiError(409, "Another recipient already has this mobile number.") from exc
+            if payload.address:
+                self._save_default_address(tenant_id, recipient_id, actor, payload.address.model_dump(mode="json"))
+            body = mapping.person_body(values)
+            if body:
+                crm_people.call("PATCH", f"/people/{recipient_id}", tenant_id, actor,
+                                json={**body, "version": payload.version or current_version})
+        except ApiError as exc:
+            if exc.status_code == 409 and (exc.data or {}).get("reason") == "VERSION_CONFLICT":
+                people_mirror.sync_ids([recipient_id])
+                raise self._conflict(self._mirror_row(tenant_id, recipient_id)) from exc
             raise
-        if not result.data:
-            if payload.version is not None:
-                latest = self._get_scoped_recipient(tenant_id, recipient_id, actor)
-                raise self._conflict(latest)
+        people_mirror.sync_ids([recipient_id])
+        self.database.table("recipients").update({"updated_by_user_id": actor.id}).eq("id", recipient_id).execute()
+        return _read(self._mirror_row(tenant_id, recipient_id))
+
+    def _save_default_address(self, tenant_id: str, recipient_id: str, actor: UserProfileResponse, address: dict[str, Any]) -> None:
+        """The person's one address on this form is the CRM's default delivery address: change it, or add it."""
+        rows = (self.database.table("recipient_addresses").select("id").eq("tenant_id", tenant_id).eq("recipient_id", recipient_id)
+                .eq("is_default", True).limit(1).execute().data or [])
+        body = mapping.address_body(address)
+        if rows:
+            crm_people.call("PATCH", f"/people/{recipient_id}/addresses/{rows[0]['id']}", tenant_id, actor, json=body)
+        else:
+            crm_people.call("POST", f"/people/{recipient_id}/addresses", tenant_id, actor, json={**body, "isDefault": True})
+
+    def _mirror_row(self, tenant_id: str, recipient_id: str, *, include_deleted: bool = False) -> dict[str, Any]:
+        query = self.database.table("recipients").select(self._columns()).eq("tenant_id", tenant_id).eq("id", recipient_id)
+        rows = (query if include_deleted else query.is_("deleted_at", "null")).limit(1).execute().data or []
+        if not rows:
             raise HTTPException(status_code=404, detail="Recipient not found.")
-        changes = trail.diff(current, values)
-        if changes:
-            status_change = next((new for field, _, new in changes if field == "status"), None)
-            action = "ARCHIVE" if status_change == "ARCHIVED" else "RESTORE" if status_change == "ACTIVE" else "EDIT"
-            trail.record(self.database, tenant_id, recipient_id, actor, action, changes, source)
-        return _read(result.data[0])
+        return rows[0]
 
     def _conflict(self, latest: dict[str, Any]) -> ApiError:
         return ApiError(
@@ -475,67 +460,38 @@ class RecipientService:
     def soft_delete(self, tenant_id: str, recipient_id: str, actor: UserProfileResponse) -> None:
         require_permission(actor, Permission.RECIPIENT_DELETE)
         self._get_scoped_recipient(tenant_id, recipient_id, actor)
-        result = (
-            self.database.table("recipients")
-            .update({
-                "deleted_at": datetime.now(timezone.utc).isoformat(),
-                "updated_by_user_id": actor.id,
-            })
-            .eq("id", recipient_id)
-            .eq("tenant_id", tenant_id)
-            .is_("deleted_at", "null")
-            .select("id")
-            .execute()
-        )
-        if not result.data:
-            raise HTTPException(status_code=404, detail="Recipient not found.")
-        trail.record(self.database, tenant_id, recipient_id, actor, "DELETE")
+        crm_people.call("DELETE", f"/people/{recipient_id}", tenant_id, actor)
+        people_mirror.sync_ids([recipient_id])
 
     def bulk_soft_delete(self, tenant_id: str, ids: list[str], actor: UserProfileResponse) -> int:
-        """Delete many recipients with a few queries (not one per person). Only people of this tenant that are not already deleted count."""
+        """Delete many people in one CRM call. Only live people of this client count (the CRM checks the client)."""
         require_permission(actor, Permission.RECIPIENT_DELETE)
         self._require_tenant_access(tenant_id, actor)
-        now = datetime.now(timezone.utc).isoformat()
-        done: list[str] = []
-        for start in range(0, len(ids), 150):
-            rows = (
-                self.database.table("recipients").update({"deleted_at": now, "updated_by_user_id": actor.id})
-                .eq("tenant_id", tenant_id).in_("id", ids[start:start + 150]).is_("deleted_at", "null").select("id").execute().data or []
-            )
-            done.extend(str(row["id"]) for row in rows)
-        trail.record_many(self.database, tenant_id, done, actor, "DELETE")
-        return len(done)
+        affected = 0
+        for start in range(0, len(ids), 1000):
+            part = [str(i) for i in ids[start:start + 1000]]
+            affected += int((crm_people.call("POST", "/people/bulk-delete", tenant_id, actor, json={"recipientIds": part}) or {}).get("affected", 0))
+            people_mirror.sync_ids(part)
+        return affected
 
     def bulk_set_status(self, tenant_id: str, ids: list[str], status: str, actor: UserProfileResponse) -> int:
-        """Archive or restore many recipients with a few queries."""
+        """Archive or restore many people in one CRM call."""
         require_permission(actor, Permission.RECIPIENT_UPDATE)
         self._require_tenant_access(tenant_id, actor)
-        done: list[str] = []
-        for start in range(0, len(ids), 150):
-            rows = (
-                self.database.table("recipients").update({"status": status, "updated_by_user_id": actor.id})
-                .eq("tenant_id", tenant_id).in_("id", ids[start:start + 150]).is_("deleted_at", "null").neq("status", status).select("id").execute().data or []
-            )
-            done.extend(str(row["id"]) for row in rows)
-        trail.record_many(self.database, tenant_id, done, actor, "ARCHIVE" if status == "ARCHIVED" else "RESTORE")
-        return len(done)
+        affected = 0
+        for start in range(0, len(ids), 1000):
+            part = [str(i) for i in ids[start:start + 1000]]
+            affected += int((crm_people.call("POST", "/people/bulk-status", tenant_id, actor, json={"recipientIds": part, "status": status}) or {}).get("affected", 0))
+            people_mirror.sync_ids(part)
+        return affected
 
     def restore(self, tenant_id: str, recipient_id: str, actor: UserProfileResponse) -> RecipientRead:
         require_permission(actor, Permission.RECIPIENT_RESTORE)
         self._require_tenant_access(tenant_id, actor)
-        result = (
-            self.database.table("recipients")
-            .update({"deleted_at": None, "updated_by_user_id": actor.id})
-            .eq("id", recipient_id)
-            .eq("tenant_id", tenant_id)
-            .not_.is_("deleted_at", "null")
-            .select(self._columns())
-            .execute()
-        )
-        if not result.data:
-            raise HTTPException(status_code=404, detail="Recipient not found.")
-        trail.record(self.database, tenant_id, recipient_id, actor, "RESTORE")
-        return _read(result.data[0])
+        self._mirror_row(tenant_id, recipient_id, include_deleted=True)  # another client's id answers "not found" here
+        crm_people.call("POST", f"/people/{recipient_id}/restore", tenant_id, actor)
+        people_mirror.sync_ids([recipient_id])
+        return _read(self._mirror_row(tenant_id, recipient_id))
 
     def _get_scoped_recipient(
         self,
@@ -560,30 +516,20 @@ class RecipientService:
     def set_avatar(
         self, tenant_id: str, recipient_id: str, actor: UserProfileResponse, *, content: bytes, content_type: str
     ) -> RecipientRead:
-        """Save a photo for this person (replacing the old one)."""
+        """Save a photo for this person in the CRM (replacing the old one); the mirror shows a copy of it."""
         require_permission(actor, Permission.RECIPIENT_UPDATE)
-        old = self._get_scoped_recipient(tenant_id, recipient_id, actor).get("avatar_url")
-        url = images.store_image(self.database, f"recipients/{tenant_id}/{recipient_id}", content, content_type)
-        return self._write_avatar(tenant_id, recipient_id, actor, url, old)
+        self._get_scoped_recipient(tenant_id, recipient_id, actor)
+        crm_people.call("PUT", f"/people/{recipient_id}/photo", tenant_id, actor,
+                        files={"file": ("photo", content, content_type or "application/octet-stream")})
+        people_mirror.sync_ids([recipient_id])
+        return _read(self._mirror_row(tenant_id, recipient_id))
 
     def clear_avatar(self, tenant_id: str, recipient_id: str, actor: UserProfileResponse) -> RecipientRead:
         require_permission(actor, Permission.RECIPIENT_UPDATE)
-        old = self._get_scoped_recipient(tenant_id, recipient_id, actor).get("avatar_url")
-        return self._write_avatar(tenant_id, recipient_id, actor, None, old)
-
-    def _write_avatar(self, tenant_id: str, recipient_id: str, actor: UserProfileResponse, url: str | None, old: str | None) -> RecipientRead:
-        result = (
-            self.database.table("recipients")
-            .update({"avatar_url": url, "updated_by_user_id": actor.id})
-            .eq("id", recipient_id).eq("tenant_id", tenant_id).is_("deleted_at", "null")
-            .select(self._columns())
-            .execute()
-        )
-        if not result.data:
-            images.remove_image(self.database, url)
-            raise HTTPException(status_code=404, detail="Recipient not found.")
-        images.remove_image(self.database, old)
-        return _read(result.data[0])
+        self._get_scoped_recipient(tenant_id, recipient_id, actor)
+        crm_people.call("DELETE", f"/people/{recipient_id}/photo", tenant_id, actor)
+        people_mirror.sync_ids([recipient_id])
+        return _read(self._mirror_row(tenant_id, recipient_id))
 
     def _require_tenant_access(self, tenant_id: str, actor: UserProfileResponse) -> None:
         require_permission(actor, Permission.RECIPIENT_READ)

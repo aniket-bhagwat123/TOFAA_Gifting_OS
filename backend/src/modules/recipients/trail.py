@@ -108,24 +108,45 @@ class TrailList(BaseModel):
     next_cursor: str | None = None
 
 
-def list_trail(database: Any, tenant_id: str, recipient_id: str, *, page: int, limit: int) -> TrailList:
-    result = (
+# Changes that exist only in Gifting OS (follow-up status of missing details, shared occasions) stay in the local
+# history. Everything else about a person is kept by the CRM, the master copy (older local rows were copied there).
+LOCAL_ONLY = "field.like.status:*,field.eq.shared_occasion"
+CRM_PAGE = 100
+
+
+def list_trail(database: Any, tenant_id: str, recipient_id: str, actor: Any, *, page: int, limit: int) -> TrailList:
+    """The person's history, newest first: the CRM's entries merged with the local-only ones."""
+    from src.modules.crm_people.client import crm_people  # here, so the recipients module imports stay one-way
+
+    wanted = page * limit
+    local = (
         database.table("recipient_audit")
         .select("id,created_at,actor_name,actor_role,action,field,old_value,new_value,source", count="exact")
-        .eq("tenant_id", tenant_id)
-        .eq("recipient_id", recipient_id)
-        .order("created_at", desc=True)
-        .order("id", desc=True)
-        .range((page - 1) * limit, page * limit - 1)
-        .execute()
+        .eq("tenant_id", tenant_id).eq("recipient_id", recipient_id).or_(LOCAL_ONLY)
+        .order("created_at", desc=True).order("id", desc=True).range(0, wanted - 1).execute()
     )
-    total = result.count or 0
+    entries = [TrailEntry(
+        id=f"local-{row['id']}", created_at=str(row["created_at"]), actor_name=row.get("actor_name") or "Unknown",
+        actor_role=row["actor_role"], action=row["action"], field=row.get("field"),
+        old_value=row.get("old_value"), new_value=row.get("new_value"), source=row["source"],
+    ) for row in local.data or []]
+    crm_total, crm_page = 0, 1
+    while True:
+        data = crm_people.call("GET", f"/people/{recipient_id}/history", tenant_id, actor, params={"page": crm_page, "limit": CRM_PAGE}) or {}
+        crm_total = int(data.get("total") or 0)
+        entries += [TrailEntry(
+            id=f"crm-{row['id']}", created_at=str(row["createdAt"]), actor_name=row.get("actorName") or "TOFAA team",
+            actor_role=row.get("actorRole") or "TOFAA", action=row["action"], field=row.get("field"),
+            old_value=row.get("oldValue"), new_value=row.get("newValue"),
+            source="EXCEL_IMPORT" if row.get("source") == "IMPORT" else row.get("source") or "MANUAL",
+        ) for row in data.get("items") or []]
+        if crm_page * CRM_PAGE >= min(crm_total, wanted):
+            break
+        crm_page += 1
+    entries.sort(key=lambda entry: entry.created_at, reverse=True)
+    total = crm_total + (local.count or 0)
     return TrailList(
-        items=[TrailEntry(
-            id=str(row["id"]), created_at=str(row["created_at"]), actor_name=row.get("actor_name") or "Unknown",
-            actor_role=row["actor_role"], action=row["action"], field=row.get("field"),
-            old_value=row.get("old_value"), new_value=row.get("new_value"), source=row["source"],
-        ) for row in result.data or []],
+        items=entries[(page - 1) * limit:wanted],
         pagination=PaginationMeta(page=page, limit=limit, total_records=total),
         next_cursor=next_page_cursor(page, limit, total),
     )

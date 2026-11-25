@@ -12,7 +12,7 @@ from src.core.supabase import get_supabase_admin_client
 from src.modules.auth.rbac import Permission, require_permission
 from src.modules.auth.schemas import UserProfileResponse
 from src.modules.imports.schemas import ImportBatchFinish, ImportBatchList, ImportBatchRead, ImportBatchStart, RevertResult
-from src.modules.recipients import trail
+from src.modules.recipients.service import recipient_service
 from src.modules.tenants.service import tenant_service
 
 TABLE = "import_batches"
@@ -86,11 +86,10 @@ class ImportService:
         rows = db.table("recipients").select("id").eq("tenant_id", tenant_id).eq("import_batch_id", batch_id).is_("deleted_at", "null").limit(100_000).execute().data or []
         ids = [str(r["id"]) for r in rows]
         now = datetime.now(timezone.utc).isoformat()
+        # People are deleted in the CRM (the master copy, which keeps the history); the mirror follows.
+        recipient_service.bulk_soft_delete(tenant_id, ids, actor)
         for start in range(0, len(ids), CHUNK):
-            part = ids[start:start + CHUNK]
-            db.table("recipients").update({"deleted_at": now, "updated_by_user_id": actor.id}).eq("tenant_id", tenant_id).in_("id", part).is_("deleted_at", "null").execute()
-            db.table("spend_recipient_group_members").delete().eq("tenant_id", tenant_id).in_("recipient_id", part).execute()
-        trail.record_many(db, tenant_id, ids, actor, "DELETE", "EXCEL_IMPORT")
+            db.table("spend_recipient_group_members").delete().eq("tenant_id", tenant_id).in_("recipient_id", ids[start:start + CHUNK]).execute()
 
         removed_groups = 0
         created = [str(g) for g in batch.get("groups_created") or []]

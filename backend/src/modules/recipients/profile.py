@@ -14,6 +14,9 @@ from src.core.errors import ApiError
 from src.core.schema import ApiResponse, to_camel
 from src.modules.auth.dependencies import CurrentUserDep
 from src.modules.auth.rbac import Permission, require_permission
+from src.modules.crm_people import mapping
+from src.modules.crm_people.client import crm_people
+from src.modules.crm_people.sync import people_mirror
 from src.modules.recipients import trail
 from src.modules.recipients.service import recipient_service
 from src.modules.tenants.service import tenant_service
@@ -127,14 +130,10 @@ class ProfileService:
         return PreferencesRead.model_validate(_camel_keys(rows[0])) if rows else PreferencesRead()
 
     def save_preferences(self, tenant_id: str, recipient_id: str, body: PreferencesBody, actor: Any, source: str) -> PreferencesRead:
+        """Saved in the CRM (which keeps the history), then mirrored here."""
         self._recipient(tenant_id, recipient_id, actor, write=True)
-        before = self.get_preferences(tenant_id, recipient_id, actor).model_dump(by_alias=False, exclude={"updated_at"})
-        values = body.model_dump()
-        self.db.table("recipient_preferences").upsert(
-            {**values, "recipient_id": recipient_id, "tenant_id": tenant_id, "updated_by_user_id": actor.id}, on_conflict="recipient_id"
-        ).execute()
-        if before != values:
-            self._log(tenant_id, recipient_id, actor, "preferences", before, values, source)
+        crm_people.call("PUT", f"/people/{recipient_id}/preferences", tenant_id, actor, json=body.model_dump(by_alias=True, mode="json"))
+        people_mirror.sync_ids([recipient_id])
         return self.get_preferences(tenant_id, recipient_id, actor)
 
     # -- addresses
@@ -145,45 +144,35 @@ class ProfileService:
         return [AddressRead.model_validate(_camel_keys(row)) for row in rows]
 
     def add_address(self, tenant_id: str, recipient_id: str, body: AddressBody, actor: Any, source: str) -> AddressRead:
+        """Saved in the CRM (the first address becomes the default there), then mirrored here."""
         self._recipient(tenant_id, recipient_id, actor, write=True)
-        existing = self.list_addresses(tenant_id, recipient_id, actor)
-        make_default = body.is_default or not existing  # the first address is the default
-        if make_default:
-            self._clear_default(tenant_id, recipient_id)
-        result = self.db.table("recipient_addresses").insert({**body.model_dump(), "is_default": make_default, "tenant_id": tenant_id, "recipient_id": recipient_id}).select("*").execute()
-        if not result.data:
-            raise HTTPException(status_code=409, detail="Address could not be saved.")
-        self._log(tenant_id, recipient_id, actor, "address", None, {"label": body.label, "city": body.city}, source)
-        return AddressRead.model_validate(_camel_keys(result.data[0]))
+        saved = crm_people.call("POST", f"/people/{recipient_id}/addresses", tenant_id, actor, json=_crm_address(body.model_dump(mode="json")))
+        people_mirror.sync_ids([recipient_id])
+        return self._address(tenant_id, recipient_id, str(saved["id"]))
 
     def update_address(self, tenant_id: str, recipient_id: str, address_id: str, body: AddressPatch, actor: Any, source: str) -> AddressRead:
         self._recipient(tenant_id, recipient_id, actor, write=True)
-        values = body.model_dump(exclude_unset=True)
+        values = body.model_dump(exclude_unset=True, mode="json")
         if not values:
             raise HTTPException(status_code=422, detail="Nothing to change.")
-        if values.get("is_default"):
-            self._clear_default(tenant_id, recipient_id)
-        result = (self.db.table("recipient_addresses").update(values).eq("id", address_id).eq("tenant_id", tenant_id)
-                  .eq("recipient_id", recipient_id).select("*").execute())
-        if not result.data:
-            raise HTTPException(status_code=404, detail="Address not found.")
-        self._log(tenant_id, recipient_id, actor, "address", None, values, source)
-        return AddressRead.model_validate(_camel_keys(result.data[0]))
+        self._address(tenant_id, recipient_id, address_id)  # another person's address answers "not found"
+        crm_people.call("PATCH", f"/people/{recipient_id}/addresses/{address_id}", tenant_id, actor, json=_crm_address(values))
+        people_mirror.sync_ids([recipient_id])
+        return self._address(tenant_id, recipient_id, address_id)
 
     def delete_address(self, tenant_id: str, recipient_id: str, address_id: str, actor: Any, source: str) -> None:
+        """Removed in the CRM, which makes the oldest remaining address the default."""
         self._recipient(tenant_id, recipient_id, actor, write=True)
-        found = (self.db.table("recipient_addresses").delete().eq("id", address_id).eq("tenant_id", tenant_id)
-                 .eq("recipient_id", recipient_id).select("id,is_default").execute().data or [])
-        if not found:
-            raise HTTPException(status_code=404, detail="Address not found.")
-        if found[0].get("is_default"):  # keep one default: promote the oldest remaining address
-            left = self.db.table("recipient_addresses").select("id").eq("tenant_id", tenant_id).eq("recipient_id", recipient_id).order("created_at").limit(1).execute().data or []
-            if left:
-                self.db.table("recipient_addresses").update({"is_default": True}).eq("id", left[0]["id"]).execute()
-        self._log(tenant_id, recipient_id, actor, "address", {"removed": address_id}, None, source)
+        self._address(tenant_id, recipient_id, address_id)
+        crm_people.call("DELETE", f"/people/{recipient_id}/addresses/{address_id}", tenant_id, actor)
+        people_mirror.sync_ids([recipient_id])
 
-    def _clear_default(self, tenant_id: str, recipient_id: str) -> None:
-        self.db.table("recipient_addresses").update({"is_default": False}).eq("tenant_id", tenant_id).eq("recipient_id", recipient_id).eq("is_default", True).execute()
+    def _address(self, tenant_id: str, recipient_id: str, address_id: str) -> AddressRead:
+        rows = (self.db.table("recipient_addresses").select("*").eq("id", address_id).eq("tenant_id", tenant_id)
+                .eq("recipient_id", recipient_id).limit(1).execute().data or [])
+        if not rows:
+            raise HTTPException(status_code=404, detail="Address not found.")
+        return AddressRead.model_validate(_camel_keys(rows[0]))
 
     # -- relationships
     def list_relationships(self, tenant_id: str, recipient_id: str, actor: Any) -> list[dict[str, Any]]:
@@ -206,17 +195,11 @@ class ProfileService:
             found = self.db.table("recipients").select("id").eq("tenant_id", tenant_id).is_("deleted_at", "null").in_("id", sorted(ids)).execute().data or []
             if len(found) != len(ids):
                 raise ApiError(422, "One of the linked recipients was not found.")
-        before = self.list_relationships(tenant_id, recipient_id, actor)
-        self.db.table("recipient_relationships").delete().eq("tenant_id", tenant_id).eq("recipient_id", recipient_id).execute()
-        if body.items:
-            self.db.table("recipient_relationships").insert([
-                {"tenant_id": tenant_id, "recipient_id": recipient_id, "related_recipient_id": str(item.related_recipient_id),
-                 "relationship_type": item.relationship_type, "created_by_user_id": actor.id} for item in body.items
-            ]).execute()
-        after = self.list_relationships(tenant_id, recipient_id, actor)
-        if [(b["relatedRecipientId"], b["relationshipType"]) for b in before] != [(a["relatedRecipientId"], a["relationshipType"]) for a in after]:
-            self._log(tenant_id, recipient_id, actor, "relationships", before, after, source)
-        return after
+        crm_people.call("PUT", f"/people/{recipient_id}/relationships", tenant_id, actor, json={"items": [
+            {"relatedRecipientId": str(item.related_recipient_id), "relationshipType": item.relationship_type} for item in body.items
+        ]})
+        people_mirror.sync_ids([recipient_id])
+        return self.list_relationships(tenant_id, recipient_id, actor)
 
     # -- shared occasions
     def save_participants(self, tenant_id: str, event_id: str, body: ParticipantsBody, actor: Any, source: str) -> list[str]:
@@ -259,7 +242,17 @@ class ProfileService:
     # -- history
     def activity(self, tenant_id: str, recipient_id: str, actor: Any, page: int, limit: int) -> trail.TrailList:
         self._recipient(tenant_id, recipient_id, actor, write=False)
-        return trail.list_trail(self.db, tenant_id, recipient_id, page=page, limit=limit)
+        return trail.list_trail(self.db, tenant_id, recipient_id, actor, page=page, limit=limit)
+
+
+# CRM address labels are PERMANENT / CURRENT / OFFICE; RESIDENTIAL and OTHER are this app's old names.
+OLD_LABELS = {"RESIDENTIAL": "PERMANENT", "OTHER": "OFFICE"}
+
+
+def _crm_address(values: dict[str, Any]) -> dict[str, Any]:
+    if values.get("label") in OLD_LABELS:
+        values = {**values, "label": OLD_LABELS[values["label"]]}
+    return mapping.address_body(values)
 
 
 def _camel_keys(row: dict[str, Any]) -> dict[str, Any]:
