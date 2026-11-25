@@ -4,7 +4,7 @@ from src.modules.auth.dependencies import CurrentUserDep
 from src.modules.auth.schemas import UserProfileResponse
 from src.modules.auth.rbac import Role
 from src.modules.auth.router import router as auth_router
-from src.modules.banners.router import router as banners_router
+from src.modules.crm_banners.router import router as banners_router
 from src.modules.gift_ideas.router import router as gift_ideas_router
 from src.modules.credits.router import router as credits_router
 from src.modules.dashboard.router import router as dashboard_router
@@ -27,7 +27,7 @@ api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(invitation_router)
 api_router.include_router(tenants_router)
-# Banners are platform-wide (not tied to a client), so they sit outside the tenant guard.
+# Banners come from TOFAA CRM and are the same for everyone (not tied to a client), so they sit outside the tenant guard.
 api_router.include_router(banners_router)
 api_router.include_router(gift_ideas_router)
 

@@ -1,6 +1,7 @@
 import { getModuleRecords } from "@/features/modules/module.service";
 
-export type Banner = { id: string; imageUrl: string };
+/** A dashboard banner. Banners are managed in TOFAA CRM; our backend fetches them with its server-side key. */
+export type Banner = { id: string; title?: string | null; imageUrl: string };
 export type CalendarFilter = "ALL" | "EXTERNAL" | "INTERNAL" | "COMPANY";
 export type CalendarItem = { key: string; date: string; title: string; label: string; kind: string; category: "EXTERNAL" | "INTERNAL" | "COMPANY" | "OTHER"; recipientId?: string | null };
 export type CalendarData = { month: string; items: CalendarItem[]; counts: Record<CalendarFilter, number> };
@@ -13,7 +14,8 @@ export type UpcomingPeople = { external: PersonCard[]; internal: PersonCard[] };
 export type DashboardOverview = { calendar: CalendarData; summary: DashboardSummary };
 
 export const dashboardService = {
-  banners: () => getModuleRecords("/banners", {}, { ttl: 60_000 }) as Promise<Banner[]>,
+  /** Never remembered in the browser: each page open must see the CRM as it is now (uploads and deletions). */
+  banners: () => getModuleRecords("/banners", {}) as Promise<Banner[]>,
   calendar: (tenantId: string, month: string, category: CalendarFilter) => getModuleRecords(`/tenants/${tenantId}/dashboard/calendar`, { month, category }) as Promise<CalendarData>,
   /** The month calendar, the upcoming People cards and the action list, loaded together on the server. */
   overview: (tenantId: string, month: string, category: CalendarFilter = "ALL") => getModuleRecords(`/tenants/${tenantId}/dashboard/overview`, { month, category }) as Promise<DashboardOverview>,

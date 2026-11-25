@@ -23,7 +23,7 @@ export interface ModuleConfig {
   actions?: (row: Record<string, unknown>, user: AuthUser, tenantId?: string | null) => ModuleAction[];
 }
 
-export interface ModuleField { name: string; label: string; type?: "text" | "password" | "number" | "date" | "email" | "textarea" | "select" | "number-list" | "recipient-select" | "recipient-multi-select" | "api-select" | "checkbox" | "image"; source?: "events" | "occasions"; required?: boolean; /** Emptying the box on edit clears the saved value instead of keeping it. */ clearable?: boolean; /** Small helper text under a checkbox. */ hint?: string; options?: string[]; optionLabels?: Record<string, string>; query?: boolean }
+export interface ModuleField { name: string; label: string; type?: "text" | "password" | "number" | "date" | "email" | "textarea" | "select" | "number-list" | "recipient-select" | "recipient-multi-select" | "api-select" | "checkbox"; source?: "events" | "occasions"; required?: boolean; /** Emptying the box on edit clears the saved value instead of keeping it. */ clearable?: boolean; /** Small helper text under a checkbox. */ hint?: string; options?: string[]; optionLabels?: Record<string, string>; query?: boolean }
 export interface ModuleAction { label: string; method: "post" | "patch" | "put"; path: string; payload?: Record<string, unknown>; prompts?: Array<{ key: string; label: string; type?: "number" | "json"; pathOnly?: boolean; required?: boolean }>; idempotency?: boolean }
 
 
@@ -34,15 +34,6 @@ const eventBudgetActions = (row: Record<string, unknown>, user: AuthUser, tenant
 const occasionFields: ModuleField[] = [
   { name: "occasionName", label: "Occasion name", required: true }, { name: "occasionDate", label: "Date", type: "date", required: true },
   { name: "description", label: "Description", type: "textarea" }, { name: "isActive", label: "Active", type: "select", options: ["true", "false"] }
-];
-
-const bannerFields: ModuleField[] = [
-  { name: "image", label: "Banner picture", type: "image", hint: "PNG, JPG or WebP, up to 5 MB. Any size with the 1000 × 90 shape, for example 2000 × 180, at least 500 pixels wide." },
-  { name: "audience", label: "Who sees it", type: "select", options: ["ALL", "CLIENT", "STAFF"], optionLabels: { ALL: "Everyone", CLIENT: "Clients only", STAFF: "TOFAA team only" } },
-  { name: "sortOrder", label: "Order (1 shows first)", type: "number" },
-  { name: "isActive", label: "Active", type: "select", options: ["true", "false"] },
-  { name: "startsOn", label: "Show from", type: "date", clearable: true },
-  { name: "endsOn", label: "Show until", type: "date", clearable: true }
 ];
 
 const ALL_ROLES: PlatformRole[] = ["CLIENT", "TOFAA_TEAM", "SUPER_ADMIN"];
@@ -67,7 +58,6 @@ export const moduleConfig: Record<string, ModuleConfig> = {
   "team-users": { roles: STAFF_ROLES, title: "Users", singular: "user", modalWidth: "lg", description: "People who can sign in and manage your account.", endpoint: (u, tenant) => `/tenants/${requireTenant(u, tenant)}/users`, columns: ["fullName", "email", "role", "isActive"], createFields: [{ name: "email", label: "Email", type: "email", required: true }, { name: "fullName", label: "Full name" }, { name: "password", label: "Temporary password", type: "password" }, { name: "sendInvitation", label: "Send email invitation", type: "checkbox", hint: "Leave unticked to create the user without emailing anyone. You share the password yourself." }], updateFields: [{ name: "fullName", label: "Full name" }, { name: "isActive", label: "Active", type: "select", options: ["true", "false"] }, { name: "password", label: "New password", type: "password" }], actions: (row, user, tenant) => { const base = `/tenants/${requireTenant(user, tenant)}/users/${row.id}`; return [{ label: row.isActive ? "Deactivate" : "Activate", method: "post", path: `${base}/${row.isActive ? "deactivate" : "activate"}` }, { label: "Resend invite", method: "post", path: `${base}/resend-invite` }]; } },
   activity: { roles: ALL_ROLES, title: "Activity", singular: "change", emptyHint: "When something changes in your account, it shows up here.", modalWidth: "sm", description: "What changed in your account, and who did it.", endpoint: (u, tenant) => `/tenants/${requireTenant(u, tenant)}/activity`, columns: ["summary", "changedAt"] },
   "gift-ideas": { roles: ALL_ROLES, title: "Gift Ideas", singular: "gift idea", description: "Gift ideas from TOFAA, ready to send.", endpoint: () => "/gift-ideas", columns: ["occasion", "giftIdea", "category"] },
-  banners: { roles: ["SUPER_ADMIN"], title: "Banners", singular: "banner", emptyHint: "Upload a banner picture to show it on every dashboard.", modalWidth: "lg", description: "Pictures (any size with the 1000 × 90 shape) shown at the top of every dashboard. Add, reorder, schedule or switch them off.", endpoint: () => "/admin/banners", columns: ["imageUrl", "audience", "sortOrder", "isActive"], createFields: bannerFields, updateFields: bannerFields, updateEndpoint: (endpoint, record) => `${endpoint.split("?")[0]}/${record.id}`, deletePath: (endpoint, id) => `${endpoint.split("?")[0]}/${id}` },
   tenants: { roles: STAFF_ROLES, title: "Clients", singular: "client", modalWidth: "lg", description: "Your client organisations and their status.", endpoint: () => "/tenants", columns: ["name", "tenantType", "status", "createdAt"], updateFields: [{ name: "name", label: "Name", required: true }, { name: "legalName", label: "Legal name" }, { name: "gstin", label: "GSTIN" }, { name: "emailDomain", label: "Email domain" }] }
 };
 

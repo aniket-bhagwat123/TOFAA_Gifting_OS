@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str | None = None
     RESEND_FROM_EMAIL: str | None = None
 
+    # Dashboard banners are managed in TOFAA CRM and read from it server to server (its live banners with audience ALL).
+    # CRM_API_URL is the CRM backend's base address, e.g. http://127.0.0.1:8000 (empty = no banners are shown).
+    # CRM_API_KEY must equal GIFTING_OS_API_KEY in the CRM backend. It stays on this server: never in the frontend.
+    CRM_API_URL: str = ""
+    CRM_API_KEY: str | None = None
+    CRM_TIMEOUT_SECONDS: float = 5
+    # 0 = ask the CRM on every dashboard load, so a banner uploaded or deleted there shows on the very next page open.
+    # (The CRM keeps its own copy, cleared the moment any banner changes, so this stays fast.)
+    CRM_BANNERS_CACHE_SECONDS: float = 0
+
     # Supabase Settings
     SUPABASE_URL: str = "https://mock.supabase.co"
     SUPABASE_ANON_KEY: str = "mock-anon-key"
@@ -86,6 +96,10 @@ class Settings(BaseSettings):
             problems.append("FRONTEND_URL must use https")
         if any(origin == "*" or not origin.startswith("https://") for origin in self.BACKEND_CORS_ORIGINS):
             problems.append("BACKEND_CORS_ORIGINS must list https origins only")
+        if self.CRM_API_URL and not self.CRM_API_URL.startswith("https://"):
+            problems.append("CRM_API_URL must use https (the API key travels with every call)")
+        if self.CRM_API_URL and len(self.CRM_API_KEY or "") < 32:
+            problems.append("CRM_API_KEY must be set to a secret of at least 32 characters when CRM_API_URL is set")
         if problems:
             raise ValueError("Unsafe production settings: " + "; ".join(problems))
         return self

@@ -20,6 +20,10 @@ services:
         sync: false
       - key: BACKEND_CORS_ORIGINS
         sync: false
+      - key: CRM_API_URL
+        sync: false
+      - key: CRM_API_KEY
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY

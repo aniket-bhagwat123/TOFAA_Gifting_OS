@@ -25,7 +25,6 @@ const moduleTitles: Record<string, string> = {
   "recipient-groups": "Recipient groups",
   "team-users": "Users",
   activity: "Activity",
-  banners: "Banners",
   profile: "My profile"
 };
 

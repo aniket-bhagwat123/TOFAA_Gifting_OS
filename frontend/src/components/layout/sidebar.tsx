@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useAppSelector } from "@/store/hooks";
 import { cn } from "@/lib/utils";
 import { moduleConfig, type PlatformRole } from "@/features/modules/module-config";
-import { Home, Building2, Users, CalendarDays, ClipboardList, Gift, Sparkles, Wallet, CalendarRange, History, Megaphone, Lightbulb, X } from "lucide-react";
+import { Home, Building2, Users, CalendarDays, ClipboardList, Gift, Sparkles, Wallet, CalendarRange, History, Lightbulb, X } from "lucide-react";
 
 type Role = PlatformRole;
 
@@ -28,8 +28,7 @@ const groups: { title: string; items: NavItem[] }[] = [
   { title: "More", items: [
     item("gifts", "Gifts", Gift),
     item("events", "Events", CalendarRange),
-    item("clients", "Clients", Building2),
-    item("banners", "Banners", Megaphone)
+    item("clients", "Clients", Building2)
   ] },
   // "Users" (team-users) hidden from nav — backend module still active
 ];
