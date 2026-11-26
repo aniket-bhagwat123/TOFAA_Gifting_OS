@@ -87,7 +87,7 @@ export function GiftRequestDetail({ requestId }: { requestId: string }) {
   }, [events]);
   const publisher = [...events].reverse().find((event) => event.toStatus === "PROPOSAL_READY");
 
-  if (!tenantId) return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900">Choose a client from the “Viewing” menu at the top first.</div>;
+  if (!tenantId) return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900">Choose a tenant from the “Viewing” menu at the top first.</div>;
   if (error && !request) return <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-base text-rose-800">{error} <Link href="/requests" className="font-semibold underline">Back to requests</Link></div>;
   if (!request) return <div className="flex justify-center py-20"><Spinner /></div>;
 

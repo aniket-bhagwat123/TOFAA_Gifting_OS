@@ -170,6 +170,7 @@ class GiftLinePage(BaseModel):
     items: list[GiftLineRead]
     pagination: PaginationMeta
     next_cursor: str | None = None
+    has_active_contract: bool = True  # false: gifts can't be listed or added until the client has one
 
 
 class ContractParameters(BaseModel):

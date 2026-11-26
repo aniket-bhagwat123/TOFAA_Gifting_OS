@@ -80,19 +80,19 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
             <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-[0_1px_3px_rgba(0,0,0,0.07)] transition-shadow hover:shadow-[0_2px_6px_rgba(0,0,0,0.11)]">
               <Eye size={14} className="shrink-0 text-brand opacity-70" />
               <div className="flex flex-col leading-none">
-                <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-400">Viewing Client</span>
+                <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-400">Viewing Tenant</span>
                 <span className={`mt-0.5 text-[13px] font-semibold leading-none ${activeTenant ? "text-slate-800" : "text-slate-400"}`}>
-                  {activeTenant ? activeTenant.name : "Choose client"}
+                  {activeTenant ? activeTenant.name : "Choose tenant"}
                 </span>
               </div>
               <ChevronDown size={13} className="shrink-0 text-slate-400" />
               <select
-                aria-label="Client you are working on"
+                aria-label="Tenant you are working on"
                 value={selectedTenantId ?? ""}
                 onChange={(event) => { window.localStorage.setItem(selectedTenantKey(user?.id), event.target.value); dispatch(setSelectedTenant(event.target.value)); }}
                 className="absolute inset-0 cursor-pointer opacity-0"
               >
-                <option value="" disabled>Choose a client</option>
+                <option value="" disabled>Choose a tenant</option>
                 {tenants.map((tenant: { id: string; name: string }) => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
               </select>
             </div>

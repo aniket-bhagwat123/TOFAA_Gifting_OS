@@ -85,7 +85,10 @@ class ContractWorkspaceService:
         limit: int,
     ) -> GiftLinePage:
         self._authorize_read(tenant_id, actor)
-        contract = self._active_contract(tenant_id)
+        contract = self._find_active_contract(tenant_id)
+        if contract is None:  # a normal state for a new client, not a failure
+            empty = self._page_result([], 0, page, limit, actor)
+            return empty.model_copy(update={"has_active_contract": False})
         rows, total = self._gift_page(tenant_id, contract["id"], page, limit)
         return self._page_result(rows, total, page, limit, actor)
 
@@ -258,6 +261,12 @@ class ContractWorkspaceService:
         return contract, self._enrich(result.data or [], actor)
 
     def _active_contract(self, tenant_id: str) -> dict[str, Any]:
+        contract = self._find_active_contract(tenant_id)
+        if contract is None:
+            raise HTTPException(status_code=404, detail="No active contract found for this tenant.")
+        return contract
+
+    def _find_active_contract(self, tenant_id: str) -> dict[str, Any] | None:
         today = date.today().isoformat()
         rows = (
             self.database.table("contracts")
@@ -273,9 +282,7 @@ class ContractWorkspaceService:
             .data
             or []
         )
-        if not rows:
-            raise HTTPException(status_code=404, detail="No active contract found for this tenant.")
-        return rows[0]
+        return rows[0] if rows else None
 
     def _gift_page(self, tenant_id: str, contract_id: str, page: int, limit: int) -> tuple[list[dict[str, Any]], int]:
         result = (

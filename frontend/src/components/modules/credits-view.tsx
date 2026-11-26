@@ -142,7 +142,7 @@ export function CreditsView() {
     finally { setSending(false); }
   };
 
-  if (!tenantId) return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{isClient ? "Your account isn't linked to an organisation yet. Please contact TOFAA." : "Choose a client from the “Viewing” menu at the top first."}</div>;
+  if (!tenantId) return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{isClient ? "Your account isn't linked to an organisation yet. Please contact TOFAA." : "Choose a tenant from the “Viewing” menu at the top first."}</div>;
   if (loading && !balance) return <div className="flex justify-center py-20"><Spinner /></div>;
   if (error && !balance) return <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error}</div>;
 

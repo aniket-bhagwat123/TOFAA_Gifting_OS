@@ -105,7 +105,7 @@ export default function DashboardPage() {
       })}
     </section>}
 
-    {!tenantId ? (!isClient && <p role="status" className="rounded-xl bg-white px-6 py-8 text-center text-sm text-muted ring-1 ring-black/5">Choose a client from the “Viewing” menu at the top to see their dashboard.</p>)
+    {!tenantId ? (!isClient && <p role="status" className="rounded-xl bg-white px-6 py-8 text-center text-sm text-muted ring-1 ring-black/5">Choose a tenant from the “Viewing” menu at the top to see their dashboard.</p>)
       : <>
         <OccasionCalendar tenantId={tenantId} initial={overview.data?.calendar ?? null} initialLoading={overview.loading} />
         <div className="grid items-start gap-4 lg:grid-cols-3">

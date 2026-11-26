@@ -266,7 +266,7 @@ export function GiftRequestWizard({ requestId, onClose, onChanged }: { requestId
   };
 
   const content = (() => {
-    if (!tenantId) return <div role="alert" className="m-8 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900">{isClient ? "Your account isn't linked to an organisation yet. Please contact TOFAA." : "Choose a client from the “Viewing” menu at the top first."}</div>;
+    if (!tenantId) return <div role="alert" className="m-8 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900">{isClient ? "Your account isn't linked to an organisation yet. Please contact TOFAA." : "Choose a tenant from the “Viewing” menu at the top first."}</div>;
     if (loading) return <div className="flex justify-center py-24"><Spinner /></div>;
     if (loadError) return <div role="alert" className="m-8 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-base text-rose-800">{loadError}</div>;
     return null;

@@ -42,7 +42,7 @@ const STAFF_ROLES: PlatformRole[] = ["TOFAA_TEAM", "SUPER_ADMIN"];
 const requireTenant = (user: AuthUser, selectedTenantId?: string | null) => {
   // A client only ever has their own organisation; staff work on the one chosen in "Viewing".
   const id = user.platformRole === "CLIENT" ? user.tenant?.id : selectedTenantId;
-  if (!id) throw new Error(user.platformRole === "CLIENT" ? "Your account isn't linked to an active organisation yet. Please contact TOFAA to get this fixed." : "Choose a client from the “Viewing” menu at the top first. If the menu is empty, no clients have been created yet.");
+  if (!id) throw new Error(user.platformRole === "CLIENT" ? "Your account isn't linked to an active organisation yet. Please contact TOFAA to get this fixed." : "Choose a tenant from the “Viewing” menu at the top first. If the menu is empty, no clients have been created yet.");
   return id;
 };
 

@@ -124,7 +124,7 @@ export function GiftRequestsList({ startNew = false }: { startNew?: boolean }) {
   const reset = () => { setStatus("ALL"); setDateKey("ANY"); setCustomFrom(""); setCustomTo(""); setRecipientId(""); setSearch(""); setQuery(""); setPage(1); };
   const closeWizard = () => { setWizard(null); if (startNew || searchParams.get("new") === "1") router.replace("/requests"); };
 
-  if (!tenantId) return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900">{isClient ? "Your account isn't linked to an organisation yet. Please contact TOFAA." : "Choose a client from the “Viewing” menu at the top first."}</div>;
+  if (!tenantId) return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900">{isClient ? "Your account isn't linked to an organisation yet. Please contact TOFAA." : "Choose a tenant from the “Viewing” menu at the top first."}</div>;
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const countOf = (key: StatusKey) => (key === "ALL" ? counts?.total : key === "UPCOMING" ? undefined : counts?.byStatus[key]) ?? 0;

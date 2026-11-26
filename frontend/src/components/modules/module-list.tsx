@@ -130,7 +130,9 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
   const isList = Array.isArray(entry?.data) || !!(entry?.data && typeof entry.data === "object" && Array.isArray((entry.data as any).items));
   const isClient = user?.platformRole === "CLIENT";
   const isSuperAdmin = user?.platformRole === "SUPER_ADMIN";
-  const canCreate = !!config.createFields && (moduleKey !== "clients" || isSuperAdmin) && (moduleKey !== "requests" || isClient) && (moduleKey !== "credits" || isClient);
+  // Gifts belong to a contract: without an active one there is nothing to show and nothing can be added.
+  const noContract = moduleKey === "gifts" && (entry?.data as { hasActiveContract?: boolean } | undefined)?.hasActiveContract === false;
+  const canCreate = !noContract && !!config.createFields && (moduleKey !== "clients" || isSuperAdmin) && (moduleKey !== "requests" || isClient) && (moduleKey !== "credits" || isClient);
   const editableFields = moduleKey === "requests" && !isClient ? undefined : config.updateFields;
   const canEdit = !!editableFields && (moduleKey !== "clients" || !isClient) && (moduleKey !== "team-users" || !!selectedTenantId);
 
@@ -296,8 +298,8 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
   </>;
   const loadingFirst = entry?.status === "loading" && !entry.data;
   const emptyState = <EmptyState
-    title={search ? "Nothing matches your search" : `No ${config.title.toLowerCase()} yet`}
-    description={search ? "Try a different word or clear the search." : config.emptyHint ?? "Once something is added, it will show up here."}
+    title={noContract ? "No active contract" : search ? "Nothing matches your search" : `No ${config.title.toLowerCase()} yet`}
+    description={noContract ? "This tenant has no contract that is active today, so gifts can't be added yet. Ask an administrator to set one up." : search ? "Try a different word or clear the search." : config.emptyHint ?? "Once something is added, it will show up here."}
     action={search ? undefined : moduleKey === "recipients" ? <Link href="/recipients?new=1"><Button><Plus size={17} /> Add person</Button></Link> : moduleKey === "clients" && canCreate ? <Button onClick={() => setClientCreateOpen(true)}><Plus size={17} /> Add client</Button> : canCreate ? <Button onClick={() => { setFieldErrors({}); setEditor(null); }}><Plus size={17} /> Add {noun}</Button> : undefined}
   />;
 

@@ -100,7 +100,7 @@ export function OccasionsHome() {
           </Card>)}
   </div>;
 
-  if (!tenantId) return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900">{isClient ? "Your account isn't linked to an organisation yet. Please contact TOFAA." : "Choose a client from the “Viewing” menu at the top first."}</div>;
+  if (!tenantId) return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900">{isClient ? "Your account isn't linked to an organisation yet. Please contact TOFAA." : "Choose a tenant from the “Viewing” menu at the top first."}</div>;
 
   const list = activity?.[section] ?? [];
   const count = (key: (typeof SECTIONS)[number][0]) => activity?.[key].length ?? 0;
