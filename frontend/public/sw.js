@@ -47,7 +47,8 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return; // the API and Supabase live elsewhere and are never cached
+  if (url.origin !== self.location.origin) return; // an API on another address and Supabase are never cached
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/health")) return; // nor is an API on this address
 
   if (request.mode === "navigate") {
     // Always go to the network for pages; show the offline page only when there is no connection.

@@ -1,7 +1,8 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import type { ApiErrorBody } from "@/types/api";
 
-const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+// Unset in a production build means the API is on this same address (one Vercel project, /api goes to the backend).
+const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL || (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "");
 
 export const api = axios.create({
   baseURL: `${baseURL.replace(/\/$/, "")}/api/v1`,
