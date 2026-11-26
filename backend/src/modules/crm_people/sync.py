@@ -105,7 +105,7 @@ class PeopleMirror:
 
         def loop() -> None:
             while not stop.wait(seconds):
-                self._safe_catch_up()
+                self.catch_up_safely()
 
         if seconds > 0:
             threading.Thread(target=loop, name="crm-people-periodic", daemon=True).start()
@@ -115,9 +115,9 @@ class PeopleMirror:
         return group_mirror.sync()
 
     def catch_up_in_background(self) -> None:
-        threading.Thread(target=self._safe_catch_up, name="crm-people-catch-up", daemon=True).start()
+        threading.Thread(target=self.catch_up_safely, name="crm-people-catch-up", daemon=True).start()
 
-    def _safe_catch_up(self) -> None:
+    def catch_up_safely(self) -> None:
         try:
             n = self.catch_up()
             if n:

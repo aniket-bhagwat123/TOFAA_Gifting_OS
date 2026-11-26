@@ -1,6 +1,7 @@
 """The CRM tells Gifting OS that People changed (server to server, shared key). Gifting OS then fetches the changes."""
 
 import hmac
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, Header, status
@@ -21,5 +22,8 @@ def key_matches(sent: str | None) -> bool:
 def people_changed(x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None) -> dict[str, str]:
     if not key_matches(x_api_key):
         raise ApiError(401, "A valid API key is required.")
-    people_mirror.catch_up_in_background()
+    if os.environ.get("VERCEL"):
+        people_mirror.catch_up_safely()  # serverless: work left running after the reply may never finish
+    else:
+        people_mirror.catch_up_in_background()
     return {"status": "accepted"}

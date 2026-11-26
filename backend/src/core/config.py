@@ -1,15 +1,18 @@
+import json
 from functools import lru_cache
 from typing import Annotated, Any
 from pydantic import BeforeValidator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 def parse_cors(v: Any) -> list[str]:
-    if isinstance(v, str) and not v.startswith("["):
-        return [i.strip() for i in v.split(",")]
-    elif isinstance(v, list):
-        return v
-    return []
+    """A JSON list or comma separated addresses. A browser's origin has no trailing slash, so it is removed."""
+    if isinstance(v, str):
+        v = v.strip()
+        v = json.loads(v) if v.startswith("[") else v.split(",")
+    if not isinstance(v, list):
+        return []
+    return [str(i).strip().rstrip("/") for i in v if str(i).strip()]
 
 
 class Settings(BaseSettings):
@@ -24,7 +27,8 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     PROJECT_NAME: str = "TOFAA Gifting OS"
     API_V1_STR: str = "/api/v1"
-    BACKEND_CORS_ORIGINS: Annotated[list[str], BeforeValidator(parse_cors)] = [
+    # NoDecode: parse_cors reads the raw text, so a plain address does not stop the app at start-up.
+    BACKEND_CORS_ORIGINS: Annotated[list[str], NoDecode, BeforeValidator(parse_cors)] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:5173",
