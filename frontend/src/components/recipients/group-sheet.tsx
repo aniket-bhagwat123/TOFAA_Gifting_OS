@@ -11,7 +11,7 @@ import { RecipientMultiSelect } from "@/components/modules/recipient-multi-selec
 import { mutateModule } from "@/features/modules/module.service";
 import { getApiErrorMessage } from "@/services/api-client";
 
-export interface RecipientGroup { id: string; name: string; recipientIds: string[]; updatedAt?: string }
+export interface RecipientGroup { id: string; name: string; recipientIds: string[]; updatedAt?: string; crmGroupId?: string | null }
 
 /** Create (group = "new") or edit/delete a recipient group — centered modal dialog. */
 export function GroupSheet({ group, endpoint, recipients, presetIds, loadingRecipients = false, onClose, onSaved }: {

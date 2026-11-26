@@ -51,7 +51,7 @@ class GiftSpendService:
         self._require_tenant(tenant_id, actor, Permission.GIFT_SPEND_READ)
         groups = (
             self.database.table("spend_recipient_groups")
-            .select("id,tenant_id,name,created_at,updated_at")
+            .select("*")
             .eq("tenant_id", tenant_id)
             .order("name")
             .order("id")
@@ -87,6 +87,8 @@ class GiftSpendService:
         group_id: str | None = None,
     ) -> RecipientGroupRead:
         self._require_tenant(tenant_id, actor, Permission.GIFT_SPEND_MANAGE)
+        if group_id:
+            self._require_not_crm_managed(tenant_id, [group_id])
         result = self._rpc(
             "save_spend_recipient_group",
             {
@@ -103,6 +105,21 @@ class GiftSpendService:
         return RecipientGroupRead.model_validate(
             {**group, "recipient_ids": [str(recipient_id) for recipient_id in payload.recipient_ids]}
         )
+
+    def _require_not_crm_managed(self, tenant_id: str, group_ids: list[str]) -> None:
+        """Groups copied from the CRM change there only; an edit here would be overwritten by the next sync."""
+        rows = (
+            self.database.table("spend_recipient_groups")
+            .select("*")  # "*" also works before the crm_group_id column exists
+            .eq("tenant_id", tenant_id)
+            .in_("id", group_ids)
+            .execute()
+            .data
+            or []
+        )
+        names = [str(row.get("name")) for row in rows if isinstance(row, dict) and row.get("crm_group_id")]
+        if names:
+            raise HTTPException(status_code=409, detail=f"Managed in TOFAA CRM, so it can't be changed here: {', '.join(names[:3])}.")
 
     @staticmethod
     def _default_budget_error(exc: APIError) -> HTTPException:
@@ -192,6 +209,7 @@ class GiftSpendService:
 
     def delete_group(self, tenant_id: str, group_id: str, actor: UserProfileResponse) -> None:
         self._require_tenant(tenant_id, actor, Permission.GIFT_SPEND_MANAGE)
+        self._require_not_crm_managed(tenant_id, [group_id])
         try:
             result = (
                 self.database.table("spend_recipient_groups")
@@ -216,6 +234,7 @@ class GiftSpendService:
         """Delete many groups in one query. If an occasion uses some of them the database refuses the lot, so the rest are tried one by one
         and the names of the ones that are in use are returned."""
         self._require_tenant(tenant_id, actor, Permission.GIFT_SPEND_MANAGE)
+        self._require_not_crm_managed(tenant_id, group_ids)
         db = self.database
         try:
             rows = db.table("spend_recipient_groups").delete().eq("tenant_id", tenant_id).in_("id", group_ids).select("id").execute().data or []

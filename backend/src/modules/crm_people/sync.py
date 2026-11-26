@@ -19,6 +19,7 @@ from src.core import images
 from src.core.supabase import get_supabase_admin_client
 from src.core.ttl_cache import lookups
 from src.modules.crm_people.client import crm_people
+from src.modules.crm_people.groups import group_mirror
 
 log = logging.getLogger(__name__)
 CHUNK = 150
@@ -91,11 +92,27 @@ class PeopleMirror:
             while True:
                 self._again.clear()
                 total += self._catch_up_once()
+                total += self._sync_groups()  # after the people, so new members already exist here
                 if not self._again.is_set():
                     return total
         finally:
             with self._lock:
                 self._running = False
+
+    def start_periodic(self, seconds: float) -> threading.Event:
+        """Catch up every `seconds`, in case a notice from the CRM was missed. Set the returned event to stop."""
+        stop = threading.Event()
+
+        def loop() -> None:
+            while not stop.wait(seconds):
+                self._safe_catch_up()
+
+        if seconds > 0:
+            threading.Thread(target=loop, name="crm-people-periodic", daemon=True).start()
+        return stop
+
+    def _sync_groups(self) -> int:
+        return group_mirror.sync()
 
     def catch_up_in_background(self) -> None:
         threading.Thread(target=self._safe_catch_up, name="crm-people-catch-up", daemon=True).start()

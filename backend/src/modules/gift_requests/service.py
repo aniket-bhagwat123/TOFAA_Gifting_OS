@@ -869,14 +869,15 @@ class GiftRequestService:
         if tenant["status"] != "ACTIVE":
             raise HTTPException(status_code=409, detail="Tenant must be active to create gift requests.")
 
-    def _apply_search(self, query: Any, tenant_id: str, search: str | None) -> Any:
+    def _apply_search(self, query: Any, tenant_id: str | list[str], search: str | None) -> Any:
         term = (search or "").strip().replace(",", " ").replace("(", " ").replace(")", " ")
         if not term:
             return query
+        tenants = [tenant_id] if isinstance(tenant_id, str) else tenant_id
         recipients = (
             self.database.table("recipients")
             .select("id")
-            .eq("tenant_id", tenant_id)
+            .in_("tenant_id", tenants)
             .ilike("name", f"%{term}%")
             .limit(200)
             .execute()

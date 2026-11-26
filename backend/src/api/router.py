@@ -5,6 +5,9 @@ from src.modules.auth.schemas import UserProfileResponse
 from src.modules.auth.rbac import Role
 from src.modules.auth.router import router as auth_router
 from src.modules.crm_banners.router import router as banners_router
+from src.modules.crm_gifting.router import clients_router as crm_clients_router
+from src.modules.crm_gifting.router import planning_router as crm_planning_router
+from src.modules.crm_gifting.router import router as crm_gifting_router
 from src.modules.crm_people.router import router as crm_people_router
 from src.modules.gift_ideas.router import router as gift_ideas_router
 from src.modules.credits.router import router as credits_router
@@ -32,6 +35,10 @@ api_router.include_router(tenants_router)
 api_router.include_router(banners_router)
 # The CRM (master copy of People) says People changed: server to server, shared key, no signed-in user.
 api_router.include_router(crm_people_router)
+# The CRM reads gift requests (shared key; it names the clients its signed-in user may see).
+api_router.include_router(crm_gifting_router)
+api_router.include_router(crm_planning_router)
+api_router.include_router(crm_clients_router)
 api_router.include_router(gift_ideas_router)
 
 # Everything else validates the tenant ID on every request.

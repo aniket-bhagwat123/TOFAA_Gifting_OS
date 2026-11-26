@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     CRM_BANNERS_CACHE_SECONDS: float = 0
     # People are mastered in the CRM too: every People change is saved there (same URL and key), with this time limit.
     CRM_PEOPLE_TIMEOUT_SECONDS: float = 20
+    # How often to catch up with CRM people and groups even without a notice (seconds, 0 = never).
+    CRM_SYNC_INTERVAL_SECONDS: float = 300
+    # Lets CRM users act on gift requests. Off by default: the first action creates a hidden account for that user.
+    CRM_KAM_ACTIONS_ENABLED: bool = False
+    # The last rollout step: true stops KAMs using Gifting OS (they work in TOFAA CRM). Nothing is deleted.
+    OS_KAM_LOGIN_DISABLED: bool = False
 
     # Supabase Settings
     SUPABASE_URL: str = "https://mock.supabase.co"

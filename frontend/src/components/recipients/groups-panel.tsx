@@ -135,6 +135,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const openAdd = (group: RecipientGroup) => { setAddingTo(group); void ensureEveryone(); };
 
   const filtered = useMemo(() => { const q = search.trim().toLowerCase(); return q ? groups.filter((g) => g.name.toLowerCase().includes(q)) : groups; }, [groups, search]);
+  const editable = filtered.filter((g) => !g.crmGroupId); // groups managed in TOFAA CRM are read-only here
   const uniquePeople = new Set(groups.flatMap((g) => g.recipientIds)).size;
   // One group open at a time: opening another closes the one that was open.
   const pick = (id: string) => setPicked((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -202,7 +203,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
       {picked.size > 0 && <div role="region" aria-label="Selected groups" aria-live="polite" className="flex flex-wrap items-center gap-2 border-b border-line bg-brand-soft/60 px-4 py-2.5 sm:px-6">
         <button type="button" role="checkbox" aria-checked="true" aria-label="Unselect all groups" onClick={() => setPicked(new Set())} className="press flex h-5 w-5 items-center justify-center rounded bg-brand text-white"><Check size={14} strokeWidth={3} /></button>
         <span className="text-xs font-semibold text-ink">{picked.size} selected</span>
-        {picked.size < filtered.length && <button type="button" onClick={() => setPicked(new Set(filtered.map((g) => g.id)))} className="press inline-flex h-8 items-center rounded-md px-2.5 text-xs font-semibold text-brand hover:bg-white/70">Select all {filtered.length} groups</button>}
+        {picked.size < editable.length && <button type="button" onClick={() => setPicked(new Set(editable.map((g) => g.id)))} className="press inline-flex h-8 items-center rounded-md px-2.5 text-xs font-semibold text-brand hover:bg-white/70">Select all {editable.length} groups</button>}
         <button type="button" onClick={() => setConfirmDelete(true)} className="press inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-xs font-medium text-rose-700 hover:bg-rose-50"><Trash2 size={15} /> Delete</button>
         <button type="button" aria-label="Clear selection" onClick={() => setPicked(new Set())} className="press ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-ink hover:bg-black/5"><X size={16} /></button>
       </div>}
@@ -218,13 +219,14 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
               const shown = group.recipientIds
                 .map((id) => ({ id, row: found.get(id) }))
                 .filter(({ row }) => !query || (row && `${row.name ?? ""} ${row.mobileNumber ?? ""} ${cityOf(row)}`.toLowerCase().includes(query)));
+              const fromCrm = !!group.crmGroupId;
               const canRemove = group.recipientIds.length > 1;
               return <li key={group.id} className="border-t border-line first:border-t-0">
                 <div className="flex items-center hover:bg-slate-50/60">
-                <label className="flex shrink-0 cursor-pointer items-center py-4 pl-4 sm:pl-6"><input type="checkbox" aria-label={`Select ${group.name}`} checked={picked.has(group.id)} onChange={() => pick(group.id)} className="h-4 w-4 rounded accent-brand" /></label>
+                <label className="flex shrink-0 cursor-pointer items-center py-4 pl-4 sm:pl-6"><input type="checkbox" aria-label={`Select ${group.name}`} checked={picked.has(group.id)} disabled={fromCrm} title={fromCrm ? "Managed in TOFAA CRM" : undefined} onChange={() => pick(group.id)} className="h-4 w-4 rounded accent-brand disabled:opacity-40" /></label>
                 <button type="button" aria-expanded={expanded} onClick={() => toggle(group.id)} className="press flex w-full items-center gap-4 px-4 py-4 text-left sm:pr-6">
                   {expanded ? <ChevronDown className="size-5 shrink-0 text-muted" /> : <ChevronRight className="size-5 shrink-0 text-muted" />}
-                  <span className="min-w-0 flex-1"><span className="block truncate text-base font-semibold text-ink">{group.name}</span><span className="block text-sm text-muted">{people(group.recipientIds.length)}</span></span>
+                  <span className="min-w-0 flex-1"><span className="block truncate text-base font-semibold text-ink">{group.name}</span><span className="block text-sm text-muted">{people(group.recipientIds.length)}{fromCrm ? " · Managed in TOFAA CRM" : ""}</span></span>
                   <span className="hidden shrink-0 text-sm text-muted sm:block">{updated(group.updatedAt)}</span>
                 </button>
                 </div>
@@ -237,8 +239,8 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
                     </div>
                     <div className="flex shrink-0 gap-2">
                       {canSend && <Button size="sm" variant="secondary" onClick={() => sendToGroup(group)}><Gift size={14} /> Send gift</Button>}
-                      <Button size="sm" onClick={() => openAdd(group)}><Plus size={14} /> Add recipients</Button>
-                      <Button size="sm" variant="secondary" onClick={() => openSheet(group)}>Edit group</Button>
+                      {!fromCrm && <Button size="sm" onClick={() => openAdd(group)}><Plus size={14} /> Add recipients</Button>}
+                      {!fromCrm && <Button size="sm" variant="secondary" onClick={() => openSheet(group)}>Edit group</Button>}
                     </div>
                   </div>
 
@@ -256,7 +258,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
                                 <td className={`${table.td} whitespace-nowrap tabular-nums text-slate-600`}>{prettyMobile(row?.mobileNumber)}</td>
                                 <td className={`${table.td} text-slate-600`}>{cityOf(row)}</td>
                                 <td className={`${table.td} whitespace-nowrap tabular-nums text-slate-600`}>{shortDate(row?.dateOfBirth)}</td>
-                                <td className={`${table.td} space-x-2 whitespace-nowrap text-right`}>{canSend && row && <Button size="sm" variant="secondary" onClick={() => sendToPerson(group, id, String(row.name ?? "Recipient"))}><Gift size={14} /> Send gift</Button>}<Button size="sm" variant="secondary" className="text-rose-700" disabled={removing === id || !canRemove} title={canRemove ? undefined : "A group needs at least one recipient"} aria-label={`Remove ${String(row?.name ?? "recipient")} from ${group.name}`} onClick={() => setMemberToRemove({ group, id, name: String(row?.name ?? "") })}>Remove</Button></td>
+                                <td className={`${table.td} space-x-2 whitespace-nowrap text-right`}>{canSend && row && <Button size="sm" variant="secondary" onClick={() => sendToPerson(group, id, String(row.name ?? "Recipient"))}><Gift size={14} /> Send gift</Button>}{!fromCrm && <Button size="sm" variant="secondary" className="text-rose-700" disabled={removing === id || !canRemove} title={canRemove ? undefined : "A group needs at least one recipient"} aria-label={`Remove ${String(row?.name ?? "recipient")} from ${group.name}`} onClick={() => setMemberToRemove({ group, id, name: String(row?.name ?? "") })}>Remove</Button>}</td>
                               </tr>)}
                             </tbody>
                           </table>
@@ -265,7 +267,7 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
                               <p className="font-medium capitalize text-ink">{row ? String(row.name ?? "Unnamed") : <span className="text-muted">Removed recipient</span>}</p>
                               <dl className="grid grid-cols-3 gap-2 text-sm"><div><dt className="text-muted">Mobile</dt><dd className="font-medium text-ink">{prettyMobile(row?.mobileNumber)}</dd></div><div><dt className="text-muted">City</dt><dd className="font-medium text-ink">{cityOf(row)}</dd></div><div><dt className="text-muted">Birthday</dt><dd className="font-medium text-ink">{shortDate(row?.dateOfBirth)}</dd></div></dl>
                               {canSend && row && <Button size="sm" variant="secondary" className="w-full" onClick={() => sendToPerson(group, id, String(row.name ?? "Recipient"))}><Gift size={14} /> Send gift</Button>}
-                              <Button size="sm" variant="secondary" className="w-full text-rose-700" disabled={removing === id || !canRemove} onClick={() => setMemberToRemove({ group, id, name: String(row?.name ?? "") })}>Remove</Button>
+                              {!fromCrm && <Button size="sm" variant="secondary" className="w-full text-rose-700" disabled={removing === id || !canRemove} onClick={() => setMemberToRemove({ group, id, name: String(row?.name ?? "") })}>Remove</Button>}
                             </li>)}
                           </ul>
                         </div>}

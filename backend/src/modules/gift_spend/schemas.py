@@ -55,6 +55,7 @@ class RecipientGroupRead(BaseModel):
     recipient_ids: list[str]
     created_at: datetime | str
     updated_at: datetime | str
+    crm_group_id: str | None = None  # set = the group is managed in TOFAA CRM and read-only here
 
 
 class OccasionGroupImport(BaseModel):

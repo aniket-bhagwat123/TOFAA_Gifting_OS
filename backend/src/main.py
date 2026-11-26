@@ -31,8 +31,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from src.modules.crm_people.sync import people_mirror
 
         people_mirror.catch_up_in_background()
-    yield
-    # Shutdown actions
+        stop = people_mirror.start_periodic(settings.CRM_SYNC_INTERVAL_SECONDS)
+        yield
+        stop.set()  # Shutdown actions
+    else:
+        yield
 
 
 app = FastAPI(

@@ -2,6 +2,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from src.core.config import settings
 from src.core.security import decode_access_token
 from src.modules.auth.rbac import Role
 from src.modules.auth.schemas import UserProfileResponse
@@ -60,6 +61,11 @@ def get_current_active_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User role is not authorized.",
+        )
+    if settings.OS_KAM_LOGIN_DISABLED and current_user.role == Role.KAM:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Key account managers now work in TOFAA CRM. Please sign in there.",
         )
     # Resolved from the active membership on every request, so deactivating a user or a tenant
     # takes effect immediately. A super admin needs no tenant: they reach every client.
