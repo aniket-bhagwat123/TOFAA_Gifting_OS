@@ -1,5 +1,7 @@
 "use client";
 
+import { useClientFirst } from "@/components/layout/client-chooser";
+import { ownerOf } from "@/services/all-clients";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronRight, Gift, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -132,6 +134,10 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
     finally { setEveryoneLoading(false); }
   }, [ready, everyone, everyoneLoading]);
   const openSheet = (target: RecipientGroup | "new") => { setGroupSheet(target); void ensureEveryone(); };
+  const sheetAsk = useClientFirst({ active: !!groupSheet, fixed: groupSheet && groupSheet !== "new" ? ownerOf(groupSheet.id) : undefined, onCancel: () => setGroupSheet(null) });
+  const addingOwner = ownerOf(addingTo?.id);
+  /** Only one client's people can be in its group. */
+  const peopleOf = (tenantId: string | undefined, rows: Row[]) => (tenantId ? rows.filter((row) => row.tenantId === tenantId) : rows);
   const openAdd = (group: RecipientGroup) => { setAddingTo(group); void ensureEveryone(); };
 
   const filtered = useMemo(() => { const q = search.trim().toLowerCase(); return q ? groups.filter((g) => g.name.toLowerCase().includes(q)) : groups; }, [groups, search]);
@@ -277,11 +283,12 @@ export function GroupsPanel({ embedded = false }: { embedded?: boolean } = {}) {
           </ul>}
     </section>
 
-    {canSend && <SendGiftDialog target={sendTarget} tenantId={tenantId!} onClose={() => setSendTarget(null)} onSent={() => setSendTarget(null)} />}
+    {sheetAsk.dialog}
+    {canSend && <SendGiftDialog target={sendTarget} tenantId={ownerOf(sendTarget?.people[0]?.id) ?? tenantId!} onClose={() => setSendTarget(null)} onSent={() => setSendTarget(null)} />}
     <DeleteDialog open={!!memberToRemove} busy={!!memberToRemove && removing === memberToRemove.id} title="Remove" confirmLabel="Yes, Remove" message={`Are you sure you want to remove ${memberToRemove?.name || "this recipient"} from ${memberToRemove?.group.name ?? "this group"}? They stay in your recipients.`}
       onConfirm={async () => { const m = memberToRemove; if (!m) return; await removeMember(m.group, m.id, m.name); setMemberToRemove(null); }} onClose={() => setMemberToRemove(null)} />
     <DeleteDialog open={confirmDelete} busy={deletingGroups} message={`Are you sure you want to delete ${picked.size === 1 ? "this group" : `${picked.size} groups`}? The people in ${picked.size === 1 ? "it" : "them"} stay in your recipients.`} onConfirm={() => void deleteGroups()} onClose={() => setConfirmDelete(false)} />
-    <AddRecipientsSheet group={addingTo} recipients={everyone} loading={everyoneLoading || (!!addingTo && !everyone)} onClose={() => setAddingTo(null)} onSubmit={(ids, rows) => addMembers(addingTo!, ids, rows)} />
-    <GroupSheet group={groupSheet} endpoint={ready?.groups ?? ""} recipients={everyone ?? []} loadingRecipients={everyoneLoading} onClose={() => setGroupSheet(null)} onSaved={() => { setGroupSheet(null); void load(); }} />
+    <AddRecipientsSheet group={addingTo} recipients={everyone && peopleOf(addingOwner, everyone)} loading={everyoneLoading || (!!addingTo && !everyone)} onClose={() => setAddingTo(null)} onSubmit={(ids, rows) => addMembers(addingTo!, ids, rows)} />
+    <GroupSheet group={sheetAsk.ready ? groupSheet : null} endpoint={sheetAsk.tenantId && user ? moduleConfig["recipient-groups"].endpoint(user, sheetAsk.tenantId) : ready?.groups ?? ""} recipients={peopleOf(sheetAsk.tenantId, everyone ?? [])} loadingRecipients={everyoneLoading} onClose={() => setGroupSheet(null)} onSaved={() => { setGroupSheet(null); void load(); }} />
   </>;
 }

@@ -11,6 +11,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { displayName } from "@/lib/utils";
 import { selectedTenantKey, setSelectedTenant } from "@/features/modules/modules.slice";
+import { ALL_CLIENTS } from "@/services/all-clients";
 
 const moduleTitles: Record<string, string> = {
   home: "Home",
@@ -74,7 +75,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
     </div>
     <div className="flex items-center gap-1.5 sm:gap-3">
       {user?.platformRole !== "CLIENT" && tenants.length > 0 && segment !== "clients" && (() => {
-        const activeTenant = tenants.find((t: { id: string; name: string }) => t.id === selectedTenantId);
+        const activeTenant = selectedTenantId === ALL_CLIENTS ? { name: "All clients" } : tenants.find((t: { id: string; name: string }) => t.id === selectedTenantId);
         return (
           <div className="relative">
             <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-[0_1px_3px_rgba(0,0,0,0.07)] transition-shadow hover:shadow-[0_2px_6px_rgba(0,0,0,0.11)]">
@@ -93,6 +94,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
                 className="absolute inset-0 cursor-pointer opacity-0"
               >
                 <option value="" disabled>Choose a tenant</option>
+                <option value={ALL_CLIENTS}>All clients</option>
                 {tenants.map((tenant: { id: string; name: string }) => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
               </select>
             </div>

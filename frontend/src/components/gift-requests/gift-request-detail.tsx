@@ -1,5 +1,6 @@
 "use client";
 
+import { ownerOf } from "@/services/all-clients";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -42,7 +43,8 @@ type Dialog = { kind: "cancel" } | { kind: "note"; action: "request-info" | "rej
 type DraftOption = { name: string; description: string; price: string; imageUrl: string };
 
 export function GiftRequestDetail({ requestId }: { requestId: string }) {
-  const { tenantId, isClient } = useTenantId();
+  const { user, tenantId, isClient } = useTenantId();
+  const superAdmin = user?.platformRole === "SUPER_ADMIN";
   const [request, setRequest] = useState<GiftRequest | null>(null);
   const [events, setEvents] = useState<GiftEvent[]>([]);
   const [available, setAvailable] = useState<number | null>(null);
@@ -166,7 +168,7 @@ export function GiftRequestDetail({ requestId }: { requestId: string }) {
 
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
       <div className="min-w-0 space-y-6">
-        {status !== "PROPOSAL_READY" && <StatusCard request={request} isClient={isClient} busy={busy} onEdit={() => setEditing(true)}
+        {status !== "PROPOSAL_READY" && <StatusCard request={request} isClient={isClient} canFinish={isClient || (superAdmin && status === "DRAFT")} busy={busy} onEdit={() => setEditing(true)}
           onSubmit={() => void act(() => mutateModule("post", `${base}/submit`, {}), "Sent to TOFAA.")} />}
 
         {(options.length > 0 && (status === "PROPOSAL_READY" || approved)) && <Card className="space-y-6 p-6 sm:p-7">
@@ -202,7 +204,7 @@ export function GiftRequestDetail({ requestId }: { requestId: string }) {
         {!isClient && <StaffActions status={status} busy={busy} onStart={() => void act(() => mutateModule("post", `/admin/gift-requests/${requestId}/start-review`, {}), "Review started.")} onMove={(path, message) => void act(() => mutateModule("post", `/admin/gift-requests/${requestId}/${path}`, {}), message)} onOpen={open} />}
 
         <Card className="space-y-6 p-6 sm:p-7">
-          <div className="flex items-center justify-between"><h3 className="text-lg font-semibold text-ink">Request brief</h3>{isClient && (status === "DRAFT" || status === "NEEDS_INFO") && <Button size="sm" variant="secondary" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</Button>}</div>
+          <div className="flex items-center justify-between"><h3 className="text-lg font-semibold text-ink">Request brief</h3>{(isClient ? status === "DRAFT" || status === "NEEDS_INFO" : superAdmin && status === "DRAFT") && <Button size="sm" variant="secondary" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</Button>}</div>
           <dl className="grid gap-x-8 gap-y-5 text-sm sm:grid-cols-3">
             <Brief label="Request ID" value={request.requestCode} /><Brief label="Recipient" value={request.recipientName} /><Brief label={request.eventId ? "Event" : "Occasion"} value={request.occasionName ?? (request.eventName ? `${request.eventName}${request.eventDate ? ` · ${shortDay(request.eventDate)}` : ""}` : null)} />
             <Brief label="Required delivery date" value={request.deliveryDate ? day(request.deliveryDate) : null} /><Brief label="Budget" value={`${budgetLabel(request)}${request.requestedCredits ? ` · ${num(request.requestedCredits)} credits` : ""}`} /><Brief label="Initiated by" value={request.initiatedVia ? labelFrom(INITIATED_VIA, request.initiatedVia) : null} />
@@ -256,7 +258,7 @@ export function GiftRequestDetail({ requestId }: { requestId: string }) {
       </aside>
     </div>
 
-    {editing && <GiftRequestWizard requestId={requestId} onClose={() => setEditing(false)} onChanged={() => void load()} />}
+    {editing && <GiftRequestWizard requestId={requestId} forTenant={ownerOf(requestId)} onClose={() => setEditing(false)} onChanged={() => void load()} />}
 
     <Sheet open={!!dialog} locked={busy} labelledBy="gr-dialog-title" className={dialog?.kind === "proposal" ? "max-w-2xl" : "max-w-md"} onClose={() => setDialog(null)}>
       {dialog && <form noValidate onSubmit={submitDialog} className="space-y-5">
@@ -292,7 +294,7 @@ function Brief({ label, value }: { label: string; value?: string | null }) {
   return <div><dt className="text-xs text-muted">{label}</dt><dd className="mt-0.5 whitespace-pre-line text-ink">{value}</dd></div>;
 }
 
-function StatusCard({ request, isClient, busy, onSubmit, onEdit }: { request: GiftRequest; isClient: boolean; busy: boolean; onSubmit: () => void; onEdit: () => void }) {
+function StatusCard({ request, isClient, canFinish, busy, onSubmit, onEdit }: { request: GiftRequest; isClient: boolean; canFinish: boolean; busy: boolean; onSubmit: () => void; onEdit: () => void }) {
   const { status } = request;
   const copy: Partial<Record<GiftStatus, { title: string; text: string; tone: string }>> = {
     DRAFT: { title: "This request is still a draft", text: isClient ? "Send it to TOFAA when you're ready. You can keep editing until then." : "The client hasn't sent this yet.", tone: "border-line" },
@@ -308,7 +310,7 @@ function StatusCard({ request, isClient, busy, onSubmit, onEdit }: { request: Gi
   const item = copy[status]; if (!item) return null;
   return <Card className={`flex flex-wrap items-center justify-between gap-4 p-6 ${item.tone}`}>
     <div className="min-w-0"><h3 className="text-lg font-semibold text-ink">{item.title}</h3><p className="mt-1 text-sm text-muted">{item.text}</p></div>
-    {isClient && (status === "DRAFT" || status === "NEEDS_INFO") && <div className="flex gap-2">
+    {canFinish && (status === "DRAFT" || status === "NEEDS_INFO") && <div className="flex gap-2">
       <Button variant="secondary" onClick={onEdit}><Pencil size={15} /> Edit</Button>
       <Button disabled={busy} onClick={onSubmit}>{busy ? "Sending…" : status === "DRAFT" ? "Send to TOFAA" : "Send again"}</Button>
     </div>}

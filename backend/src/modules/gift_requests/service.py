@@ -966,9 +966,7 @@ class GiftRequestService:
 
     @staticmethod
     def _require_can_request(actor: UserProfileResponse) -> None:
-        """Gift requests are raised by the client's team (or their KAM), never by a super admin."""
-        if actor.role == Role.SUPER_ADMIN:
-            raise HTTPException(status_code=403, detail="Super admins cannot create gift requests.")
+        """Gift requests are raised by the client's team, their KAM or a super admin."""
         require_permission(actor, Permission.GIFT_REQUEST_CREATE)
 
     @staticmethod

@@ -1,5 +1,6 @@
 """Dashboard banners, read from TOFAA CRM. Gifting OS stores no banners of its own.
 
+A banner is for every client or for chosen ones, so the CRM is asked for one client (?tenantId=).
 This server calls GET {CRM_API_URL}/api/v1/integrations/banners with the shared secret in the X-API-Key header. The key
 never reaches a browser: the dashboard asks this server (GET /api/v1/banners), never the CRM.
 By default nothing is remembered here (CRM_BANNERS_CACHE_SECONDS = 0): every dashboard load asks the CRM, so uploads
@@ -47,33 +48,34 @@ class CrmBanner(BaseModel):
 class CrmBannerSource:
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._cached: tuple[float, list[CrmBanner]] | None = None  # (expires at, banners)
+        # client id (None = no client chosen) -> (expires at, banners)
+        self._cached: dict[str | None, tuple[float, list[CrmBanner]]] = {}
 
-    def live(self) -> list[CrmBanner]:
-        now = time.monotonic()
-        cached = self._cached
-        if cached and cached[0] > now:
+    def live(self, tenant_id: str | None = None) -> list[CrmBanner]:
+        cached = self._cached.get(tenant_id)
+        if cached and cached[0] > time.monotonic():
             return cached[1]
         with self._lock:  # one fetch at a time; others reuse its result
-            cached = self._cached
+            cached = self._cached.get(tenant_id)
             if cached and cached[0] > time.monotonic():
                 return cached[1]
-            banners, ok = self._fetch()
+            banners, ok = self._fetch(tenant_id)
             ttl = settings.CRM_BANNERS_CACHE_SECONDS if ok else FAILURE_CACHE_SECONDS
-            self._cached = (time.monotonic() + ttl, banners)
+            self._cached[tenant_id] = (time.monotonic() + ttl, banners)
             return banners
 
     def clear(self) -> None:
         with self._lock:
-            self._cached = None
+            self._cached.clear()
 
-    def _fetch(self) -> tuple[list[CrmBanner], bool]:
+    def _fetch(self, tenant_id: str | None) -> tuple[list[CrmBanner], bool]:
         base, key = settings.CRM_API_URL.strip().rstrip("/"), settings.CRM_API_KEY or ""
         if not base or not key:
             return [], True  # not set up: no banners, nothing to report
         try:
             response = httpx.get(
                 base + PATH,
+                params={"tenantId": tenant_id} if tenant_id else None,
                 headers={"X-API-Key": key, "Accept": "application/json"},
                 timeout=settings.CRM_TIMEOUT_SECONDS,
                 follow_redirects=False,  # never resend the key to wherever a redirect points

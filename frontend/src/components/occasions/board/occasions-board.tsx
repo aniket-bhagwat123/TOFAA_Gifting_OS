@@ -1,5 +1,6 @@
 "use client";
 
+import { useClientFirst } from "@/components/layout/client-chooser";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Info, List as ListIcon, MoreVertical, Plus, Search, X } from "lucide-react";
@@ -61,6 +62,9 @@ export function OccasionsBoard() {
   const [sending, setSending] = useState<UpcomingEvent | null>(null);
   const [companySend, setCompanySend] = useState<SendGiftTarget | null>(null);
   const [warn, setWarn] = useState<{ item: OverviewItem; kind: ActionKind } | null>(null);
+  const formAsk = useClientFirst({ active: !!form, fixed: form?.item?.tenantId, onCancel: () => setForm(null) });
+  const [sendOwner, setSendOwner] = useState<string>(); // a client's own occasion; a TOFAA festival has none
+  const sendAsk = useClientFirst({ active: !!companySend, fixed: sendOwner, onCancel: () => setCompanySend(null) });
 
   useEffect(() => { try { const saved = window.localStorage.getItem(VIEW_KEY); if (saved === "calendar" || saved === "list") setView(saved); } catch { /* the page works without it */ } }, []);
   useEffect(() => { try { window.localStorage.setItem(VIEW_KEY, view); } catch { /* ignore */ } }, [view]);
@@ -83,7 +87,7 @@ export function OccasionsBoard() {
   const proceed = (item: OverviewItem, kind: ActionKind) => {
     if (kind === "plan" || kind === "create") {
       // The same Send gift dialog as People and Groups. A company occasion asks who gets it; a person's date is for that person.
-      if (item.sourceType === "COMPANY") setCompanySend({ title: item.name, people: [], wholeGroup: false, pickRecipients: true, occasionId: item.occasionId ?? null, date: item.date });
+      if (item.sourceType === "COMPANY") setSendOwner(item.isGlobal ? undefined : item.tenantId), setCompanySend({ title: item.name, people: [], wholeGroup: false, pickRecipients: true, occasionId: item.occasionId ?? null, date: item.date });
       else setSending(toSendItem(item));
     } else if (item.requestId && (kind === "request" || kind === "track")) router.push(`/requests/${item.requestId}`);
     else setSelected(item);
@@ -191,7 +195,7 @@ export function OccasionsBoard() {
                     const { icon: KindIcon, tint } = KIND_META[item.kind];
                     const primary = action.kind === "plan";
                     return <tr key={item.key} tabIndex={0} onClick={() => setSelected(item)} onKeyDown={(event) => { if (event.key === "Enter" && event.target === event.currentTarget) setSelected(item); }} className={cn(table.row, "cursor-pointer focus-visible:bg-slate-50 focus-visible:outline-none", loading && "opacity-60")}>
-                      <td className={table.td}><div className="flex items-center gap-3"><Subject item={item} /><div className="min-w-0"><p className="truncate font-semibold capitalize text-ink">{item.name}</p><p className="truncate text-xs text-muted">{item.sourceType === "COMPANY" ? "Company Event" : item.relationship ?? ""}</p></div></div></td>
+                      <td className={table.td}><div className="flex items-center gap-3"><Subject item={item} /><div className="min-w-0"><p className="truncate font-semibold capitalize text-ink">{item.name}</p><p className="truncate text-xs text-muted">{[item.sourceType === "COMPANY" ? "Company Event" : item.relationship, item.tenantName].filter(Boolean).join(" · ")}</p></div></div></td>
                       <td className={table.td}><span className="flex items-center gap-3 text-sm font-medium text-ink"><span aria-hidden className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full", tint)}><KindIcon size={20} /></span>{item.label}</span></td>
                       <td className={table.td}><p className="text-sm font-semibold tabular-nums text-ink">{day(item.date)}</p><p className={cn("text-xs", item.daysAway >= 0 && item.daysAway <= 7 ? "font-medium text-amber-700" : "text-muted")}>{countdownText(item.daysAway)}</p></td>
                       <td className={table.td}><StatusPill status={item.status} /></td>
@@ -220,9 +224,10 @@ export function OccasionsBoard() {
       onAct={(item, kind) => { setSelected(null); act(item, kind); }}
       onEdit={(item) => { setSelected(null); setForm({ item }); }}
       onDeleted={() => { setSelected(null); reload(); }} />
-    <AddOccasionPanel open={!!form} editing={form?.item ?? null} prefilledDate={form?.date} tenantId={tenantId} onClose={() => setForm(null)} onSaved={() => { setForm(null); reload(); }} />
+    {formAsk.dialog}{sendAsk.dialog}
+    <AddOccasionPanel open={!!form && formAsk.ready} editing={form?.item ?? null} prefilledDate={form?.date} tenantId={formAsk.tenantId ?? tenantId} onClose={() => setForm(null)} onSaved={() => { setForm(null); reload(); }} />
     <EventSendSheet item={sending} onClose={() => setSending(null)} onSent={() => { setSending(null); reload(); }} />
-    <SendGiftDialog target={companySend} tenantId={tenantId} onClose={() => setCompanySend(null)} onSent={() => { setCompanySend(null); reload(); }} />
+    <SendGiftDialog target={sendAsk.ready ? companySend : null} tenantId={sendAsk.tenantId ?? tenantId} onClose={() => setCompanySend(null)} onSent={() => { setCompanySend(null); reload(); }} />
 
     <Sheet open={!!warn} labelledBy="occ-dup-title" className="max-w-md" onClose={() => setWarn(null)}>
       {warn && <div className="space-y-4">

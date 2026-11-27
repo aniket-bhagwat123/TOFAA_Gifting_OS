@@ -1,5 +1,6 @@
 "use client";
 
+import { useClientFirst } from "@/components/layout/client-chooser";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search,ChevronLeft, ChevronRight, Power, ShieldQuestion, Trash2, Plus, Pencil } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -77,6 +78,10 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
     try { return user ? config.endpoint(user, selectedTenantId) : null; }
     catch (error) { return error instanceof Error ? error.message : "This account is not linked to a tenant."; }
   }, [config, user, selectedTenantId]);
+  // Under "All clients" a new record asks for its client first; an edited one already has it.
+  const ask = useClientFirst({ active: editor !== undefined && moduleKey !== "clients", fixed: editor?.tenantId as string | undefined, onCancel: () => setEditor(undefined) });
+  const formTenant = ask.tenantId ?? selectedTenantId;
+  const formEndpoint = ask.tenantId && user ? config.endpoint(user, ask.tenantId) : endpoint;
   const load = () => {
     if (user && typeof endpoint === "string") void dispatch(loadModule({ key: moduleKey, endpoint, params: { page, limit: pageSize } }));
   };
@@ -86,7 +91,7 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
     if ((moduleKey !== "recipient-groups" && moduleKey !== "gifts") || !user || typeof endpoint !== "string") return;
     let cancelled = false;
     const tasks: Promise<void>[] = [];
-    const recipientTask = loadAllModuleRecords(moduleConfig.recipients.endpoint(user, selectedTenantId))
+    const recipientTask = loadAllModuleRecords(moduleConfig.recipients.endpoint(user, formTenant))
       .then((items) => { if (!cancelled) setRecipientOptions(items); })
       .catch((error) => { if (!cancelled) setRecipientsError(getApiErrorMessage(error)); })
       .finally(() => { if (!cancelled) setRecipientsLoading(false); });
@@ -98,21 +103,21 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
       setEventOptionsLoading(true);
       setEventOptionsError(null);
       setEventOptions([]);
-      tasks.push(loadAllModuleRecords(moduleConfig.events.endpoint(user, selectedTenantId))
+      tasks.push(loadAllModuleRecords(moduleConfig.events.endpoint(user, formTenant))
         .then((items) => { if (!cancelled) setEventOptions(items); })
         .catch((error) => { if (!cancelled) setEventOptionsError(getApiErrorMessage(error)); })
         .finally(() => { if (!cancelled) setEventOptionsLoading(false); }));
       setOccasionOptionsLoading(true);
       setOccasionOptionsError(null);
       setOccasionOptions([]);
-      tasks.push(loadAllModuleRecords(moduleConfig.occasions.endpoint(user, selectedTenantId))
+      tasks.push(loadAllModuleRecords(moduleConfig.occasions.endpoint(user, formTenant))
         .then((items) => { if (!cancelled) setOccasionOptions(items); })
         .catch((error) => { if (!cancelled) setOccasionOptionsError(getApiErrorMessage(error)); })
         .finally(() => { if (!cancelled) setOccasionOptionsLoading(false); }));
     }
     void Promise.all(tasks);
     return () => { cancelled = true; };
-  }, [moduleKey, user, selectedTenantId, endpoint]);
+  }, [moduleKey, user, formTenant, endpoint]);
 
   useEffect(() => {
     // New user: start with a generated password the admin can see. Editing: blank = keep the current one.
@@ -125,7 +130,9 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
   const pagination = entry?.data && typeof entry.data === "object" ? (entry.data as any).pagination : undefined;
   const total = Number(pagination?.totalRecords ?? pagination?.total_records ?? pagination?.total ?? (entry?.data && typeof entry.data === "object" ? (entry.data as any).total : undefined) ?? rows.length);
   const totalPages = Math.max(1, Number(pagination?.pages ?? Math.ceil(total / pageSize)));
-  const columns = config.columns.length ? config.columns : Array.from(new Set(rows.flatMap((row) => Object.keys(row)))).slice(0, 8);
+  const baseColumns = config.columns.length ? config.columns : Array.from(new Set(rows.flatMap((row) => Object.keys(row)))).slice(0, 8);
+  // While all clients are shown each row says whose it is.
+  const columns = selectedTenantId === "all" && rows.some((row) => row.tenantName) && !baseColumns.includes("tenantName") ? [...baseColumns, "tenantName"] : baseColumns;
   const recipientNameById = new Map(recipientOptions.map((recipient) => [String(recipient.id ?? ""), String(recipient.name ?? "Unknown recipient")]));
   const isList = Array.isArray(entry?.data) || !!(entry?.data && typeof entry.data === "object" && Array.isArray((entry.data as any).items));
   const isClient = user?.platformRole === "CLIENT";
@@ -145,7 +152,7 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
 
   const saveRecord = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (typeof endpoint !== "string") return;
+    if (typeof endpoint !== "string" || typeof formEndpoint !== "string") return;
     const fields = editor ? editableFields : config.createFields;
     if (!fields) return;
     const form = new FormData(event.currentTarget);
@@ -182,10 +189,10 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
       setFieldErrors({ [body.eventId ? "occasionId" : "eventId"]: message });
       return;
     }
-    let path = endpoint;
+    let path = formEndpoint;
     if (editor) {
-      path = config.updateEndpoint?.(endpoint, editor) ?? (moduleKey === "gifts" ? `/gifts/${editor.id}` : moduleKey === "team-users" ? `/tenants/${selectedTenantId}/users/${editor.id}` : `${endpoint}/${editor.id}`);
-    } else if (moduleKey === "team-users") path = `/tenants/${selectedTenantId}/users`;
+      path = config.updateEndpoint?.(formEndpoint, editor) ?? (moduleKey === "gifts" ? `/gifts/${editor.id}` : moduleKey === "team-users" ? `/tenants/${formTenant}/users/${editor.id}` : `${formEndpoint}/${editor.id}`);
+    } else if (moduleKey === "team-users") path = `/tenants/${formTenant}/users`;
     setSaving(true);
     try {
       const saved = await mutateModule(editor ? config.updateMethod ?? "patch" : "post", path, body, params, moduleKey === "credits" && !editor ? { "Idempotency-Key": crypto.randomUUID() } : undefined) as { invitationWarning?: string } | undefined;
@@ -333,7 +340,8 @@ export function ModuleList({ moduleKey }: { moduleKey: string }) {
       </> : <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">{filteredRows.length ? filteredRows.flatMap((row) => Object.entries(row)).filter(([, value]) => typeof value !== "object" || value === null).map(([key, value]) => <div key={key} className="rounded-2xl border border-line/70 p-4"><p className="text-sm text-muted">{labelOf(key)}</p><p className="mt-1 break-words text-base font-semibold text-ink">{renderCell(key, value)}</p></div>) : <p className="col-span-full py-10 text-center text-sm text-muted">{entry?.status === "loading" ? "Loading…" : "Nothing to show yet."}</p>}</div>}
       {isList && totalPages > 1 && <div className={cn(table.footer, "flex-nowrap")}><p className="hidden text-sm text-muted sm:block">{total} in total</p><div className="flex w-full items-center justify-between gap-2 sm:w-auto"><Button variant="secondary" size="sm" disabled={page <= 1 || entry?.status === "loading"} onClick={() => setPage((value) => value - 1)}><ChevronLeft size={16} /> Previous</Button><span className="px-2 text-sm text-muted">Page {page} of {totalPages}</span><Button variant="secondary" size="sm" disabled={page >= totalPages || entry?.status === "loading"} onClick={() => setPage((value) => value + 1)}>Next <ChevronRight size={16} /></Button></div></div>}
     </Card>
-    <FormPanel open={editor !== undefined} locked={saving} width={config.modalWidth ?? "md"} onSubmit={saveRecord} icon={editor ? <Pencil size={26} /> : <Plus size={26} />}
+    {ask.dialog}
+    <FormPanel open={editor !== undefined && ask.ready} locked={saving} width={config.modalWidth ?? "md"} onSubmit={saveRecord} icon={editor ? <Pencil size={26} /> : <Plus size={26} />}
       title={editor ? `Edit ${noun}` : `Add ${noun}`} description={editor ? `Change the details of this ${noun}.` : `Fill in the details to add a new ${noun}.`}
       onClose={() => { setEditor(undefined); setFieldErrors({}); setSelectedRecipientIds([]); }}
       footer={<div className="flex gap-3"><Button type="button" variant="secondary" className="flex-1" disabled={saving} onClick={() => { setEditor(undefined); setFieldErrors({}); setSelectedRecipientIds([]); }}>Cancel</Button><Button type="submit" className="flex-1" disabled={saving}>{saving ? "Saving…" : editor ? "Save changes" : isUserModule ? "Create User" : `Add ${noun}`}</Button></div>}>

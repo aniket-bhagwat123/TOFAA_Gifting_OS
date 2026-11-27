@@ -34,7 +34,7 @@ export function formatTimestamp(value: unknown): string {
 export const columnLabels: Record<string, string> = {
   mobileNumber: "Mobile", dateOfBirth: "Birthday", budget: "Budget", tenantType: "Type", createdAt: "Added", requestedBudget: "Budget",
   giftName: "Gift", unitPrice: "Price", requestedCredits: "Credits", amountDueMinor: "Amount due", occasionName: "Occasion", occasionDate: "Date",
-  eventName: "Event", eventDate: "Date", isActive: "Status", fullName: "Name", notificationType: "About", readAt: "Seen", recipientIds: "People", slaState: "Timing", summary: "What changed", changedAt: "When"
+  tenantName: "Client", eventName: "Event", eventDate: "Date", isActive: "Status", fullName: "Name", notificationType: "About", readAt: "Seen", recipientIds: "People", slaState: "Timing", summary: "What changed", changedAt: "When"
 };
 export const labelOf = (col: string) => columnLabels[col] ?? titleCase(col);
 export const moneyColumns = new Set(["budget", "requestedBudget", "unitPrice"]);

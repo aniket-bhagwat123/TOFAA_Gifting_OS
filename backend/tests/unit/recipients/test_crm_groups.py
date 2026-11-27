@@ -68,3 +68,55 @@ def test_editing_or_deleting_a_crm_group_is_refused(monkeypatch):
         with pytest.raises(HTTPException) as err:
             call()
         assert err.value.status_code == 409 and "Diwali" in err.value.detail
+
+
+def test_a_group_left_under_an_earlier_client_is_made_again_for_the_new_one(monkeypatch):
+    """The CRM account was linked to another client: the old copy is detached (not deleted), the new one gets its own id."""
+    from postgrest.exceptions import APIError
+
+    from src.modules.crm_people.groups import Change, GroupMirror
+
+    rows = [{"id": "g1", "tenant_id": "old", "name": "Diwali", "crm_group_id": "g1"}]
+    done = []
+
+    class Table:
+        def __init__(self):
+            self.filters, self.op, self.values = {}, "select", None
+
+        def select(self, *a):
+            return self
+
+        def insert(self, values):
+            self.op, self.values = "insert", values
+            return self
+
+        def update(self, values):
+            self.op, self.values = "update", values
+            return self
+
+        def eq(self, key, value):
+            self.filters[key] = value
+            return self
+
+        def execute(self):
+            if self.op == "insert":
+                if any(r["id"] == self.values["id"] for r in rows):
+                    raise APIError({"code": "23505", "message": "duplicate key"})
+                rows.append(dict(self.values))
+            found = [r for r in rows if all(r.get(k) == v for k, v in self.filters.items())]
+            if self.op == "update":
+                for r in found:
+                    r.update(self.values)
+            done.append(self.op)
+            return type("R", (), {"data": [dict(r) for r in found]})()
+
+    class Database:
+        def table(self, name):
+            return Table()
+
+    monkeypatch.setattr(GroupMirror, "db", property(lambda self: Database()))
+    change = Change("create", "g1", "new", "Diwali", "g1")
+    GroupMirror()._apply(change)
+    assert rows[0] == {"id": "g1", "tenant_id": "old", "name": "Diwali", "crm_group_id": None}
+    assert rows[1]["tenant_id"] == "new" and rows[1]["crm_group_id"] == "g1" and rows[1]["id"] == change.id != "g1"
+

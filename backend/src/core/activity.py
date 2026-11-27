@@ -328,6 +328,7 @@ _VERBS = {"POST": "added", "PUT": "updated", "PATCH": "updated", "DELETE": "remo
 
 
 def segments(route: str) -> tuple[str, ...]:
+    route = route.replace("/integrations/crm/modules", "")  # changes made from TOFAA CRM read like the OS's own
     return tuple(p for p in route.strip("/").split("/") if p and not p.startswith("{") and p not in _SKIPPED)
 
 

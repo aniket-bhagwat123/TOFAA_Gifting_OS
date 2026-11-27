@@ -74,7 +74,7 @@ export function RecipientsTable({ rows, loading, selected, onToggle, onTogglePag
                   <Avatar name={String(row.name ?? "")} src={row.avatarUrl ?? undefined} className="h-8 w-8 text-xs" />
                   <span className="min-w-0">
                     <span className="flex items-center gap-2"><span className="block max-w-[10rem] truncate text-sm font-semibold capitalize text-ink">{String(row.name ?? "Unnamed")}</span>{row.isPrimary && <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand">Primary</span>}</span>
-                    <span className="block max-w-[12rem] truncate text-xs text-muted">{row.designation || ""}</span>
+                    <span className="block max-w-[12rem] truncate text-xs text-muted">{[row.designation, row.tenantName].filter(Boolean).map(String).join(" · ")}</span>
                   </span>
                 </button>
               </td>

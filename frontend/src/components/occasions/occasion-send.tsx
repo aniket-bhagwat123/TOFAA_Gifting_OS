@@ -1,5 +1,9 @@
 "use client";
 
+import { NoPeople } from "@/components/recipients/no-people";
+import { useClientFirst } from "@/components/layout/client-chooser";
+import { useRouter } from "next/navigation";
+import { ownerOf } from "@/services/all-clients";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, ChevronLeft, Send } from "lucide-react";
@@ -21,7 +25,10 @@ type Result = { createdCount: number; skippedCount: number; creditsPerRecipient:
 
 /** Plan gifts for one occasion: a budget, who it is for (groups and/or people), then Send. */
 export function OccasionSend({ occasionId }: { occasionId: string }) {
-  const { tenantId } = useTenantId();
+  const viewing = useTenantId();
+  const router = useRouter();
+  const ask = useClientFirst({ active: true, fixed: ownerOf(occasionId), onCancel: () => router.push("/occasions") });
+  const tenantId = ask.ready ? ask.tenantId ?? viewing.tenantId : null;
   const { unitPriceMinor, available } = useBudgetInfo(tenantId);
   const [occasion, setOccasion] = useState<Occasion | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -91,11 +98,13 @@ export function OccasionSend({ occasionId }: { occasionId: string }) {
 
   const toggleGroup = (id: string) => { setGroupIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]); setError(null); };
 
+  if (!ask.ready) return <>{ask.dialog}</>;
   if (!tenantId) return <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-base text-amber-900">Choose a tenant from the “Viewing” menu at the top first.</div>;
   if (loadError) return <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-base text-rose-800">{loadError} <Link href="/occasions" className="font-semibold underline">Back to occasions</Link></div>;
   if (!ready || !occasion) return <div className="flex justify-center py-20"><Spinner /></div>;
 
   return <div className="w-full space-y-6">
+    {ask.dialog}
     <div>
       <Link href="/occasions" className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-ink"><ChevronLeft size={16} /> Gift Calendar</Link>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -141,6 +150,7 @@ export function OccasionSend({ occasionId }: { occasionId: string }) {
           </div> : <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-muted">You have no groups yet. Pick people one by one, or <Link href="/recipient-groups" className="font-semibold text-brand hover:underline">create a group</Link>.</p>)
             : <div className="space-y-1.5"><span id="occ-people" className="sr-only">People</span>
               <RecipientMultiSelect options={recipients} selectedIds={peopleIds} loading={false} loadError={null} labelId="occ-people" onChange={(id, selected) => { setPeopleIds((current) => selected ? [...current, id] : current.filter((value) => value !== id)); setError(null); }} /></div>}
+          <NoPeople tenantId={tenantId} empty={!recipients.length} onAdded={setRecipients} />
         </div>
 
         <label className="block space-y-1.5 text-sm font-medium text-ink">Note for TOFAA <span className="font-normal text-muted">(optional)</span>

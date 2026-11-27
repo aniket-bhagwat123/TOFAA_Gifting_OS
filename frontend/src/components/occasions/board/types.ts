@@ -8,6 +8,7 @@ export type Sort = "soonest" | "priority" | "name";
 
 export type OpenRequest = { id: string; requestCode?: string | null; status: string; recipientId?: string | null };
 export type OverviewItem = {
+  tenantId?: string; tenantName?: string; // set while all clients are shown
   key: string; sourceDate?: string | null; sourceType: "RECIPIENT" | "COMPANY"; kind: Kind; label: string; name: string; date: string; daysAway: number;
   status: Status; tab: Tab; priority: Priority; repeatAnnually: boolean; notes?: string | null; description?: string | null;
   recipientId?: string | null; recipientAvatarUrl?: string | null; relationship?: string | null; eventId?: string | null; occasionId?: string | null;

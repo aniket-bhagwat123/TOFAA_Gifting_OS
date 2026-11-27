@@ -9,6 +9,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { loadCurrentUser } from "@/features/auth/auth.slice";
 import { loadModule, selectedTenantKey, setSelectedTenant } from "@/features/modules/modules.slice";
+import { ALL_CLIENTS, type ClientOption, setClients } from "@/services/all-clients";
+import { ClientChooser } from "./client-chooser";
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch();
@@ -24,13 +26,14 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (user && user.platformRole !== "CLIENT" && !tenantOptions) void dispatch(loadModule({ key: "tenantOptions", endpoint: "/tenants", params: { page: 1, limit: 100 } }));
   }, [dispatch, user, tenantOptions]);
-  // Staff pick the client they work on. Restore the last choice, but never guess one: acting on the wrong client is worse than choosing.
+  // Staff see all clients unless they last chose one. (Under "All clients" nothing is guessed: something new asks whose it is.)
+  const clients = (tenantOptions?.data as { items?: ClientOption[] } | undefined)?.items;
+  if (clients) setClients(clients); // before the screens ask for data
   useEffect(() => {
-    const clients = (tenantOptions?.data as { items?: { id: string }[] } | undefined)?.items;
-    if (!clients || selectedTenantId || !user) return;
+    if (!clients?.length || selectedTenantId || !user) return;
     const remembered = window.localStorage.getItem(selectedTenantKey(user.id));
-    if (remembered && clients.some((client) => client.id === remembered)) dispatch(setSelectedTenant(remembered));
-  }, [dispatch, user, tenantOptions, selectedTenantId]);
+    dispatch(setSelectedTenant(remembered && clients.some((client) => client.id === remembered) ? remembered : ALL_CLIENTS));
+  }, [dispatch, user, clients, selectedTenantId]);
   useEffect(() => {
     if (status === "unauthenticated") router.replace(`/login?next=${encodeURIComponent(pathname)}`);
   }, [status, router, pathname]);
@@ -44,5 +47,5 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   }
   if (status !== "authenticated") return null;
 
-  return <div className="min-h-screen bg-canvas"><a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-xl focus:bg-white focus:px-4 focus:py-2">Skip to content</a><Sidebar mobileOpen={menuOpen} onClose={() => setMenuOpen(false)} /><div className="lg:pl-[216px]"><Topbar onMenu={() => setMenuOpen(true)} /><main id="main" className="animate-rise-in p-4 sm:p-5 lg:p-5">{children}</main></div><FirstLoginPasswordDialog open={mustReset} /></div>;
+  return <div className="min-h-screen bg-canvas"><a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-xl focus:bg-white focus:px-4 focus:py-2">Skip to content</a><Sidebar mobileOpen={menuOpen} onClose={() => setMenuOpen(false)} /><div className="lg:pl-[216px]"><Topbar onMenu={() => setMenuOpen(true)} /><main id="main" className="animate-rise-in p-4 sm:p-5 lg:p-5">{children}</main></div><FirstLoginPasswordDialog open={mustReset} />{selectedTenantId === ALL_CLIENTS && <ClientChooser />}</div>;
 }

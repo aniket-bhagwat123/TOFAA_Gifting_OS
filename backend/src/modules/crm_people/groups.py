@@ -7,6 +7,8 @@ The CRM sends a full snapshot: every group of every linked client, with its memb
                                  its members become the CRM's
   * deleted in the CRM        -> deleted here, or kept as a Gifting OS group when an occasion still uses it
 Groups without `crm_group_id` that match nothing in the CRM are never touched.
+When a CRM account is linked to a different client here, its groups are made again under that client; the earlier copies
+stay with the earlier client as Gifting OS groups.
 
 Preview without writing anything:  python -m src.modules.crm_people.groups
 """
@@ -15,6 +17,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import uuid4
 
 from postgrest.exceptions import APIError
 
@@ -120,6 +123,20 @@ class GroupMirror:
         lookups.clear()
         return done
 
+    def _free_from_earlier_client(self, c: Change, refused: APIError) -> str:
+        """The CRM group is already copied under another client (its account was linked elsewhere before). That copy
+        stops following the CRM and keeps its people and budgets; returns the id to make the new copy with. Any other
+        clash (for example a name) is passed on."""
+        db = self.db
+        table = "spend_recipient_groups"
+        found = (db.table(table).select("id,tenant_id,crm_group_id").eq("crm_group_id", c.crm_group_id).execute().data or []) +                 (db.table(table).select("id,tenant_id,crm_group_id").eq("id", c.id).execute().data or [])
+        earlier = [g for g in found if str(g["tenant_id"]) != c.tenant_id]
+        if not earlier:
+            raise refused
+        for group in earlier:
+            db.table(table).update({"crm_group_id": None}).eq("id", group["id"]).execute()
+        return str(uuid4()) if any(str(g["id"]) == c.id for g in earlier) else c.id
+
     def _apply(self, c: Change) -> None:
         db = self.db
         groups = lambda: db.table("spend_recipient_groups")  # noqa: E731
@@ -135,7 +152,13 @@ class GroupMirror:
         if c.updated_at:
             values["updated_at"] = c.updated_at
         if c.action == "create":
-            groups().insert({**values, "id": c.id, "tenant_id": c.tenant_id}).execute()
+            try:
+                groups().insert({**values, "id": c.id, "tenant_id": c.tenant_id}).execute()
+            except APIError as exc:
+                if exc.code != "23505":
+                    raise
+                c.id = self._free_from_earlier_client(c, exc)
+                groups().insert({**values, "id": c.id, "tenant_id": c.tenant_id}).execute()
         else:
             groups().update(values).eq("id", c.id).execute()
         # Add before removing, so a failure part way never leaves the group emptier than both versions.

@@ -47,7 +47,8 @@ function rowToInitial(row: DirectoryRow): WizardData {
   };
 }
 
-export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onClose, onSaved, onEdited, onViewProfile }: {
+export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onClose, onSaved, onEdited, onViewProfile, zIndex, doneLabel }: {
+  zIndex?: string; doneLabel?: string; // when opened from inside another form
   open: boolean; endpoints: SaveEndpoints | null; userId?: string;
   editTarget?: DirectoryRow | null;
   onClose: () => void; onSaved: () => void; onEdited?: () => void; onViewProfile: (id: string) => void;
@@ -190,10 +191,10 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
 
   // ── success state (add mode only) ─────────────────────────────────────────
   if (result) {
-    return <FormPanel open={open} onClose={onClose} width="2xl" icon={<CheckCircle2 size={26} />} title="Recipient added"
+    return <FormPanel zIndex={zIndex} open={open} onClose={onClose} width="2xl" icon={<CheckCircle2 size={26} />} title="Recipient added"
       description="The recipient is saved and shared with your TOFAA team."
       footer={<div className="flex flex-wrap gap-3">
-        <Button className="flex-1" onClick={() => { onClose(); onViewProfile(result.recipientId); }}>View recipient profile</Button>
+        <Button className="flex-1" onClick={() => { onClose(); onViewProfile(result.recipientId); }}>{doneLabel ?? "View recipient profile"}</Button>
         <Button variant="secondary" className="flex-1" onClick={reset}><UserPlus size={16} /> Add another</Button>
         <Button variant="secondary" className="flex-1" onClick={onClose}>Close</Button>
       </div>}>
@@ -209,7 +210,7 @@ export function RecipientCreatePanel({ open, endpoints, userId, editTarget, onCl
   const stepper = <WizardStepper steps={isEdit ? STEPS : STEPS.map((s) => (s.key === "preferences" ? { ...s, label: "Delivery Address" } : s))} current={step} reached={reached} onGo={go} />;
 
   return <>
-    <FormPanel open={open} onClose={close} width="2xl" locked={locked} onSubmit={(e) => void submit(e)}
+    <FormPanel zIndex={zIndex} open={open} onClose={close} width="2xl" locked={locked} onSubmit={(e) => void submit(e)}
       icon={isEdit ? <UserPen size={26} /> : <UserPlus size={26} />}
       title={isEdit ? "Edit Recipient" : "Add Recipient"}
       description={isEdit ? `Updating ${editTarget?.name ?? "recipient"}'s profile. Only the name is required.` : "Create a new recipient profile. Only the name is required."}

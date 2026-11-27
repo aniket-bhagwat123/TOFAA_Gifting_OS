@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Building2, Loader2, RefreshCw, Eye, EyeOff, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { FormPanel, FormSection } from "@/components/ui/form-panel";
+import { CrmAccountSection } from "./crm-account-section";
 import { Button } from "@/components/ui/button";
 import { RequiredMark } from "@/components/ui/required-mark";
 import { generatePassword, PASSWORD_MIN } from "@/lib/password";
@@ -553,6 +554,8 @@ export function ClientCreateSheet({
           </button>
         )}
       </FormSection>
+
+      {isEdit && <CrmAccountSection number={3} tenantId={String(editClient?.id ?? "")} />}
     </FormPanel>
   );
 }

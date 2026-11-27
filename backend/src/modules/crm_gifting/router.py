@@ -3,6 +3,8 @@
 POST is used for these reads because the list of allowed clients is too long for a web address.
 """
 
+import base64
+import binascii
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -159,6 +161,84 @@ class Invite(Writer):
     email: str = Field(max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     full_name: str | None = Field(default=None, max_length=150)
     client_role: Literal["OWNER", "EA", "HR"] = "OWNER"
+
+
+class ClientChange(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    tenant_id: UUID
+    name: str | None = Field(default=None, min_length=2, max_length=200)
+    active: bool | None = None
+    actor_id: UUID
+    actor_name: str = Field(min_length=1, max_length=100)
+
+
+@clients_router.post("/list")
+def all_clients() -> dict:
+    return {"data": crm_clients_service.list_all(), "message": "OK"}
+
+
+@clients_router.post("/update")
+def change_client(body: ClientChange) -> dict:
+    data = crm_clients_service.change(
+        str(body.tenant_id), name=body.name, active=body.active, crm_user_id=str(body.actor_id), crm_user_name=body.actor_name,
+    )
+    return {"data": data, "message": "Client updated."}
+
+
+class ClientWriter(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    tenant_id: UUID
+    actor_id: UUID  # the signed-in CRM user
+    actor_name: str = Field(min_length=1, max_length=100)
+
+    def who(self) -> dict:
+        return {"crm_user_id": str(self.actor_id), "crm_user_name": self.actor_name}
+
+
+class ClientDetails(ClientWriter):
+    legal_name: str | None = Field(default=None, max_length=200)
+    gstin: str | None = Field(default=None, min_length=15, max_length=15, pattern=r"^[A-Za-z0-9]{15}$")
+    email_domain: str | None = Field(default=None, max_length=253)
+
+
+class ClientLogo(ClientWriter):
+    content: str | None = Field(default=None, max_length=3_000_000)  # base64; none removes the logo
+    content_type: str = Field(default="", max_length=40)
+
+
+class ClientLogin(ClientWriter):
+    user_id: UUID
+    full_name: str | None = Field(default=None, max_length=150)
+    client_role: Literal["OWNER", "EA", "HR"] | None = None
+    is_active: bool | None = None
+
+
+@clients_router.post("/details")
+def change_details(body: ClientDetails) -> dict:
+    changes = {k: getattr(body, k) for k in ("legal_name", "gstin", "email_domain") if k in body.model_fields_set}
+    if not changes:
+        raise ApiError(422, "Nothing to change.")
+    return {"data": crm_clients_service.change_details(str(body.tenant_id), changes, **body.who()), "message": "Client updated."}
+
+
+@clients_router.post("/logo")
+def change_logo(body: ClientLogo) -> dict:
+    try:
+        content = base64.b64decode(body.content, validate=True) if body.content else None
+    except binascii.Error as exc:
+        raise ApiError(422, "That picture could not be read.") from exc
+    data = crm_clients_service.change_logo(str(body.tenant_id), content, body.content_type, **body.who())
+    return {"data": data, "message": "Logo saved."}
+
+
+@clients_router.post("/users/update")
+def change_login(body: ClientLogin) -> dict:
+    changes = body.model_dump(include={"full_name", "client_role", "is_active"}, exclude_none=True)
+    if not changes:
+        raise ApiError(422, "Nothing to change.")
+    return {"data": crm_clients_service.change_user(str(body.tenant_id), str(body.user_id), changes, **body.who()), "message": "Login updated."}
 
 
 @clients_router.post("/status")

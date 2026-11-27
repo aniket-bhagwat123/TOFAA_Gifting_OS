@@ -44,6 +44,7 @@ def note(actor: Any, tenant_id: str) -> None:
 
 def resource_of(route_path: str) -> str:
     """The first meaningful path segment, e.g. ``/api/v1/tenants/{tenant_id}/recipients/{id}`` -> recipients."""
+    route_path = route_path.replace("/integrations/crm/modules", "")
     parts = [p for p in route_path.strip("/").split("/") if p and not p.startswith("{") and p not in _SKIPPED_SEGMENTS]
     return parts[0] if parts else "tenant"
 

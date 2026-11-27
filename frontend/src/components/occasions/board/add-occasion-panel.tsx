@@ -1,5 +1,6 @@
 "use client";
 
+import { NoPeople } from "@/components/recipients/no-people";
 import { useEffect, useState } from "react";
 import { Building2, CalendarPlus, Check } from "lucide-react";
 import { toast } from "sonner";
@@ -57,6 +58,8 @@ export function AddOccasionPanel({ open, editing, prefilledDate, tenantId, onClo
     });
   }, [open, editing, prefilledDate]);
 
+  useEffect(() => { setRecipients(null); setLoadError(null); }, [tenantId]);
+
   useEffect(() => {
     if (!open || recipients) return;
     let cancelled = false;
@@ -66,6 +69,12 @@ export function AddOccasionPanel({ open, editing, prefilledDate, tenantId, onClo
     return () => { cancelled = true; };
   }, [open, recipients, tenantId]);
 
+  const [addingPerson, setAddingPerson] = useState(false);
+  const personAdded = (people: Record<string, unknown>[]) => {
+    const added = people.find((row) => !(recipients ?? []).some((known) => known.id === row.id));
+    setRecipients(people);
+    if (added) set({ recipientId: String(added.id) });
+  };
   const company = form.mode === "COMPANY";
   const categories = editing && form.category && !COMPANY_CATEGORIES.includes(form.category) ? [...COMPANY_CATEGORIES, form.category] : COMPANY_CATEGORIES;
 
@@ -106,7 +115,7 @@ export function AddOccasionPanel({ open, editing, prefilledDate, tenantId, onClo
   const error = (key: string) => errors[key] ? <p role="alert" className="mt-1 text-sm text-rose-600">{errors[key]}</p> : null;
   const HeaderIcon = company ? Building2 : CalendarPlus;
 
-  return <FormPanel open={open} onClose={onClose} width="md" locked={saving} onSubmit={save} icon={<HeaderIcon size={26} />} title={editing ? "Edit Occasion" : "Add Occasion"} description={editing ? "Change the details of this occasion." : "Add an important date to your company's gifting calendar."}
+  return <FormPanel open={open} onClose={addingPerson ? () => undefined : onClose} width="md" locked={saving} onSubmit={save} icon={<HeaderIcon size={26} />} title={editing ? "Edit Occasion" : "Add Occasion"} description={editing ? "Change the details of this occasion." : "Add an important date to your company's gifting calendar."}
     submitLabel={editing ? "Save changes" : "Save Occasion"}>
       {!editing && <div role="tablist" aria-label="Occasion type" className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1">
         {([["RECIPIENT", "Recipient Occasion"], ["COMPANY", "Company Occasion"]] as const).map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={form.mode === value} onClick={() => set({ mode: value })} className={cn("press min-h-11 rounded-xl px-3 text-sm font-semibold", form.mode === value ? "border border-brand bg-white text-brand shadow-sm" : "text-slate-700")}>{label}</button>)}
@@ -130,6 +139,7 @@ export function AddOccasionPanel({ open, editing, prefilledDate, tenantId, onClo
           <div><span id="occ-recipient-label" className={fieldLabel}>Recipient<RequiredMark /></span>
             {editing ? <p className="min-h-10 rounded-md border border-line bg-slate-50 px-3 py-2 text-sm capitalize text-ink">{editing.name}</p>
               : <SearchableSelect name="recipientId" labelId="occ-recipient-label" options={(recipients ?? []).map((row) => ({ id: String(row.id), label: String(row.name ?? "Unnamed"), searchText: String(row.mobileNumber ?? "") }))} value={form.recipientId} loading={!recipients && !loadError} loadError={loadError} placeholder="Search and select recipient…" error={errors.recipientId} required onChange={(value) => set({ recipientId: value })} />}
+            {!editing && <NoPeople tenantId={tenantId} empty={recipients?.length === 0} onAdded={personAdded} onOpenChange={setAddingPerson} />}
             {error("recipientId")}</div>
           <div><label htmlFor="occ-relationship" className={fieldLabel}>Relationship</label>
             <select id="occ-relationship" value={form.relationship} onChange={(event) => set({ relationship: event.target.value })} className={inputClass}><option value="">Select relationship</option>{RELATIONSHIPS.map((name) => <option key={name} value={name}>{name}</option>)}</select></div>

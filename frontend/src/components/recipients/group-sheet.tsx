@@ -1,5 +1,6 @@
 "use client";
 
+import { NoPeople } from "@/components/recipients/no-people";
 import { useEffect, useId, useState } from "react";
 import { Users, X } from "lucide-react";
 import { toast } from "sonner";
@@ -25,6 +26,10 @@ export function GroupSheet({ group, endpoint, recipients, presetIds, loadingReci
   const [errors, setErrors] = useState<{ name?: string; ids?: string }>({});
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [addingPerson, setAddingPerson] = useState(false);
+  const [added, setAdded] = useState<Record<string, unknown>[]>([]); // people added from inside this form
+  useEffect(() => setAdded([]), [endpoint]);
+  const people = added.length ? [...recipients.filter((row) => !added.some((a) => a.id === row.id)), ...added] : recipients;
 
   useEffect(() => {
     setName(editing?.name ?? "");
@@ -58,7 +63,7 @@ export function GroupSheet({ group, endpoint, recipients, presetIds, loadingReci
   };
 
   return (
-    <Sheet open={!!group} onClose={onClose} labelledBy={titleId} locked={busy} className="max-w-lg">
+    <Sheet open={!!group} onClose={addingPerson ? () => undefined : onClose} labelledBy={titleId} locked={busy} className="max-w-lg">
       {(
         <form noValidate onSubmit={(e) => void save(e)}>
           <div className="flex items-start justify-between gap-3">
@@ -87,10 +92,12 @@ export function GroupSheet({ group, endpoint, recipients, presetIds, loadingReci
             <div className="space-y-1.5">
               <span id="group-people-label" className="block text-sm font-semibold text-ink">Recipients<RequiredMark /></span>
               <RecipientMultiSelect
-                options={recipients} selectedIds={ids} loading={loadingRecipients}
+                options={people} selectedIds={ids} loading={loadingRecipients}
                 loadError={null} error={errors.ids} labelId="group-people-label"
                 onChange={(id, selected) => { setIds((c) => selected ? [...c, id] : c.filter((v) => v !== id)); setErrors((c) => ({ ...c, ids: undefined })); }}
               />
+              {group && <NoPeople tenantId={endpoint.split("/")[2]} empty={!loadingRecipients && !people.length} onOpenChange={setAddingPerson}
+                onAdded={(rows) => { setAdded(rows); setIds((c) => [...new Set([...c, ...rows.filter((row) => !people.some((p) => p.id === row.id)).map((row) => String(row.id))])]); }} />}
             </div>
           </div>
 

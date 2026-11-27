@@ -15,7 +15,7 @@ export type DashboardOverview = { calendar: CalendarData; summary: DashboardSumm
 
 export const dashboardService = {
   /** Never remembered in the browser: each page open must see the CRM as it is now (uploads and deletions). */
-  banners: () => getModuleRecords("/banners", {}) as Promise<Banner[]>,
+  banners: (tenantId?: string | null) => getModuleRecords("/banners", tenantId ? { tenantId } : {}) as Promise<Banner[]>,
   calendar: (tenantId: string, month: string, category: CalendarFilter) => getModuleRecords(`/tenants/${tenantId}/dashboard/calendar`, { month, category }) as Promise<CalendarData>,
   /** The month calendar, the upcoming People cards and the action list, loaded together on the server. */
   overview: (tenantId: string, month: string, category: CalendarFilter = "ALL") => getModuleRecords(`/tenants/${tenantId}/dashboard/overview`, { month, category }) as Promise<DashboardOverview>,

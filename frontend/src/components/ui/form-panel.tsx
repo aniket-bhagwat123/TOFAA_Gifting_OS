@@ -14,7 +14,9 @@ export type PanelWidth = keyof typeof WIDTHS;
  * The one format for every add/edit form: a panel that slides in from the right with an icon, title and
  * description at the top, a scrolling body of numbered sections, and a Cancel / Save footer that stays in view.
  */
-export function FormPanel({ open, onClose, title, description, icon, width = "md", locked = false, onSubmit, submitLabel, savingLabel = "Saving…", cancelLabel = "Cancel", footer, stepper, children }: {
+export function FormPanel({ open, onClose, title, description, icon, width = "md", locked = false, onSubmit, submitLabel, savingLabel = "Saving…", cancelLabel = "Cancel", footer, stepper, zIndex, children }: {
+  /** Raised only when the panel opens above a dialog. */
+  zIndex?: string;
   open: boolean; onClose: () => void; title: string; description?: string; icon?: ReactNode; width?: PanelWidth; locked?: boolean;
   onSubmit?: FormEventHandler<HTMLFormElement>;
   /** Text of the main button. Leave out when the form supplies its own `footer`. */
@@ -38,7 +40,7 @@ export function FormPanel({ open, onClose, title, description, icon, width = "md
     <div className={cn("scroll-clean min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-4 sm:px-6", stepper && "pt-4")}>{children}</div>
     {(footer ?? defaultFooter) && <footer className="border-t border-line/70 bg-white px-5 py-3 sm:px-6">{footer ?? defaultFooter}</footer>}
   </>;
-  return <SidePanel open={open} onClose={onClose} labelledBy={titleId} locked={locked} className={cn(WIDTHS[width], "flex flex-col overflow-hidden p-0 sm:p-0")}>
+  return <SidePanel zIndex={zIndex} open={open} onClose={onClose} labelledBy={titleId} locked={locked} className={cn(WIDTHS[width], "flex flex-col overflow-hidden p-0 sm:p-0")}>
     {onSubmit ? <form noValidate onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">{body}</form> : <div className="flex min-h-0 flex-1 flex-col">{body}</div>}
   </SidePanel>;
 }

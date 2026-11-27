@@ -1,5 +1,7 @@
 "use client";
 
+import { useClientFirst } from "@/components/layout/client-chooser";
+import { ownerOf } from "@/services/all-clients";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -71,7 +73,7 @@ function RowMenu({ request, canEdit, onEdit }: { request: GiftRequest; canEdit: 
 
 export function GiftRequestsList({ startNew = false }: { startNew?: boolean }) {
   const { user, tenantId, isClient } = useTenantId();
-  const canCreate = user?.platformRole !== "SUPER_ADMIN";
+  const canCreate = !!user; // client users, KAMs and super admins
   const router = useRouter();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<StatusKey>("ALL");
@@ -89,6 +91,7 @@ export function GiftRequestsList({ startNew = false }: { startNew?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [wizard, setWizard] = useState<{ editId?: string } | null>(startNew || searchParams.get("new") === "1" ? {} : null);
   const [refresh, setRefresh] = useState(0);
+  const ask = useClientFirst({ active: !!wizard, fixed: ownerOf(wizard?.editId), onCancel: () => closeWizard() });
 
   useEffect(() => { const timer = setTimeout(() => { setQuery(search.trim()); setPage(1); }, 300); return () => clearTimeout(timer); }, [search]);
 
@@ -175,7 +178,8 @@ export function GiftRequestsList({ startNew = false }: { startNew?: boolean }) {
                 </td></tr> : items.map((request) => {
                   const occasion = request.occasionName ?? request.eventName;
                   const occasionDate = request.occasionDate ?? request.eventDate ?? request.deliveryDate;
-                  const editable = isClient && (request.status === "DRAFT" || request.status === "NEEDS_INFO");
+                  // A super admin can finish their drafts; answering a request for information stays with the client.
+                  const editable = isClient ? request.status === "DRAFT" || request.status === "NEEDS_INFO" : user?.platformRole === "SUPER_ADMIN" && request.status === "DRAFT";
                   const cell = table.td;
                   return <tr key={request.id} onClick={() => router.push(`/requests/${request.id}`)} className={cn(table.row, "group cursor-pointer")}>
                     <td className={cell}>
@@ -183,7 +187,7 @@ export function GiftRequestsList({ startNew = false }: { startNew?: boolean }) {
                       <span className="mt-1 block whitespace-nowrap text-xs tabular-nums text-muted">{createdLabel(request.createdAt)}</span>
                     </td>
                     <td className={cell}>
-                      <div className="flex items-center gap-3"><Avatar name={request.recipientName} src={request.recipientAvatarUrl} className="h-9 w-9 text-xs" /><div className="min-w-0"><p className="max-w-[11rem] truncate text-sm font-semibold text-ink">{request.recipientName ?? "—"}</p><p className="max-w-[11rem] truncate text-xs text-muted">{request.relationship ?? ""}</p></div></div>
+                      <div className="flex items-center gap-3"><Avatar name={request.recipientName} src={request.recipientAvatarUrl} className="h-9 w-9 text-xs" /><div className="min-w-0"><p className="max-w-[11rem] truncate text-sm font-semibold text-ink">{request.recipientName ?? "—"}</p><p className="max-w-[11rem] truncate text-xs text-muted">{[request.relationship, (request as GiftRequest & { tenantName?: string }).tenantName].filter(Boolean).join(" · ")}</p></div></div>
                     </td>
                     <td className={cell}>
                       <div className="flex items-center gap-3"><span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700"><Gift size={20} /></span><div className="min-w-0"><p className="max-w-[11rem] truncate text-sm font-medium text-ink">{occasion ?? "—"}</p><p className="whitespace-nowrap text-xs tabular-nums text-muted">{occasionDate ? day(occasionDate) : ""}</p></div></div>
@@ -219,6 +223,7 @@ export function GiftRequestsList({ startNew = false }: { startNew?: boolean }) {
       </div>
     </div>
 
-    {wizard && (canCreate || wizard.editId) && <GiftRequestWizard requestId={wizard.editId} onClose={closeWizard} onChanged={() => setRefresh((value) => value + 1)} />}
+    {ask.dialog}
+    {wizard && ask.ready && (canCreate || wizard.editId) && <GiftRequestWizard requestId={wizard.editId} forTenant={ask.tenantId} onClose={closeWizard} onChanged={() => setRefresh((value) => value + 1)} />}
   </div>;
 }

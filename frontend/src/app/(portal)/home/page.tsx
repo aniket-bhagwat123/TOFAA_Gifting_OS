@@ -78,14 +78,14 @@ export default function DashboardPage() {
 
   const stats = statKeys.map((key) => {
     const data = modules[key]?.data as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-    const count = data?.pagination?.total ?? data?.total ?? data?.items?.length ?? (Array.isArray(data) ? data.length : undefined);
+    const count = data?.pagination?.totalRecords ?? data?.pagination?.total_records ?? data?.pagination?.total ?? data?.total ?? data?.items?.length ?? (Array.isArray(data) ? data.length : undefined);
     return { key, ...statMeta[key], count, loading: modules[key]?.status === "loading" };
   });
   const firstName = displayName(user).split(" ")[0];
   const actions = isClient ? clientActions : staffActions[role].map((a, i) => ({ ...a, primary: i === 0 }));
 
   return <div className="space-y-3">
-    <InsightBanner />
+    <InsightBanner tenantId={tenantId} />
 
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="text-lg font-semibold text-ink sm:text-xl">{greeting()}{firstName ? `, ${firstName}` : ""}! <span aria-hidden>👋</span></h2>

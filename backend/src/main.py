@@ -19,6 +19,7 @@ from src.api.router import api_router
 from src.core import activity, audit, telemetry
 from src.core.config import settings
 from src.core.ttl_cache import lookups
+from src.modules import crm_clients_notice
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -78,6 +79,8 @@ async def request_pipeline(request: Request, call_next: Callable[[Request], Awai
     if is_write:
         # A change may alter who a user is or which clients they reach: forget what was remembered.
         lookups.clear()
+        if crm_clients_notice.is_client_change(request.method, request.url.path, response.status_code):
+            crm_clients_notice.notify()
         if context:
             route = getattr(request.scope.get("route"), "path", "")
             # Fire and forget: the change already committed, and a slow audit insert must not delay the reply.

@@ -39,10 +39,11 @@ const primary = `${pillButton} bg-brand text-white shadow-sm hover:bg-brand-dark
  * The five-step Add Recipient page: details, relationship & group, occasions, preferences & delivery, review.
  * Only the name is required; optional steps can be skipped; a draft is kept on this device so nothing typed is lost.
  */
-export function RecipientWizardPage() {
+export function RecipientWizardPage({ forTenant }: { forTenant?: string } = {}) {
   const router = useRouter();
   const user = useAppSelector((state) => state.auth.user);
-  const selectedTenantId = useAppSelector((state) => state.modules.selectedTenantId);
+  const viewing = useAppSelector((state) => state.modules.selectedTenantId);
+  const selectedTenantId = forTenant ?? viewing; // under "All clients", the client asked about before this opened
 
   const endpoints = useMemo(() => {
     try { return user ? { recipients: moduleConfig.recipients.endpoint(user, selectedTenantId), groups: moduleConfig["recipient-groups"].endpoint(user, selectedTenantId) } : null; }

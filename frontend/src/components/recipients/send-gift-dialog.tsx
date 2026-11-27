@@ -1,5 +1,6 @@
 "use client";
 
+import { NoPeople } from "@/components/recipients/no-people";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getModuleRecords, mutateModule } from "@/features/modules/module.service";
@@ -60,6 +61,7 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
   const [showEach, setShowEach] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [addingPerson, setAddingPerson] = useState(false);
 
   useEffect(() => {
     if (!target) return;
@@ -182,7 +184,7 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
   const single = people.length === 1;
   const shown = people.filter((p) => !search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase()));
   const customCount = people.filter((p) => own[p.id] !== undefined && own[p.id].trim() !== budget.trim()).length;
-  return <Sheet open={!!target} locked={sending} labelledBy="send-gift-title" className="max-w-lg" onClose={onClose}>
+  return <Sheet open={!!target} locked={sending} labelledBy="send-gift-title" className="max-w-lg" onClose={addingPerson ? () => undefined : onClose}>
     {target && <form noValidate onSubmit={send} className="space-y-5">
       <div>
         <h2 id="send-gift-title" className="text-2xl font-semibold text-ink">Send gift</h2>
@@ -200,6 +202,8 @@ export function SendGiftDialog({ target, tenantId, onClose, onSent }: { target: 
             className={`min-h-9 rounded-full border px-3.5 text-sm font-medium ${on ? "border-brand bg-brand-soft text-brand" : "border-line bg-white text-ink hover:bg-slate-50"}`}>{g.name} <span className="font-normal text-muted">· {g.recipientIds.length}</span></button>; })}
         </div>}
         <RecipientMultiSelect options={directory} selectedIds={pickedPeople} loading={directoryState.loading} loadError={directoryState.error} labelId="sg-people" onChange={(id, on) => { setPickedPeople((c) => on ? [...c, id] : c.filter((x) => x !== id)); setError(null); }} />
+        <NoPeople tenantId={tenantId} empty={!directoryState.loading && !directoryState.error && !directory.length} onOpenChange={setAddingPerson}
+          onAdded={(rows) => { setPickedPeople((c) => [...c, ...rows.filter((row) => !directory.some((d) => d.id === row.id)).map((row) => String(row.id))]); setDirectory(rows); }} />
         <p className="text-xs text-muted">{people.length ? `${people.length} ${people.length === 1 ? "person" : "people"} will receive this gift.` : "Pick a group, or people one by one."}</p>
       </div>}
 

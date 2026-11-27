@@ -7,11 +7,11 @@ import { type Banner, dashboardService } from "@/features/dashboard/dashboard.se
 const ROTATE_MS = 8000;
 
 /**
- * The dashboard banner strip. Each slide is a 1000 × 90 picture managed in TOFAA CRM (audience "ALL").
+ * The dashboard banner strip. Each slide is a 2156 × 198 picture managed in TOFAA CRM, for every client or for this one.
  * Loaded once each time the page opens (no timer). Nothing is cached on the way, so the list always matches the CRM at
  * that moment: a banner uploaded there shows on the next page change, one deleted there is gone on the next page change.
  */
-export function InsightBanner() {
+export function InsightBanner({ tenantId }: { tenantId?: string | null }) {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [broken, setBroken] = useState<Set<string>>(() => new Set());
   const [index, setIndex] = useState(0);
@@ -19,11 +19,12 @@ export function InsightBanner() {
 
   useEffect(() => {
     let cancelled = false;
-    dashboardService.banners()
+    setBanners([]); // never show the previous client's banners while the next ones load
+    dashboardService.banners(tenantId)
       .then((next) => { if (!cancelled) setBanners(Array.isArray(next) ? next : []); })
       .catch(() => { if (!cancelled) setBanners([]); });
     return () => { cancelled = true; };
-  }, []);
+  }, [tenantId]);
 
   // A picture that no longer loads (deleted in the CRM a moment ago, or an expired link) is skipped, never shown broken.
   const shown = banners.filter((banner) => !broken.has(banner.id));
@@ -42,7 +43,7 @@ export function InsightBanner() {
 
   return <section aria-label="Announcements" aria-roledescription="carousel" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
     className="relative overflow-hidden rounded-xl">
-    <img key={banner.id} src={banner.imageUrl} alt={banner.title ?? ""} width={1000} height={90} className="block h-auto w-full"
+    <img key={banner.id} src={banner.imageUrl} alt={banner.title ?? ""} width={2156} height={198} className="block h-auto w-full"
       onError={() => setBroken((current) => new Set(current).add(banner.id))} />
     {count > 1 && <>
       <button type="button" aria-label="Previous banner" onClick={() => go(-1)} className={`${arrow} left-2`}><ChevronLeft size={16} /></button>

@@ -95,6 +95,34 @@ def test_answer_is_remembered_when_a_cache_time_is_set(crm, monkeypatch):
     assert len(calls) == 2
 
 
+def test_each_client_is_asked_for_and_remembered_separately(crm, monkeypatch):
+    answer, calls = crm
+    monkeypatch.setattr(settings, "CRM_BANNERS_CACHE_SECONDS", 10)
+    answer(body={"data": [{"id": "1", "imageUrl": "https://x.supabase.co/a"}]})
+    source = CrmBannerSource()
+    source.live("t-1")
+    answer(body={"data": []})
+    assert source.live("t-2") == [] and [b.id for b in source.live("t-1")] == ["1"]
+    assert [c[1]["params"] for c in calls] == [{"tenantId": "t-1"}, {"tenantId": "t-2"}]
+
+
+def test_a_client_user_gets_their_own_banners_and_no_one_elses(monkeypatch):
+    from fastapi import HTTPException
+
+    from src.modules.auth.rbac import Role
+    from src.modules.auth.schemas import UserProfileResponse
+    from src.modules.crm_banners import router
+
+    asked = []
+    monkeypatch.setattr(router.crm_banners, "live", lambda tenant=None: asked.append(tenant) or [])
+    user = UserProfileResponse(id="u", email="a@example.com", role=Role.CLIENT, tenant_id="00000000-0000-0000-0000-000000000001")
+    router.live_banners(user, None)
+    assert asked == [user.tenant_id]
+    with pytest.raises(HTTPException):
+        router.live_banners(user, "00000000-0000-0000-0000-000000000002")
+    assert len(asked) == 1
+
+
 def test_production_refuses_plain_http_or_a_weak_key(monkeypatch):
     from src.core.config import Settings
 

@@ -19,7 +19,7 @@ const when = (days: number) => (days === 0 ? "Today" : days === 1 ? "Tomorrow" :
 /** Birthdays and events coming up, each with a one-click way to start a gift request. */
 export function UpcomingPanel() {
   const { user, tenantId } = useTenantId();
-  const canCreate = user?.platformRole !== "SUPER_ADMIN";
+  const canCreate = !!user; // client users, KAMs and super admins
   const router = useRouter();
   const [items, setItems] = useState<Upcoming[] | null>(null);
   const [error, setError] = useState<string | null>(null);

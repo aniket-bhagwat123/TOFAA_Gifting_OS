@@ -8,6 +8,8 @@ from src.modules.crm_banners.router import router as banners_router
 from src.modules.crm_gifting.router import clients_router as crm_clients_router
 from src.modules.crm_gifting.router import planning_router as crm_planning_router
 from src.modules.crm_gifting.router import router as crm_gifting_router
+from src.modules.crm_modules.router import router as crm_modules_router
+from src.modules.crm_people.account import router as crm_account_router
 from src.modules.crm_people.router import router as crm_people_router
 from src.modules.gift_ideas.router import router as gift_ideas_router
 from src.modules.credits.router import router as credits_router
@@ -39,10 +41,12 @@ api_router.include_router(crm_people_router)
 api_router.include_router(crm_gifting_router)
 api_router.include_router(crm_planning_router)
 api_router.include_router(crm_clients_router)
+api_router.include_router(crm_modules_router)
 api_router.include_router(gift_ideas_router)
 
 # Everything else validates the tenant ID on every request.
 tenant_scoped = [Depends(enforce_tenant_scope)]
+api_router.include_router(crm_account_router, dependencies=tenant_scoped)
 api_router.include_router(credits_router, dependencies=tenant_scoped)
 api_router.include_router(dashboard_router, dependencies=tenant_scoped)
 api_router.include_router(contract_workspace_router, dependencies=tenant_scoped)

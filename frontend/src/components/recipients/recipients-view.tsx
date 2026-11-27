@@ -1,5 +1,7 @@
 "use client";
 
+import { useClientFirst } from "@/components/layout/client-chooser";
+import { ownerOf } from "@/services/all-clients";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Archive, ArchiveRestore, Building2, Check, ChevronLeft, ChevronRight, Download, Gift, LogIn, Plus, Search, Trash2, Upload, UserPlus, Users, X, CalendarClock, MapPin, Heart } from "lucide-react";
@@ -44,6 +46,8 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
     catch (error) { return { error: error instanceof Error ? error.message : "This account isn't linked to an organisation yet." }; }
   }, [user, selectedTenantId]);
   const ready = endpoints && !("error" in endpoints) ? endpoints : null;
+  /** The same addresses for one client, for a form opened from "All clients". */
+  const endpointsFor = (tenantId?: string) => (tenantId && user ? { recipients: moduleConfig.recipients.endpoint(user, tenantId), groups: moduleConfig["recipient-groups"].endpoint(user, tenantId) } : ready);
 
   const [rows, setRows] = useState<DirectoryRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -121,6 +125,11 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
   useEffect(() => { setRows([]); setSummary(null); setGroups([]); setEveryone([]); setSelected(new Set()); setFilters(NO_FILTERS); setPage(1); }, [ready]);
 
   const refresh = () => { void loadPage(); void loadSide(); setEveryone([]); };
+  const createAsk = useClientFirst({ active: createOpen, onCancel: () => { setCreateOpen(false); if (startNew) router.replace("/recipients"); } });
+  const importAsk = useClientFirst({ active: importOpen, onCancel: () => setImportOpen(false) });
+  const presetOwners = [...new Set(groupPreset.map((id) => ownerOf(id)))];
+  const groupAsk = useClientFirst({ active: !!groupSheet, fixed: (groupSheet && groupSheet !== "new" ? ownerOf(groupSheet.id) : undefined) ?? (presetOwners.length === 1 ? presetOwners[0] : undefined), onCancel: () => setGroupSheet(null) });
+  const groupPeople = groupAsk.tenantId ? everyone.filter((row) => row.tenantId === groupAsk.tenantId) : everyone;
   // The group form lists every person, so load them only when it is opened.
   useEffect(() => { if (groupSheet && ready && !everyone.length) loadAllModuleRecords(ready.recipients).then((all) => setEveryone(all as RecipientRow[])).catch(() => undefined); }, [groupSheet, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -309,14 +318,15 @@ export function RecipientsView({ startNew = false }: { startNew?: boolean }) {
 
     </div>
 
-    <RecipientCreatePanel open={createOpen} endpoints={ready} userId={user?.id} onClose={() => { setCreateOpen(false); if (startNew) router.replace("/recipients"); }} onSaved={refresh}
+    {createAsk.dialog}{importAsk.dialog}{groupAsk.dialog}
+    <RecipientCreatePanel open={createOpen && createAsk.ready} endpoints={endpointsFor(createAsk.tenantId)} userId={user?.id} onClose={() => { setCreateOpen(false); if (startNew) router.replace("/recipients"); }} onSaved={refresh}
       onViewProfile={(id) => { getModuleRecords(`${ready?.recipients}/${id}`, {}).then((row) => setTarget(row as RecipientRow)).catch(() => toast.error("We couldn't open that recipient.")); }} />
-    <RecipientCreatePanel open={!!editTarget} editTarget={editTarget} endpoints={ready} userId={user?.id} onClose={() => setEditTarget(null)} onSaved={refresh} onEdited={() => { setEditTarget(null); refresh(); }}
+    <RecipientCreatePanel open={!!editTarget} editTarget={editTarget} endpoints={endpointsFor(ownerOf(editTarget ? String(editTarget.id) : null))} userId={user?.id} onClose={() => setEditTarget(null)} onSaved={refresh} onEdited={() => { setEditTarget(null); refresh(); }}
       onViewProfile={(id) => { getModuleRecords(`${ready?.recipients}/${id}`, {}).then((row) => setTarget(row as RecipientRow)).catch(() => toast.error("We couldn't open that recipient.")); }} />
     <RecipientDialog target={target} endpoint={ready?.recipients ?? ""} onClose={() => setTarget(null)} onPhotoChanged={refresh} onSaved={(addAnother) => { if (!addAnother) setTarget(null); refresh(); }} onDelete={(row) => setConfirm([row as DirectoryRow])} />
-    <GroupSheet group={groupSheet} endpoint={ready?.groups ?? ""} recipients={everyone} loadingRecipients={!everyone.length} presetIds={groupPreset} onClose={() => setGroupSheet(null)} onSaved={() => { if (groupSheet === "new" && groupPreset.length) setSelected(new Set()); setGroupSheet(null); refresh(); }} />
+    <GroupSheet group={groupAsk.ready ? groupSheet : null} endpoint={endpointsFor(groupAsk.tenantId)?.groups ?? ""} recipients={groupPeople} loadingRecipients={!everyone.length && rows.length > 0} presetIds={groupAsk.tenantId ? groupPreset.filter((id) => ownerOf(id) === groupAsk.tenantId) : groupPreset} onClose={() => setGroupSheet(null)} onSaved={() => { if (groupSheet === "new" && groupPreset.length) setSelected(new Set()); setGroupSheet(null); refresh(); }} />
     {clientTenantId && <SendGiftDialog target={sendTarget} tenantId={clientTenantId} onClose={() => setSendTarget(null)} onSent={() => setSendTarget(null)} />}
-    <ImportRecipientsSheet open={importOpen} endpoint={ready?.recipients ?? ""} groupsEndpoint={ready?.groups ?? ""} onClose={() => setImportOpen(false)} onDone={refresh} />
+    <ImportRecipientsSheet open={importOpen && importAsk.ready} endpoint={endpointsFor(importAsk.tenantId)?.recipients ?? ""} groupsEndpoint={endpointsFor(importAsk.tenantId)?.groups ?? ""} onClose={() => setImportOpen(false)} onDone={refresh} />
     <DeleteDialog open={!!confirm} busy={deleting} message={confirm && confirm.length > 1 ? `Are you sure you want to delete ${confirm.length} recipients?` : `Are you sure you want to delete ${confirm?.[0]?.name ?? "this recipient"}?`} onConfirm={() => void remove()} onClose={() => setConfirm(null)} />
   </>;
 }

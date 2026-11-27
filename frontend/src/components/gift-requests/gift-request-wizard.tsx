@@ -1,7 +1,7 @@
 "use client";
 
+import { NoPeople } from "@/components/recipients/no-people";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, ChevronDown, FileText, Gift, Heart, Lightbulb, MapPin, MessageSquare, Pencil, Plus, ShieldCheck, Star, Target, UploadCloud, User, Users, X } from "lucide-react";
 import { toast } from "sonner";
@@ -73,8 +73,12 @@ function Summary({ rows }: { rows: Array<{ icon: ReactNode; label: string; value
   </aside>;
 }
 
-export function GiftRequestWizard({ requestId, onClose, onChanged }: { requestId?: string; onClose: () => void; onChanged: () => void }) {
-  const { user, tenantId, isClient } = useTenantId();
+const ignore = () => undefined; // while a recipient is being added on top
+
+export function GiftRequestWizard({ requestId, forTenant, onClose, onChanged }: { requestId?: string; forTenant?: string; onClose: () => void; onChanged: () => void }) {
+  const viewing = useTenantId();
+  const { user, isClient } = viewing;
+  const tenantId = forTenant ?? viewing.tenantId; // under "All clients", the client asked about before this opened
   const router = useRouter();
   const params = useSearchParams();
 
@@ -154,6 +158,14 @@ export function GiftRequestWizard({ requestId, onClose, onChanged }: { requestId
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
+  const [addingPerson, setAddingPerson] = useState(false);
+  /** Someone added from inside this form: list them, with their dates, and choose them. */
+  const personAdded = (people: Row[]) => {
+    const added = people.find((row) => !recipients.some((known) => known.id === row.id));
+    setRecipients(people);
+    if (added) { setForm({ recipientId: String(added.id), deliveryAddress: null }); clear("recipientId"); }
+    void loadAllModuleRecords(`/tenants/${tenantId}/events`).then(setEvents).catch(() => undefined);
+  };
   const recipient = recipients.find((row) => String(row.id) === form.recipientId);
   const eventOptions = useMemo(() => events.filter((event) => !form.recipientId || !event.recipientId || String(event.recipientId) === form.recipientId), [events, form.recipientId]);
   const sourceOptions = [
@@ -297,7 +309,7 @@ export function GiftRequestWizard({ requestId, onClose, onChanged }: { requestId
     </Sheet>;
   }
 
-  return <><Sheet open onClose={requestClose} locked={!!busy} labelledBy="gr-wizard-title" className="flex max-w-5xl flex-col overflow-hidden !p-0">
+  return <><Sheet open onClose={addingPerson ? ignore : requestClose} locked={!!busy} labelledBy="gr-wizard-title" className="flex max-w-5xl flex-col overflow-hidden !p-0">
     <header className="flex items-start gap-4 px-6 pb-4 pt-6 sm:px-8">
       <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand"><Gift size={26} /></span>
       <div className="min-w-0 flex-1"><h2 id="gr-wizard-title" className="text-2xl font-bold text-ink">{editing ? "Edit gift request" : "New gift request"}</h2>
@@ -326,7 +338,7 @@ export function GiftRequestWizard({ requestId, onClose, onChanged }: { requestId
               <span id="gr-recipient" className="mb-1.5 block text-sm font-medium text-ink">Who is it for?<RequiredMark /></span>
               <SearchableSelect name="recipientId" labelId="gr-recipient" options={recipients.map((row) => ({ id: String(row.id), label: String(row.name ?? "Unnamed"), searchText: `${String((row.address as Row | undefined)?.city ?? "")} ${String(row.mobileNumber ?? "")}` }))} value={form.recipientId} loading={false} loadError={null} placeholder="Search or select a recipient" error={errors.recipientId} required onChange={(value) => { setForm({ recipientId: value, ...(form.source === "event" ? { eventId: "" } : {}), deliveryAddress: null }); clear("recipientId"); }} />
               <FieldError id="gr-recipient-error" message={errors.recipientId} />
-              <Link href="/recipients?new=1" target="_blank" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline"><Plus size={15} /> Add new recipient</Link>
+              <NoPeople tenantId={tenantId} empty={!recipients.length} link onAdded={personAdded} onOpenChange={setAddingPerson} />
             </div>
             <div>
               <span id="gr-source" className="mb-1.5 block text-sm font-medium text-ink">Occasion or event<RequiredMark /></span>

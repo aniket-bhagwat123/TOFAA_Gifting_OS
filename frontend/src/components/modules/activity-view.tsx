@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { Tab, TabBar } from "@/components/ui/tab-bar";
 import { ImportHistory } from "./import-history";
 
-type Entry = { id: string; title: string; description: string; category: string; actorName: string; actorKind: "TOFAA" | "USER"; changedAt: string };
+type Entry = { id: string; title: string; description: string; category: string; actorName: string; actorKind: "TOFAA" | "USER"; changedAt: string; tenantName?: string };
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 /** One icon and soft tint per kind of change, using the app's existing status colours. */
@@ -108,6 +108,7 @@ export function ActivityView() {
                   <p className="text-[0.9375rem] font-semibold text-ink">{entry.title}</p>
                   {entry.description && <p className="mt-0.5 text-sm text-slate-600">{entry.description}</p>}
                   <p className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+                    {entry.tenantName && <><span className="font-medium text-slate-700">{entry.tenantName}</span><span aria-hidden>·</span></>}
                     <span>By <span className={cn("font-medium", entry.actorKind === "TOFAA" ? "text-brand" : "text-slate-700")}>{entry.actorName}</span></span>
                     <span aria-hidden>·</span>
                     <time dateTime={entry.changedAt} className="tabular-nums">{timeOf(entry.changedAt)}</time>

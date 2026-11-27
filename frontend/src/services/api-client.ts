@@ -1,5 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import type { ApiErrorBody } from "@/types/api";
+import { allClientsAdapter } from "./all-clients";
 
 // Unset in a production build means the API is on this same address (one Vercel project, /api goes to the backend).
 const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL || (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "");
@@ -10,6 +11,8 @@ export const api = axios.create({
   timeout: 20000,
   headers: { "Content-Type": "application/json" }
 });
+
+api.defaults.adapter = allClientsAdapter(axios.getAdapter(axios.defaults.adapter)); // "All clients" requests
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (typeof window !== "undefined") {

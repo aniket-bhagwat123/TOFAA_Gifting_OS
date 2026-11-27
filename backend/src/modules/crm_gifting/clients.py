@@ -13,10 +13,10 @@ from src.core.config import settings
 from src.core.supabase import get_supabase_admin_client
 from src.modules.auth.rbac import Role
 from src.modules.crm_gifting.actors import crm_actors
-from src.modules.tenants.models import TenantType
-from src.modules.tenants.schemas import TenantCreate
+from src.modules.tenants.models import TenantStatus, TenantType
+from src.modules.tenants.schemas import TenantCreate, TenantUpdate
 from src.modules.tenants.service import tenant_service
-from src.modules.users.schemas import UserInviteCreate
+from src.modules.users.schemas import UserInviteCreate, UserUpdate
 from src.modules.users.service import user_service
 
 SWITCHED_OFF = "Acting from the CRM is switched off in Gifting OS."
@@ -43,7 +43,7 @@ class CrmClientsService:
             raise HTTPException(status_code=403, detail=SWITCHED_OFF)
 
     def status(self, tenant_id: str) -> dict[str, Any]:
-        rows = (self.db.table("tenants").select("id,name,status").eq("id", tenant_id)
+        rows = (self.db.table("tenants").select("id,name,status,legal_name,gstin,email_domain,logo_url").eq("id", tenant_id)
                 .neq("tenant_type", TenantType.INTERNAL.value).limit(1).execute().data or [])
         if not rows:
             raise HTTPException(status_code=404, detail="Client not found in Gifting OS.")
@@ -51,9 +51,69 @@ class CrmClientsService:
         ids = [m["user_id"] for m in members]
         found = self.db.table("profiles").select("id,email,full_name,role").in_("id", ids).execute().data or [] if ids else []
         profiles = {p["id"]: p for p in found}
-        users = [{"email": p.get("email"), "fullName": p.get("full_name"), "status": m["status"]}
+        users = [{"userId": str(m["user_id"]), "email": p.get("email"), "fullName": p.get("full_name"), "status": m["status"], "clientRole": self._client_role(m["user_id"])}
                  for m in members if (p := profiles.get(m["user_id"])) and p.get("role") == Role.CLIENT.value]
-        return {"name": rows[0]["name"], "status": rows[0]["status"], "users": users, "actionsEnabled": settings.CRM_KAM_ACTIONS_ENABLED}
+        row = rows[0]
+        return {"name": row["name"], "status": row["status"], "legalName": row.get("legal_name"), "gstin": row.get("gstin"),
+                "emailDomain": row.get("email_domain"), "logoUrl": row.get("logo_url"), "users": users,
+                "actionsEnabled": settings.CRM_KAM_ACTIONS_ENABLED}
+
+    def _as_admin(self, tenant_id: str, crm_user_id: str, crm_user_name: str):
+        """The CRM person, acting with the rights the CRM has already checked."""
+        self._check_enabled()
+        self.status(tenant_id)  # a real client, else "not found"
+        actor = self.actors.get(crm_user_id, crm_user_name).model_copy(update={"role": Role.SUPER_ADMIN})
+        audit.note(actor, tenant_id)
+        return actor
+
+    def change_details(self, tenant_id: str, changes: dict[str, Any], *, crm_user_id: str, crm_user_name: str) -> dict[str, Any]:
+        """Legal name, GSTIN and email domain, with the same checks as the Gifting OS screen. None clears a value."""
+        actor = self._as_admin(tenant_id, crm_user_id, crm_user_name)
+        self.tenants.update(tenant_id, TenantUpdate(**changes), actor)
+        return self.status(tenant_id)
+
+    def change_logo(self, tenant_id: str, content: bytes | None, content_type: str, *, crm_user_id: str, crm_user_name: str) -> dict[str, Any]:
+        actor = self._as_admin(tenant_id, crm_user_id, crm_user_name)
+        self.tenants.set_logo(tenant_id, actor, content=content, content_type=content_type)
+        return self.status(tenant_id)
+
+    def change_user(self, tenant_id: str, user_id: str, changes: dict[str, Any], *, crm_user_id: str, crm_user_name: str) -> dict[str, Any]:
+        """A client login's name, role, or whether it can sign in. Only logins of this client."""
+        actor = self._as_admin(tenant_id, crm_user_id, crm_user_name)
+        if user_id not in {u["userId"] for u in self.status(tenant_id)["users"]}:
+            raise HTTPException(status_code=404, detail="That login is not one of this client's.")
+        self.users.update_user(tenant_id, user_id, UserUpdate(**changes), actor)
+        return self.status(tenant_id)
+
+    def _client_role(self, user_id: str) -> str | None:
+        """OWNER, EA or HR, kept with the sign-in account. Left out when it cannot be read."""
+        try:
+            return (self.db.auth.admin.get_user_by_id(user_id).user.user_metadata or {}).get("client_role")
+        except Exception:  # noqa: BLE001 - the role is only a label
+            return None
+
+    def list_all(self) -> dict[str, Any]:
+        """Every client, for the CRM to keep its client accounts in step."""
+        rows = (self.db.table("tenants").select("id,name,status,logo_url").neq("tenant_type", TenantType.INTERNAL.value)
+                .order("created_at").limit(1000).execute().data or [])
+        return {"items": rows}
+
+    def change(self, tenant_id: str, *, name: str | None, active: bool | None, crm_user_id: str, crm_user_name: str) -> dict[str, Any]:
+        """A rename or on/off switch made in the CRM. Nothing is deleted."""
+        self._check_enabled()
+        current = self.status(tenant_id)
+        actor = self.actors.get(crm_user_id, crm_user_name).model_copy(update={"role": Role.SUPER_ADMIN})
+        audit.note(actor, tenant_id)
+        if name and name.strip() != current["name"]:
+            taken = (self.db.table("tenants").select("id").ilike("name", literal_pattern(name.strip())).neq("id", tenant_id)
+                     .neq("tenant_type", TenantType.INTERNAL.value).limit(1).execute().data)
+            if taken:
+                raise HTTPException(status_code=409, detail="Another client in Gifting OS already has this name.")
+            # Straight to the row: a switched-off client can be renamed too.
+            self.db.table("tenants").update({"name": name.strip()}).eq("id", tenant_id).neq("tenant_type", TenantType.INTERNAL.value).execute()
+        if active is not None and active == (current["status"] == TenantStatus.DEACTIVATED.value):
+            self.tenants.set_status(tenant_id, TenantStatus.ACTIVE if active else TenantStatus.DEACTIVATED, actor)
+        return {"tenantId": tenant_id}
 
     def create(self, name: str, *, crm_user_id: str, crm_user_name: str) -> dict[str, Any]:
         """A new client organisation. One with exactly this name is returned instead, so a retry never makes two."""

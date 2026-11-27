@@ -7,7 +7,7 @@ interface ModulesState { byKey: Record<string, ModuleEntry>; selectedTenantId: s
 const initialState: ModulesState = { byKey: {}, selectedTenantId: null };
 
 /** Where a user's last chosen client is remembered between visits. */
-export const selectedTenantKey = (userId?: string) => `tofaa.selectedTenant.${userId ?? "anonymous"}`;
+export const selectedTenantKey = (userId?: string) => `tofaa.viewingClient.${userId ?? "anonymous"}`; // one client, or "all"
 
 /** Platform-wide lists that do not belong to the tenant being viewed. */
 const isPlatformKey = (key: string) => key === "tenantOptions" || key === "clients";
